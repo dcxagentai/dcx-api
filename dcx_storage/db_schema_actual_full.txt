@@ -1,0 +1,292 @@
+============================================================
+STEPHEN DCX ACTUAL SCHEMA FULL REPORT
+Generated on localhost:5432
+Database: stephen_dcx
+============================================================
+
+
+TABLE LIST (\dt):
+------------------------------
+- dcx_commodity_deals
+- dcx_deal_threads
+- dcx_deal_translations
+- dcx_languages
+- dcx_market_question_messages
+- dcx_marketing_waitlist
+- dcx_message_annotations
+- dcx_message_translations
+- dcx_outbound_broadcasts
+- dcx_presentation_hidden_items
+- dcx_raw_messages
+- dcx_thread_messages
+- dcx_users
+
+
+============================================================
+TABLE: dcx_commodity_deals
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_commodity_deals_id_seq'::regclass)
+initiating_dcx_user_id         | integer                   | NO       | 
+counterparty_dcx_user_id       | integer                   | YES      | 
+deal_type                      | character varying         | NO       | 
+commodity_type                 | character varying         | NO       | 
+incoterm_type                  | character varying         | YES      | 
+location_port                  | character varying         | YES      | 
+proposed_price                 | numeric                   | YES      | 
+currency                       | character varying         | YES      | 'USD'::character varying
+deal_status                    | character varying         | YES      | 'open'::character varying
+created_at                     | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+updated_at                     | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+amount_value                   | numeric                   | YES      | 
+amount_unit                    | character varying         | YES      | 
+
+FOREIGN KEYS:
+- initiating_dcx_user_id -> dcx_users(id) [dcx_commodity_deals_initiating_dcx_user_id_fkey]
+- counterparty_dcx_user_id -> dcx_users(id) [dcx_commodity_deals_counterparty_dcx_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_commodity_deals_pkey]
+
+
+============================================================
+TABLE: dcx_deal_threads
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_deal_threads_id_seq'::regclass)
+deal_id                        | integer                   | NO       | 
+initiating_dcx_user_id         | integer                   | NO       | 
+counterparty_dcx_user_id       | integer                   | NO       | 
+thread_status                  | character varying         | YES      | 'open'::character varying
+created_at                     | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+
+FOREIGN KEYS:
+- deal_id -> dcx_commodity_deals(id) [dcx_deal_threads_deal_id_fkey]
+- initiating_dcx_user_id -> dcx_users(id) [dcx_deal_threads_initiating_dcx_user_id_fkey]
+- counterparty_dcx_user_id -> dcx_users(id) [dcx_deal_threads_counterparty_dcx_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_deal_threads_pkey]
+- UNIQUE: deal_id [dcx_deal_threads_deal_id_counterparty_dcx_user_id_key]
+- UNIQUE: counterparty_dcx_user_id [dcx_deal_threads_deal_id_counterparty_dcx_user_id_key]
+
+
+============================================================
+TABLE: dcx_deal_translations
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_deal_translations_id_seq'::regclass)
+deal_id                        | integer                   | NO       | 
+lang_code                      | character varying         | NO       | 
+translated_commodity_type      | character varying         | NO       | 
+
+FOREIGN KEYS:
+- deal_id -> dcx_commodity_deals(id) [dcx_deal_translations_deal_id_fkey]
+- lang_code -> dcx_languages(lang_code) [dcx_deal_translations_lang_code_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_deal_translations_pkey]
+- UNIQUE: deal_id [dcx_deal_translations_deal_id_lang_code_key]
+- UNIQUE: lang_code [dcx_deal_translations_deal_id_lang_code_key]
+
+
+============================================================
+TABLE: dcx_languages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_languages_id_seq'::regclass)
+lang_code                      | character varying         | NO       | 
+lang_name                      | character varying         | NO       | 
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_languages_pkey]
+- UNIQUE: lang_code [dcx_languages_lang_code_key]
+
+
+============================================================
+TABLE: dcx_market_question_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_market_question_messages_id_seq'::regclass)
+root_message_id                | integer                   | NO       | 
+role                           | text                      | NO       | 
+message_text                   | text                      | YES      | 
+media_url                      | text                      | YES      | 
+source_message_id              | integer                   | YES      | 
+created_at                     | timestamp with time zone  | NO       | now()
+
+FOREIGN KEYS:
+- root_message_id -> dcx_raw_messages(id) [dcx_market_question_messages_root_message_id_fkey]
+- source_message_id -> dcx_raw_messages(id) [dcx_market_question_messages_source_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_market_question_messages_pkey]
+
+
+============================================================
+TABLE: dcx_marketing_waitlist
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_marketing_waitlist_id_seq'::regclass)
+email_address                  | character varying         | NO       | 
+requested_at                   | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_marketing_waitlist_pkey]
+- UNIQUE: email_address [dcx_marketing_waitlist_email_address_key]
+
+
+============================================================
+TABLE: dcx_message_annotations
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+message_id                     | integer                   | NO       | 
+message_category               | text                      | NO       | 
+answer_preview                 | text                      | YES      | 
+created_at                     | timestamp with time zone  | NO       | now()
+updated_at                     | timestamp with time zone  | NO       | now()
+
+FOREIGN KEYS:
+- message_id -> dcx_raw_messages(id) [dcx_message_annotations_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: message_id [dcx_message_annotations_pkey]
+
+
+============================================================
+TABLE: dcx_message_translations
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_message_translations_id_seq'::regclass)
+message_id                     | integer                   | NO       | 
+lang_code                      | character varying         | NO       | 
+translated_text                | text                      | NO       | 
+
+FOREIGN KEYS:
+- message_id -> dcx_raw_messages(id) [dcx_message_translations_message_id_fkey]
+- lang_code -> dcx_languages(lang_code) [dcx_message_translations_lang_code_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_message_translations_pkey]
+- UNIQUE: message_id [dcx_message_translations_message_id_lang_code_key]
+- UNIQUE: lang_code [dcx_message_translations_message_id_lang_code_key]
+
+
+============================================================
+TABLE: dcx_outbound_broadcasts
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_outbound_broadcasts_id_seq'::regclass)
+whatsapp_message_id            | character varying         | NO       | 
+deal_id                        | integer                   | NO       | 
+receiver_dcx_user_id           | integer                   | NO       | 
+sent_at                        | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+thread_id                      | integer                   | YES      | 
+
+FOREIGN KEYS:
+- deal_id -> dcx_commodity_deals(id) [dcx_outbound_broadcasts_deal_id_fkey]
+- receiver_dcx_user_id -> dcx_users(id) [dcx_outbound_broadcasts_receiver_dcx_user_id_fkey]
+- thread_id -> dcx_deal_threads(id) [dcx_outbound_broadcasts_thread_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_outbound_broadcasts_pkey]
+- UNIQUE: whatsapp_message_id [dcx_outbound_broadcasts_whatsapp_message_id_key]
+
+
+============================================================
+TABLE: dcx_presentation_hidden_items
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+item_type                      | text                      | NO       | 
+item_id                        | integer                   | NO       | 
+hidden_at                      | timestamp with time zone  | NO       | now()
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: item_type [dcx_presentation_hidden_items_pkey]
+- PRIMARY KEY: item_id [dcx_presentation_hidden_items_pkey]
+
+
+============================================================
+TABLE: dcx_raw_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_raw_messages_id_seq'::regclass)
+external_message_id            | character varying         | YES      | 
+dcx_sender_id                  | integer                   | YES      | 
+dcx_receiver_id                | integer                   | YES      | 
+channel_type                   | character varying         | NO       | 
+message_direction              | character varying         | NO       | 
+text_content                   | text                      | YES      | 
+media_url                      | character varying         | YES      | 
+received_at                    | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+
+FOREIGN KEYS:
+- dcx_sender_id -> dcx_users(id) [dcx_raw_messages_dcx_sender_id_fkey]
+- dcx_receiver_id -> dcx_users(id) [dcx_raw_messages_dcx_receiver_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_raw_messages_pkey]
+- UNIQUE: external_message_id [dcx_raw_messages_external_message_id_key]
+
+
+============================================================
+TABLE: dcx_thread_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_thread_messages_id_seq'::regclass)
+thread_id                      | integer                   | NO       | 
+message_id                     | integer                   | NO       | 
+created_at                     | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+
+FOREIGN KEYS:
+- thread_id -> dcx_deal_threads(id) [dcx_thread_messages_thread_id_fkey]
+- message_id -> dcx_raw_messages(id) [dcx_thread_messages_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_thread_messages_pkey]
+- UNIQUE: thread_id [dcx_thread_messages_thread_id_message_id_key]
+- UNIQUE: message_id [dcx_thread_messages_thread_id_message_id_key]
+
+
+============================================================
+TABLE: dcx_users
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | integer                   | NO       | nextval('dcx_users_id_seq'::regclass)
+phone_number                   | character varying         | YES      | 
+email_address                  | character varying         | YES      | 
+full_name                      | character varying         | YES      | 
+user_role                      | character varying         | YES      | 'trader'::character varying
+preferred_language             | character varying         | YES      | 'en'::character varying
+registered_at                  | timestamp with time zone  | YES      | CURRENT_TIMESTAMP
+
+FOREIGN KEYS:
+- preferred_language -> dcx_languages(lang_code) [dcx_users_preferred_language_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [dcx_users_pkey]
+- UNIQUE: phone_number [dcx_users_phone_number_key]
+- UNIQUE: email_address [dcx_users_email_address_key]
+
