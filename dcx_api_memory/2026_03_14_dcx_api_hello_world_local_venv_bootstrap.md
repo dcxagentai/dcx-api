@@ -25,8 +25,8 @@ The backend now has:
 
 ### Files
 - `requirements.txt`
-- `dcx_api_fastapi_hello_world_application.py`
-- `dcx_api_fastapi_hello_world_application_test.py`
+- `dcx_api_app.py`
+- `dcx_api_app_test.py`
 - `.venv/`
 
 ### Verification
@@ -45,13 +45,13 @@ From `dcx_site/dcx_api`:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn dcx_api_fastapi_hello_world_application:app --reload
+python -m uvicorn dcx_api_app:app --reload
 ```
 
 Or without activation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn dcx_api_fastapi_hello_world_application:app --reload
+.\.venv\Scripts\python.exe -m uvicorn dcx_api_app:app --reload
 ```
 
 ### Notes
