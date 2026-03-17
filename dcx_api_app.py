@@ -20,7 +20,7 @@ app = FastAPI(title="DCX API Bootstrap", version="0.0.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://dcx-(admin|app|public)\.pages\.dev$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +55,7 @@ def get_dcx_api_root_welcome_response() -> dict:
         - The service may fail to start because dependencies are missing.
         - The route may fail if the ASGI app is imported from the wrong module path.
         - The bootstrap database query may fail if the database is unavailable.
+        - Browser calls from hosted frontend shells may fail if CORS does not allow the current Pages origins.
       what_comes_next:
         - Add dedicated health/readiness routes.
         - Add the first real domain capabilities and project them through API routes.
@@ -64,6 +65,7 @@ def get_dcx_api_root_welcome_response() -> dict:
       - root_route_returns_backend_identity: GET / -> response json identifies dcx_api backend bootstrap state
       - root_route_returns_latest_raw_message_payload_shape: GET / -> response json contains latest_raw_message with bootstrap fields
       - root_route_allows_local_frontend_origin: GET / with localhost Origin header -> access-control-allow-origin is returned
+      - root_route_allows_cloudflare_pages_frontend_origin: GET / with dcx-admin.pages.dev Origin header -> access-control-allow-origin is returned
 
     ERRORS:
       - API_HELLO_WORLD_IMPORT_FAILURE:
@@ -86,6 +88,17 @@ def get_dcx_api_root_welcome_response() -> dict:
             - Re-check db_config.py.
             - Run the bootstrap test schema apply script.
             - Retry the route once the database is reachable.
+          retry_safe: true
+      - API_SHARED_WELCOME_CORS_MISCONFIGURED:
+          suggested_action: Confirm the temporary MVP CORS rule still allows localhost and the three Cloudflare Pages frontend origins.
+          common_causes:
+            - CORS origin regex too narrow
+            - Pages project hostnames changed
+            - middleware configuration edited without updating tests
+          recovery_steps:
+            - Re-check the allow_origin_regex in dcx_api_app.py.
+            - Confirm the frontend is deployed on the expected pages.dev hostname.
+            - Retry after redeploying the backend.
           retry_safe: true
 
     CODE:
