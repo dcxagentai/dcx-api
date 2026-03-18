@@ -9,14 +9,85 @@ The main capabilities exposed here are:
 - a read-only local Postgres sample projected from the fresh one-table bootstrap schema into that route
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from dcx_storage.dcx_apply_initial_user_waitlist_schema_to_configured_database import (
+    apply_initial_user_waitlist_schema_to_configured_database,
+)
 from dcx_api_read_latest_bootstrap_test_message_from_local_postgres_capability import (
     read_latest_bootstrap_test_message_from_local_postgres_capability,
 )
 
-app = FastAPI(title="DCX API Bootstrap", version="0.0.1")
+
+@asynccontextmanager
+async def dcx_api_application_lifespan(application: FastAPI):
+    """
+    CONTRACT:
+      preconditions:
+        - The FastAPI application is starting in a process that should have database access.
+        - The initial user waitlist schema capability is importable from the backend workspace.
+      postconditions:
+        - The first four stephen_dcx user waitlist tables have been ensured before request handling begins.
+        - No seed rows were inserted and no existing rows were deleted.
+      side_effects:
+        - executes idempotent database schema initialization during application startup
+      idempotent: true
+      retry_safe: true
+      async: true
+      idempotency_key: dcx_api_startup_apply_initial_user_waitlist_schema_v1
+      locks: []
+      contention_strategy: rely on the underlying schema capability to keep repeated startup applies safe
+
+    NARRATIVE:
+      why:
+        - This exists so a fresh local or Render database automatically gets the first durable user waitlist schema without a separate manual setup step.
+        - The first real user milestone should start from an initialized schema, not from remembered manual SQL paste steps.
+      when_to_use:
+        - At normal API process startup locally and in production.
+      when_not_to_use:
+        - Do not use this lifespan hook to seed demo data.
+        - Do not grow this into a catch-all migration engine once explicit migrations exist.
+      what_can_go_wrong:
+        - Startup will fail if the configured database is unreachable.
+        - Startup will fail if the database user lacks schema-write permissions.
+      what_comes_next:
+        - Add the first users and auth challenge capabilities on top of the initialized schema.
+        - Later replace startup-only schema evolution with explicit non-breaking migrations where needed.
+
+    TESTS:
+      - covered_indirectly_by_schema_apply_capability_tests
+      - startup_path_ensures_tables_before_new_user_flow_capabilities_are_added
+
+    ERRORS:
+      - API_INITIAL_USER_WAITLIST_SCHEMA_APPLY_FAILED:
+          suggested_action: Confirm database connectivity and schema-write permissions for the configured backend database.
+          common_causes:
+            - Render or local Postgres unavailable
+            - wrong db env configuration
+            - SQL file missing
+          recovery_steps:
+            - Re-check db_config values.
+            - Confirm the SQL file still exists in dcx_storage.
+            - Retry backend startup after restoring database access.
+          retry_safe: true
+          what_changed: none if startup failed before the SQL transaction committed
+          rollback_needed: false
+          rollback_operation: inspect manually only if a partial external schema change occurred
+
+    CODE:
+    """
+    apply_initial_user_waitlist_schema_to_configured_database()
+    yield
+
+
+app = FastAPI(
+    title="DCX API Bootstrap",
+    version="0.0.1",
+    lifespan=dcx_api_application_lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
