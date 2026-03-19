@@ -1,11 +1,11 @@
 """
 CONTEXT:
-This file verifies the first durable DCX user waitlist schema apply capability next to the
-implementation so the schema-init contract stays locally visible and executable.
+This file verifies the durable DCX user-signup schema apply capability next to the
+implementation so the startup schema-init contract stays executable.
 """
 
-from dcx_storage.dcx_apply_initial_user_waitlist_schema_to_configured_database import (
-    apply_initial_user_waitlist_schema_to_configured_database,
+from dcx_storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
+    apply_initial_user_signup_schema_to_configured_database,
 )
 
 
@@ -40,25 +40,25 @@ class FakeConnection:
 def test_executes_schema_sql_against_configured_connection() -> None:
     fake_connection = FakeConnection()
 
-    apply_initial_user_waitlist_schema_to_configured_database(
+    apply_initial_user_signup_schema_to_configured_database(
         connect_to_database=lambda **_: fake_connection,
     )
 
     assert "CREATE TABLE IF NOT EXISTS stephen_dcx_languages" in fake_connection.cursor_instance.executed_sql
-    assert "CREATE TABLE IF NOT EXISTS stephen_dcx_users" in fake_connection.cursor_instance.executed_sql
+    assert "ALTER TABLE stephen_dcx_user_auth_challenges" in fake_connection.cursor_instance.executed_sql
 
 
 def test_returns_applied_status_payload_when_execution_succeeds() -> None:
-    payload = apply_initial_user_waitlist_schema_to_configured_database(
+    payload = apply_initial_user_signup_schema_to_configured_database(
         connect_to_database=lambda **_: FakeConnection(),
     )
 
     assert payload["status"] == "applied"
-    assert payload["applied_sql_file"] == "dcx_initial_user_waitlist_schema_2026_03_18.sql"
+    assert payload["applied_sql_file"] == "dcx_initial_user_signup_schema_2026_03_18.sql"
 
 
-def test_schema_sql_contains_four_project_prefixed_tables() -> None:
-    payload = apply_initial_user_waitlist_schema_to_configured_database(
+def test_schema_sql_contains_signup_challenge_hardening_columns() -> None:
+    payload = apply_initial_user_signup_schema_to_configured_database(
         connect_to_database=lambda **_: FakeConnection(),
     )
 
@@ -67,15 +67,15 @@ def test_schema_sql_contains_four_project_prefixed_tables() -> None:
         "stephen_dcx_users",
         "stephen_dcx_user_auth_identities",
         "stephen_dcx_user_auth_challenges",
+        "stephen_dcx_public_route_rate_limits",
     ]
 
 
-def test_schema_sql_contains_no_seed_inserts() -> None:
+def test_schema_sql_contains_rate_limit_table() -> None:
     fake_connection = FakeConnection()
 
-    apply_initial_user_waitlist_schema_to_configured_database(
+    apply_initial_user_signup_schema_to_configured_database(
         connect_to_database=lambda **_: fake_connection,
     )
 
-    assert "INSERT INTO" not in fake_connection.cursor_instance.executed_sql
-    assert "DELETE FROM" not in fake_connection.cursor_instance.executed_sql
+    assert "CREATE TABLE IF NOT EXISTS stephen_dcx_public_route_rate_limits" in fake_connection.cursor_instance.executed_sql

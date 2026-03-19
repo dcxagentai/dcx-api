@@ -72,6 +72,45 @@ CREATE TABLE IF NOT EXISTS stephen_dcx_user_auth_challenges (
     updated_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT
 );
 
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS otp_salt TEXT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS public_signup_flow_token_hash TEXT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS public_signup_flow_token_expires_at_ts_ms BIGINT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS next_send_allowed_at_ts_ms BIGINT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS locked_until_ts_ms BIGINT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS send_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS send_budget_window_started_at_ts_ms BIGINT;
+
+ALTER TABLE stephen_dcx_user_auth_challenges
+ADD COLUMN IF NOT EXISTS send_budget_request_count INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS stephen_dcx_public_route_rate_limits (
+    route_key TEXT NOT NULL,
+    client_ip TEXT NOT NULL,
+    window_started_at_ts_ms BIGINT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_at_ts_ms BIGINT NOT NULL,
+    created_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT,
+    updated_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT,
+    PRIMARY KEY (route_key, client_ip, window_started_at_ts_ms)
+);
+
+UPDATE stephen_dcx_user_auth_challenges
+SET challenge_purpose = 'email_signup'
+WHERE challenge_purpose = 'waitlist_signup';
+
 CREATE INDEX IF NOT EXISTS stephen_dcx_languages_is_default_idx
 ON stephen_dcx_languages (is_default);
 
@@ -95,6 +134,18 @@ ON stephen_dcx_user_auth_challenges (user_auth_identity_id);
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_challenges_lookup_idx
 ON stephen_dcx_user_auth_challenges (user_id, challenge_type, challenge_purpose, challenge_status);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_challenges_flow_token_hash_idx
+ON stephen_dcx_user_auth_challenges (public_signup_flow_token_hash);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stephen_dcx_user_auth_challenges_one_active_idx
+ON stephen_dcx_user_auth_challenges (user_auth_identity_id, challenge_type, challenge_purpose)
+WHERE challenge_status = 'pending'
+  AND consumed_at_ts_ms IS NULL
+  AND invalidated_at_ts_ms IS NULL;
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_public_route_rate_limits_lookup_idx
+ON stephen_dcx_public_route_rate_limits (route_key, client_ip, window_started_at_ts_ms);
 
 DO $$
 BEGIN
@@ -150,6 +201,21 @@ BEGIN
     ) THEN
         CREATE TRIGGER stephen_dcx_user_auth_challenges_set_updated_at_ts_ms
         BEFORE UPDATE ON stephen_dcx_user_auth_challenges
+        FOR EACH ROW
+        EXECUTE FUNCTION stephen_dcx_set_updated_at_ts_ms();
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'stephen_dcx_public_route_rate_limits_set_updated_at_ts_ms'
+    ) THEN
+        CREATE TRIGGER stephen_dcx_public_route_rate_limits_set_updated_at_ts_ms
+        BEFORE UPDATE ON stephen_dcx_public_route_rate_limits
         FOR EACH ROW
         EXECUTE FUNCTION stephen_dcx_set_updated_at_ts_ms();
     END IF;
