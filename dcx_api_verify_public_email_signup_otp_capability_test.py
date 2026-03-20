@@ -68,6 +68,7 @@ def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) 
                 None,
                 1710001200000,
                 "pending",
+                "user@example.com",
             ),
             None,
         ],
@@ -88,6 +89,7 @@ def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) 
     )
 
     assert payload["status"] == "confirmed"
+    assert payload["confirmed_email"] == "user@example.com"
     assert payload["verification_page_url"] == "http://localhost:4321/users/signup-email/verify-otp"
 
 
@@ -107,6 +109,7 @@ def test_incorrect_otp_increments_attempt_count(monkeypatch) -> None:
                 None,
                 1710001200000,
                 "pending",
+                "user@example.com",
             ),
         ],
     )

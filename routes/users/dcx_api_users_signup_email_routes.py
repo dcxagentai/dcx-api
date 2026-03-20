@@ -20,6 +20,7 @@ from dcx_api_enforce_public_route_rate_limit_capability import (
     enforce_public_route_rate_limit_capability,
 )
 from dcx_api_public_email_signup_otp_support import (
+    build_public_email_signup_confirmation_email_delivery_draft,
     hash_public_email_signup_identifier_for_logs,
 )
 from dcx_api_reset_public_email_signup_send_cooldown_after_delivery_failure_capability import (
@@ -30,6 +31,9 @@ from dcx_api_resend_public_email_signup_otp_capability import (
 )
 from dcx_api_send_public_email_signup_otp_via_resend_capability import (
     send_public_email_signup_otp_via_resend_capability,
+)
+from dcx_api_send_public_email_signup_confirmation_via_resend_capability import (
+    send_public_email_signup_confirmation_via_resend_capability,
 )
 from dcx_api_verify_public_email_signup_otp_capability import (
     verify_public_email_signup_otp_capability,
@@ -240,8 +244,6 @@ def post_public_email_otp_verification_request(
     """
     client_ip = _read_public_request_client_ip(request)
     origin_header = request.headers.get("origin")
-    resend_result: dict | None = None
-
     try:
         enforce_public_route_rate_limit_capability(
             route_key="users_signup_email_verify_otp",
@@ -256,6 +258,22 @@ def post_public_email_otp_verification_request(
             verification_page_url=public_email_otp_verification_request.verification_page_url,
             origin_header=origin_header,
         )
+        try:
+            confirmation_email_delivery_draft = build_public_email_signup_confirmation_email_delivery_draft(
+                language_code=verification_result["language_code"],
+                normalized_email=verification_result["confirmed_email"],
+            )
+            send_public_email_signup_confirmation_via_resend_capability(
+                email_delivery_draft=confirmation_email_delivery_draft,
+                confirmed_email=verification_result["confirmed_email"],
+            )
+        except RuntimeError as confirmation_runtime_error:
+            logger.info(
+                "public_email_signup_confirmation_email_send_failed client_ip=%s confirmed_email_fingerprint=%s error_code=%s",
+                client_ip,
+                hash_public_email_signup_identifier_for_logs(verification_result["confirmed_email"]),
+                str(confirmation_runtime_error),
+            )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
         logger.info(

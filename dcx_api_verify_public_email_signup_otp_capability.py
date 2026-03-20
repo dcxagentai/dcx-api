@@ -187,7 +187,8 @@ def verify_public_email_signup_otp_capability(
                         max_attempt_count,
                         locked_until_ts_ms,
                         public_signup_flow_token_expires_at_ts_ms,
-                        challenge_status
+                        challenge_status,
+                        delivery_target
                     FROM stephen_dcx_user_auth_challenges
                     WHERE public_signup_flow_token_hash = %s
                       AND challenge_type = %s
@@ -216,6 +217,7 @@ def verify_public_email_signup_otp_capability(
                 challenge_locked_until_ts_ms = challenge_row[8]
                 flow_token_expires_at_ts_ms = challenge_row[9]
                 challenge_status = challenge_row[10]
+                confirmed_email = challenge_row[11]
 
                 if challenge_status != "pending":
                     raise RuntimeError("API_PUBLIC_EMAIL_SIGNUP_FLOW_RESTART_REQUIRED")
@@ -357,6 +359,7 @@ def verify_public_email_signup_otp_capability(
 
     return {
         "status": "confirmed",
+        "confirmed_email": confirmed_email,
         "language_code": normalized_language_code,
         "verification_page_url": normalized_verification_page_url,
     }

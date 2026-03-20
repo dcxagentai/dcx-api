@@ -546,6 +546,68 @@ def build_public_email_signup_otp_email_delivery_draft(
     }
 
 
+def build_public_email_signup_confirmation_email_delivery_draft(
+    language_code: str,
+    normalized_email: str,
+) -> dict:
+    """
+    CONTRACT:
+      preconditions:
+        - language_code identifies the public language variant for one confirmed signup.
+        - normalized_email is the already-normalized confirmed recipient email.
+      postconditions:
+        - Returns one localized confirmation email draft for the successful waitlist confirmation.
+      side_effects: []
+      idempotent: true
+      retry_safe: true
+      async: false
+
+    NARRATIVE:
+      WHY this exists:
+        - The OTP confirmation moment is the natural place to send one short trust-building follow-up email.
+      WHEN TO USE it:
+        - Use it right after a successful OTP verification if the backend wants to send a confirmation email.
+      WHEN NOT TO USE it:
+        - Do not use it for OTP code delivery, resend operations, or broader marketing announcements.
+      WHAT CAN GO WRONG:
+        - Language-specific copy can drift if the confirmation email is edited in only one locale.
+      WHAT COMES NEXT:
+        - The provider boundary capability can project the draft through Resend without changing browser-facing behavior.
+
+    TESTS:
+      - builds_english_confirmation_email_draft
+      - builds_spanish_confirmation_email_draft
+
+    ERRORS: []
+
+    CODE:
+    """
+    if language_code == "es":
+        return {
+            "recipient_email": normalized_email,
+            "subject": "Ya estás en la lista de espera de DCX Agentic",
+            "text_body": (
+                "Hola,\n\n"
+                "Gracias por unirte a la lista de espera de DCX Agentic.\n"
+                "Ya tenemos tu correo y te compartiremos más novedades en breve.\n\n"
+                "Gracias,\n"
+                "DCX"
+            ),
+        }
+
+    return {
+        "recipient_email": normalized_email,
+        "subject": "You're on the DCX Agentic waitlist",
+        "text_body": (
+            "Hello,\n\n"
+            "Thanks for joining the DCX Agentic waitlist.\n"
+            "We've got your email and will share more soon.\n\n"
+            "Thanks,\n"
+            "DCX"
+        ),
+    }
+
+
 def hash_public_email_signup_identifier_for_logs(raw_value: str) -> str:
     """
     CONTRACT:

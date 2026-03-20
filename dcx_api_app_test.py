@@ -165,6 +165,97 @@ def test_users_email_verify_route_returns_generic_failure_wrapper() -> None:
     }
 
 
+def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_payload_minimal() -> None:
+    with patch.object(
+        users_signup_routes,
+        "enforce_public_route_rate_limit_capability",
+        return_value={"request_count": 1},
+    ), patch.object(
+        users_signup_routes,
+        "verify_public_email_signup_otp_capability",
+        return_value={
+            "status": "confirmed",
+            "confirmed_email": "user@example.com",
+            "language_code": "en",
+            "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
+        },
+    ), patch.object(
+        users_signup_routes,
+        "build_public_email_signup_confirmation_email_delivery_draft",
+        return_value={
+            "recipient_email": "user@example.com",
+            "subject": "You're on the DCX Agentic waitlist",
+            "text_body": "Hello",
+        },
+    ), patch.object(
+        users_signup_routes,
+        "send_public_email_signup_confirmation_via_resend_capability",
+        return_value={"provider": "resend", "status": "accepted", "confirmed_email": "user@example.com"},
+    ) as confirmation_send_mock:
+        response = client.post(
+            "/users/signup-email/verify-otp",
+            json={
+                "signup_flow_token": "opaque_signup_flow_token_value_123456",
+                "otp_code": "123456",
+                "language_code": "en",
+                "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
+            },
+            headers={"Origin": "http://localhost:4321"},
+        )
+        payload = response.json()
+
+    confirmation_send_mock.assert_called_once()
+    assert payload == {
+        "ok": True,
+        "data": {},
+    }
+
+
+def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() -> None:
+    with patch.object(
+        users_signup_routes,
+        "enforce_public_route_rate_limit_capability",
+        return_value={"request_count": 1},
+    ), patch.object(
+        users_signup_routes,
+        "verify_public_email_signup_otp_capability",
+        return_value={
+            "status": "confirmed",
+            "confirmed_email": "user@example.com",
+            "language_code": "en",
+            "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
+        },
+    ), patch.object(
+        users_signup_routes,
+        "build_public_email_signup_confirmation_email_delivery_draft",
+        return_value={
+            "recipient_email": "user@example.com",
+            "subject": "You're on the DCX Agentic waitlist",
+            "text_body": "Hello",
+        },
+    ), patch.object(
+        users_signup_routes,
+        "send_public_email_signup_confirmation_via_resend_capability",
+        side_effect=RuntimeError("API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED"),
+    ):
+        response = client.post(
+            "/users/signup-email/verify-otp",
+            json={
+                "signup_flow_token": "opaque_signup_flow_token_value_123456",
+                "otp_code": "123456",
+                "language_code": "en",
+                "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
+            },
+            headers={"Origin": "http://localhost:4321"},
+        )
+        payload = response.json()
+
+    assert payload == {
+        "ok": True,
+        "data": {},
+    }
+
+
 def test_users_email_resend_route_returns_refreshed_flow_token() -> None:
     with patch.object(
         users_signup_routes,
