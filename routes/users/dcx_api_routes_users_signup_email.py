@@ -217,6 +217,13 @@ def _map_signup_error(error_code: str) -> dict:
             "suggested_action": "Please wait a little and try again.",
         }
 
+    if error_code.startswith("API_LIVE_EMAIL_TEMPLATE_"):
+        return {
+            "code": "API_PUBLIC_EMAIL_SIGNUP_REQUEST_REJECTED",
+            "message": "We could not accept that signup request just now.",
+            "suggested_action": "Please wait a little and try again.",
+        }
+
     if error_code in {
         "API_PUBLIC_EMAIL_SIGNUP_PERSISTENCE_FAILED",
         "API_PUBLIC_EMAIL_SIGNUP_SECRET_MISSING",

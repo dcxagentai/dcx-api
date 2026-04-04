@@ -13,6 +13,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from emails.transactional.build_public_email_signup_otp_email_delivery_draft import (
+    build_public_email_signup_otp_email_delivery_draft,
+)
 from users.signup_email.accept_public_email_signup_request import (
     accept_public_email_signup_request_capability,
 )
@@ -26,7 +29,6 @@ from users.signup_email.public_email_signup_otp_support import (
     PUBLIC_EMAIL_SIGNUP_SEND_BUDGET_WINDOW_MS,
     PUBLIC_EMAIL_SIGNUP_SEND_COOLDOWN_MS,
     build_public_email_signup_flow_token,
-    build_public_email_signup_otp_email_delivery_draft,
     build_public_email_signup_verification_link_url,
     generate_public_email_signup_otp_code,
     generate_public_email_signup_otp_salt,
@@ -46,6 +48,7 @@ def create_or_refresh_public_email_signup_artifacts_capability(
     user_uuid_provider: Callable[[], uuid.UUID] | None = None,
     otp_code_provider: Callable[[], str] | None = None,
     otp_salt_provider: Callable[[], str] | None = None,
+    otp_email_delivery_draft_builder: Callable[..., dict] | None = None,
 ) -> dict:
     """
     CONTRACT:
@@ -119,6 +122,9 @@ def create_or_refresh_public_email_signup_artifacts_capability(
         origin_header=origin_header,
     )
     connect = connect_to_database or psycopg2.connect
+    build_otp_email_delivery_draft = (
+        otp_email_delivery_draft_builder or build_public_email_signup_otp_email_delivery_draft
+    )
     now_ts_ms = (current_timestamp_ms_provider or _current_timestamp_ms_provider)()
     normalized_email = normalized_payload["normalized_email"]
     normalized_language_code = normalized_payload["language_code"]
@@ -367,11 +373,12 @@ def create_or_refresh_public_email_signup_artifacts_capability(
                         language_code=normalized_language_code,
                         signup_flow_token=raw_signup_flow_token,
                     )
-                    email_delivery_draft = build_public_email_signup_otp_email_delivery_draft(
+                    email_delivery_draft = build_otp_email_delivery_draft(
                         language_code=normalized_language_code,
                         normalized_email=normalized_email,
                         otp_code=otp_code,
                         verification_link_url=verification_link_url,
+                        connect_to_database=connect,
                     )
                 else:
                     challenge_id = active_challenge_row[0]
@@ -497,11 +504,12 @@ def create_or_refresh_public_email_signup_artifacts_capability(
                             language_code=normalized_language_code,
                             signup_flow_token=raw_signup_flow_token,
                         )
-                        email_delivery_draft = build_public_email_signup_otp_email_delivery_draft(
+                        email_delivery_draft = build_otp_email_delivery_draft(
                             language_code=normalized_language_code,
                             normalized_email=normalized_email,
                             otp_code=otp_code,
                             verification_link_url=verification_link_url,
+                            connect_to_database=connect,
                         )
 
                 return {

@@ -93,6 +93,12 @@ def test_resend_refreshes_existing_challenge_and_rotates_flow_token(monkeypatch)
         current_timestamp_ms_provider=lambda: 1710000000000,
         otp_code_provider=lambda: "654321",
         otp_salt_provider=lambda: "saltsaltsaltsalt",
+        otp_email_delivery_draft_builder=lambda **kwargs: {
+            "recipient_email": kwargs["normalized_email"],
+            "subject": "DCX Agentic: Your verification code",
+            "text_body": "body",
+            "verification_link_url": kwargs["verification_link_url"],
+        },
     )
 
     assert payload["status"] == "otp_resent"
@@ -101,7 +107,7 @@ def test_resend_refreshes_existing_challenge_and_rotates_flow_token(monkeypatch)
     assert payload["email_delivery_draft"]["recipient_email"] == "user@example.com"
     assert (
         payload["email_delivery_draft"]["verification_link_url"]
-        == f"http://localhost:4321/users/signup-email/verify-otp#signup_flow_token={rotated_signup_flow_token}"
+        == f"http://localhost:4321/en/t/verify-otp#signup_flow_token={rotated_signup_flow_token}"
     )
     assert payload["delivery_failure_recovery_state"] == {
         "challenge_id": 301,
@@ -166,6 +172,12 @@ def test_resend_rejects_cooldown_window(monkeypatch) -> None:
             origin_header="http://localhost:4321",
             connect_to_database=lambda **_: fake_connection,
             current_timestamp_ms_provider=lambda: 1710000000000,
+            otp_email_delivery_draft_builder=lambda **kwargs: {
+                "recipient_email": kwargs["normalized_email"],
+                "subject": "unused",
+                "text_body": "unused",
+                "verification_link_url": kwargs["verification_link_url"],
+            },
         )
     except RuntimeError as runtime_error:
         assert str(runtime_error) == "API_PUBLIC_EMAIL_SIGNUP_OTP_RESEND_COOLDOWN_ACTIVE"

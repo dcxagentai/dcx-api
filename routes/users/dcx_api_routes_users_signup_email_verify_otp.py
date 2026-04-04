@@ -12,6 +12,9 @@ import logging
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 
+from emails.transactional.build_public_email_signup_confirmation_email_delivery_draft import (
+    build_public_email_signup_confirmation_email_delivery_draft,
+)
 from emails.transactional.send_public_email_signup_confirmation import (
     send_public_email_signup_confirmation,
 )
@@ -20,7 +23,6 @@ from system.rate_limits.enforce_public_route_rate_limit import (
     enforce_public_route_rate_limit_capability,
 )
 from users.signup_email.public_email_signup_otp_support import (
-    build_public_email_signup_confirmation_email_delivery_draft,
     hash_public_email_signup_identifier_for_logs,
 )
 from users.signup_email.verify_public_email_signup_otp import (

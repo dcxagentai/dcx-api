@@ -201,6 +201,13 @@ def _map_resend_error(error_code: str) -> dict:
             "suggested_action": "Please wait a little and try again.",
         }
 
+    if error_code.startswith("API_LIVE_EMAIL_TEMPLATE_"):
+        return {
+            "code": "API_PUBLIC_EMAIL_SIGNUP_REQUEST_REJECTED",
+            "message": "We could not resend a code right now.",
+            "suggested_action": "Please wait a little and try again.",
+        }
+
     if error_code in {
         "API_PUBLIC_EMAIL_SIGNUP_SEND_LIMIT_REACHED",
         "API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED",

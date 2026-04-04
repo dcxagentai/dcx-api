@@ -75,6 +75,12 @@ def test_creates_new_user_identity_and_pending_challenge_for_new_email(monkeypat
         user_uuid_provider=lambda: UUID("00000000-0000-0000-0000-000000000001"),
         otp_code_provider=lambda: "654321",
         otp_salt_provider=lambda: "saltsaltsaltsalt",
+        otp_email_delivery_draft_builder=lambda **kwargs: {
+            "recipient_email": kwargs["normalized_email"],
+            "subject": "DCX Agentic: Your verification code",
+            "text_body": "body",
+            "verification_link_url": kwargs["verification_link_url"],
+        },
     )
 
     assert payload["signup_flow_token"] == expected_signup_flow_token
@@ -83,7 +89,7 @@ def test_creates_new_user_identity_and_pending_challenge_for_new_email(monkeypat
     assert payload["email_delivery_draft"]["recipient_email"] == "user@example.com"
     assert (
         payload["email_delivery_draft"]["verification_link_url"]
-        == f"http://localhost:4321/users/signup-email/verify-otp#signup_flow_token={expected_signup_flow_token}"
+        == f"http://localhost:4321/en/t/verify-otp#signup_flow_token={expected_signup_flow_token}"
     )
     assert payload["delivery_failure_recovery_state"] == {
         "challenge_id": 301,
@@ -132,6 +138,12 @@ def test_repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_s
         connect_to_database=lambda **_: fake_connection,
         current_timestamp_ms_provider=lambda: 1710000000000,
         user_uuid_provider=lambda: UUID("00000000-0000-0000-0000-000000000001"),
+        otp_email_delivery_draft_builder=lambda **kwargs: {
+            "recipient_email": kwargs["normalized_email"],
+            "subject": "unused",
+            "text_body": "unused",
+            "verification_link_url": kwargs["verification_link_url"],
+        },
     )
 
     assert payload["send_required"] is False
