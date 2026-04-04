@@ -11,14 +11,23 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from dcx_api_public_email_signup_otp_support import (
+from users.signup_email.public_email_signup_otp_support import (
     _read_allowed_public_email_signup_origins,
 )
-from dcx_storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
+from storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
     apply_initial_user_signup_schema_to_configured_database,
 )
-from routes.users.dcx_api_users_signup_email_routes import (
-    dcx_api_users_signup_email_router,
+from routes.files.dcx_api_routes_files_r2_hello_world import (
+    dcx_api_routes_files_r2_hello_world_router,
+)
+from routes.users.dcx_api_routes_users_signup_email import (
+    dcx_api_routes_users_signup_email_router,
+)
+from routes.users.dcx_api_routes_users_signup_email_resend_otp import (
+    dcx_api_routes_users_signup_email_resend_otp_router,
+)
+from routes.users.dcx_api_routes_users_signup_email_verify_otp import (
+    dcx_api_routes_users_signup_email_verify_otp_router,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -72,7 +81,7 @@ async def dcx_api_application_lifespan(application: FastAPI):
             - SQL file missing
           recovery_steps:
             - Re-check db_config values.
-            - Confirm the SQL file still exists in dcx_storage.
+            - Confirm the SQL file still exists in storage.
             - Retry backend startup after restoring database access.
           retry_safe: true
           what_changed: none if startup failed before the SQL transaction committed
@@ -99,7 +108,10 @@ app.add_middleware(
     allow_headers=["Content-Type", "Origin"],
 )
 
-app.include_router(dcx_api_users_signup_email_router)
+app.include_router(dcx_api_routes_users_signup_email_router)
+app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
+app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)
+app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 
 @app.get("/")
@@ -178,7 +190,9 @@ def get_dcx_api_root_welcome_response() -> dict:
                 "Add dedicated readiness and health routes when deployment needs them.",
             ],
             "related_operations": [
-                "dcx_api_users_signup_email_router",
+                "dcx_api_routes_users_signup_email_router",
+                "dcx_api_routes_users_signup_email_verify_otp_router",
+                "dcx_api_routes_users_signup_email_resend_otp_router",
             ],
         },
     }

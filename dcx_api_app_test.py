@@ -9,7 +9,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from dcx_api_app import app
-import routes.users.dcx_api_users_signup_email_routes as users_signup_routes
+import routes.users.dcx_api_routes_users_signup_email as signup_email_routes
+import routes.users.dcx_api_routes_users_signup_email_resend_otp as resend_otp_routes
+import routes.users.dcx_api_routes_users_signup_email_verify_otp as verify_otp_routes
 
 client = TestClient(app)
 
@@ -34,7 +36,9 @@ def test_root_route_returns_minimal_ready_payload() -> None:
                 "Add dedicated readiness and health routes when deployment needs them.",
             ],
             "related_operations": [
-                "dcx_api_users_signup_email_router",
+                "dcx_api_routes_users_signup_email_router",
+                "dcx_api_routes_users_signup_email_verify_otp_router",
+                "dcx_api_routes_users_signup_email_resend_otp_router",
             ],
         },
     }
@@ -47,11 +51,11 @@ def test_root_route_allows_local_frontend_origin() -> None:
 
 def test_users_email_signup_route_returns_minimal_flow_token_payload() -> None:
     with patch.object(
-        users_signup_routes,
+        signup_email_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        signup_email_routes,
         "create_or_refresh_public_email_signup_artifacts_capability",
         return_value={
             "signup_flow_token": "opaque_signup_flow_token_value_123456",
@@ -64,8 +68,8 @@ def test_users_email_signup_route_returns_minimal_flow_token_payload() -> None:
             },
         },
     ), patch.object(
-        users_signup_routes,
-        "send_public_email_signup_otp_via_resend_capability",
+        signup_email_routes,
+        "send_public_email_signup_otp",
         return_value={"provider": "resend", "status": "accepted", "challenge_id": 301},
     ):
         response = client.post(
@@ -103,11 +107,11 @@ def test_users_email_signup_route_rejects_extra_fields() -> None:
 
 def test_users_email_signup_route_returns_generic_error_wrapper_on_validation_failure() -> None:
     with patch.object(
-        users_signup_routes,
+        signup_email_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        signup_email_routes,
         "create_or_refresh_public_email_signup_artifacts_capability",
         side_effect=RuntimeError("API_PUBLIC_EMAIL_SIGNUP_EMAIL_INVALID"),
     ):
@@ -135,11 +139,11 @@ def test_users_email_signup_route_returns_generic_error_wrapper_on_validation_fa
 
 def test_users_email_verify_route_returns_generic_failure_wrapper() -> None:
     with patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "verify_public_email_signup_otp_capability",
         side_effect=RuntimeError("API_PUBLIC_EMAIL_SIGNUP_OTP_VERIFICATION_FAILED"),
     ):
@@ -167,11 +171,11 @@ def test_users_email_verify_route_returns_generic_failure_wrapper() -> None:
 
 def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_payload_minimal() -> None:
     with patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "verify_public_email_signup_otp_capability",
         return_value={
             "status": "confirmed",
@@ -180,7 +184,7 @@ def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_pay
             "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
         },
     ), patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "build_public_email_signup_confirmation_email_delivery_draft",
         return_value={
             "recipient_email": "user@example.com",
@@ -188,8 +192,8 @@ def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_pay
             "text_body": "Hello",
         },
     ), patch.object(
-        users_signup_routes,
-        "send_public_email_signup_confirmation_via_resend_capability",
+        verify_otp_routes,
+        "send_public_email_signup_confirmation",
         return_value={"provider": "resend", "status": "accepted", "confirmed_email": "user@example.com"},
     ) as confirmation_send_mock:
         response = client.post(
@@ -213,11 +217,11 @@ def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_pay
 
 def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() -> None:
     with patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "verify_public_email_signup_otp_capability",
         return_value={
             "status": "confirmed",
@@ -226,7 +230,7 @@ def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() 
             "verification_page_url": "http://localhost:4321/users/signup-email/verify-otp",
         },
     ), patch.object(
-        users_signup_routes,
+        verify_otp_routes,
         "build_public_email_signup_confirmation_email_delivery_draft",
         return_value={
             "recipient_email": "user@example.com",
@@ -234,8 +238,8 @@ def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() 
             "text_body": "Hello",
         },
     ), patch.object(
-        users_signup_routes,
-        "send_public_email_signup_confirmation_via_resend_capability",
+        verify_otp_routes,
+        "send_public_email_signup_confirmation",
         side_effect=RuntimeError("API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED"),
     ):
         response = client.post(
@@ -258,11 +262,11 @@ def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() 
 
 def test_users_email_resend_route_returns_refreshed_flow_token() -> None:
     with patch.object(
-        users_signup_routes,
+        resend_otp_routes,
         "enforce_public_route_rate_limit_capability",
         return_value={"request_count": 1},
     ), patch.object(
-        users_signup_routes,
+        resend_otp_routes,
         "resend_public_email_signup_otp_capability",
         return_value={
             "status": "otp_resent",
@@ -275,8 +279,8 @@ def test_users_email_resend_route_returns_refreshed_flow_token() -> None:
             },
         },
     ), patch.object(
-        users_signup_routes,
-        "send_public_email_signup_otp_via_resend_capability",
+        resend_otp_routes,
+        "send_public_email_signup_otp",
         return_value={"provider": "resend", "status": "accepted", "challenge_id": 301},
     ):
         response = client.post(
