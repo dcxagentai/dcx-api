@@ -8,11 +8,12 @@ bundle away from the generated TypeScript snapshot.
 
 from __future__ import annotations
 
-import hmac
-import os
 import time
 
 from routes.users.dcx_api_routes_users_support import read_dcx_runtime_environment
+from public_site.build.validate_dcx_public_build_api_token import (
+    validate_dcx_public_build_api_token_capability,
+)
 
 
 def read_dcx_public_build_time_api_test_payload_capability(
@@ -85,16 +86,7 @@ def read_dcx_public_build_time_api_test_payload_capability(
 
     CODE:
     """
-    configured_build_token = os.getenv("DCX_PUBLIC_BUILD_API_TOKEN", "").strip()
-    if configured_build_token == "":
-        raise RuntimeError("API_PUBLIC_BUILD_TOKEN_NOT_CONFIGURED")
-
-    normalized_provided_build_token = (provided_build_token or "").strip()
-    if normalized_provided_build_token == "":
-        raise RuntimeError("API_PUBLIC_BUILD_TOKEN_REQUIRED")
-
-    if not hmac.compare_digest(normalized_provided_build_token, configured_build_token):
-        raise RuntimeError("API_PUBLIC_BUILD_TOKEN_INVALID")
+    validate_dcx_public_build_api_token_capability(provided_build_token)
 
     return {
         "build_test_message": (

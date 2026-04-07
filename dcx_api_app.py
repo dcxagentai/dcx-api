@@ -20,6 +20,9 @@ from routes.files.dcx_api_routes_files_r2_hello_world import (
 from routes.public.dcx_api_routes_public_build_time_api_test import (
     dcx_api_routes_public_build_time_api_test_router,
 )
+from routes.public.dcx_api_routes_public_build_time_ux_strings_bundle import (
+    dcx_api_routes_public_build_time_ux_strings_bundle_router,
+)
 from routes.admin.dcx_api_routes_admin_users_list import (
     dcx_api_routes_admin_users_list_router,
 )
@@ -141,6 +144,7 @@ app.include_router(dcx_api_routes_users_signup_email_router)
 app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)
 app.include_router(dcx_api_routes_public_build_time_api_test_router)
+app.include_router(dcx_api_routes_public_build_time_ux_strings_bundle_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 
