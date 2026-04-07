@@ -1,0 +1,5 @@
+The first `dcx_app` account backend contract now includes phone and timezone data in both the read and save flow. `read_authenticated_dcx_user_account_summary_capability` returns `primary_phone_e164`, phone confirmation fields, `preferred_timezone`, and `available_timezones` sourced from `stephen_dcx_timezones`, alongside the existing language and communication-preference data.
+
+`save_authenticated_dcx_user_account_editable_settings_capability` now accepts `preferred_timezone_id` in addition to `preferred_language_id` and `email_communication_preference`. It validates timezone ids against active rows in `stephen_dcx_timezones`, preserves the upsert-shaped mutable user save pattern, and returns the saved timezone id in the result. The `/users/me/account-settings` route request model was expanded to accept `preferred_timezone_id`, and invalid timezone selections are folded into the same canonical invalid-settings error wrapper.
+
+Verification for this change was a focused pytest run in `dcx_site/dcx_api` covering the account read capability, account save capability, and `dcx_api_app_test.py`, with `28 passed`.

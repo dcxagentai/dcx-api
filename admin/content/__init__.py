@@ -1,0 +1,1 @@
+"""Admin content read capabilities."""

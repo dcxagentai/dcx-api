@@ -11,14 +11,35 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from users.signup_email.public_email_signup_otp_support import (
-    _read_allowed_public_email_signup_origins,
-)
 from storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
     apply_initial_user_signup_schema_to_configured_database,
 )
 from routes.files.dcx_api_routes_files_r2_hello_world import (
     dcx_api_routes_files_r2_hello_world_router,
+)
+from routes.public.dcx_api_routes_public_build_time_api_test import (
+    dcx_api_routes_public_build_time_api_test_router,
+)
+from routes.admin.dcx_api_routes_admin_users_list import (
+    dcx_api_routes_admin_users_list_router,
+)
+from routes.admin.dcx_api_routes_admin_content_ux_strings_catalog import (
+    dcx_api_routes_admin_content_ux_strings_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_ux_strings_save_live_row import (
+    dcx_api_routes_admin_content_ux_strings_save_live_row_router,
+)
+from routes.admin.dcx_api_routes_admin_content_emails_catalog import (
+    dcx_api_routes_admin_content_emails_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
+    dcx_api_routes_admin_content_emails_save_live_row_router,
+)
+from routes.users.dcx_api_routes_users_me_account_summary import (
+    dcx_api_routes_users_me_account_summary_router,
+)
+from routes.users.dcx_api_routes_users_me_account_settings import (
+    dcx_api_routes_users_me_account_settings_router,
 )
 from routes.users.dcx_api_routes_users_signup_email import (
     dcx_api_routes_users_signup_email_router,
@@ -29,6 +50,7 @@ from routes.users.dcx_api_routes_users_signup_email_resend_otp import (
 from routes.users.dcx_api_routes_users_signup_email_verify_otp import (
     dcx_api_routes_users_signup_email_verify_otp_router,
 )
+from routes.users.dcx_api_routes_users_support import read_allowed_dcx_frontend_origins
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -102,15 +124,23 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(_read_allowed_public_email_signup_origins()),
+    allow_origins=sorted(read_allowed_dcx_frontend_origins()),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Origin"],
 )
 
+app.include_router(dcx_api_routes_admin_users_list_router)
+app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
+app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
+app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
+app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
+app.include_router(dcx_api_routes_users_me_account_summary_router)
+app.include_router(dcx_api_routes_users_me_account_settings_router)
 app.include_router(dcx_api_routes_users_signup_email_router)
 app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)
+app.include_router(dcx_api_routes_public_build_time_api_test_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 
@@ -186,10 +216,24 @@ def get_dcx_api_root_welcome_response() -> dict:
             "what_happened": "The backend root route responded successfully with a minimal service-ready payload.",
             "side_effects_executed": [],
             "next_steps": [
+                "Use /admin/users/list for the first dcx_admin users surface.",
+                "Use /admin/content/ux-strings/catalog for the admin UX-strings viewer.",
+                "Use /admin/content/ux-strings/save-live-row for immutable admin UX-string updates.",
+                "Use /admin/content/emails/catalog for the admin emails viewer.",
+                "Use /admin/content/emails/save-live-row for immutable admin email-template updates.",
                 "Use the dedicated /users routes for public signup flow interactions.",
+                "Use /users/me/account-summary for the first dcx_app account surface.",
+                "Use /users/me/account-settings for the first dcx_app editable account save path.",
                 "Add dedicated readiness and health routes when deployment needs them.",
             ],
             "related_operations": [
+                "dcx_api_routes_admin_users_list_router",
+                "dcx_api_routes_admin_content_ux_strings_catalog_router",
+                "dcx_api_routes_admin_content_ux_strings_save_live_row_router",
+                "dcx_api_routes_admin_content_emails_catalog_router",
+                "dcx_api_routes_admin_content_emails_save_live_row_router",
+                "dcx_api_routes_users_me_account_summary_router",
+                "dcx_api_routes_users_me_account_settings_router",
                 "dcx_api_routes_users_signup_email_router",
                 "dcx_api_routes_users_signup_email_verify_otp_router",
                 "dcx_api_routes_users_signup_email_resend_otp_router",
