@@ -38,6 +38,15 @@ from routes.admin.dcx_api_routes_admin_content_emails_catalog import (
 from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
     dcx_api_routes_admin_content_emails_save_live_row_router,
 )
+from routes.admin.dcx_api_routes_admin_public_site_publish_status import (
+    dcx_api_routes_admin_public_site_publish_status_router,
+)
+from routes.admin.dcx_api_routes_admin_public_site_publish_run import (
+    dcx_api_routes_admin_public_site_publish_run_router,
+)
+from routes.admin.dcx_api_routes_admin_public_site_mark_local_rebuild_complete import (
+    dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router,
+)
 from routes.users.dcx_api_routes_users_me_account_summary import (
     dcx_api_routes_users_me_account_summary_router,
 )
@@ -138,6 +147,9 @@ app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
 app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
+app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
+app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
+app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
 app.include_router(dcx_api_routes_users_me_account_summary_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
 app.include_router(dcx_api_routes_users_signup_email_router)
