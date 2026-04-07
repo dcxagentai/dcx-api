@@ -18,6 +18,9 @@ from emails.transactional.build_public_email_signup_confirmation_email_delivery_
 from emails.transactional.send_public_email_signup_confirmation import (
     send_public_email_signup_confirmation,
 )
+from auth.password.create_dcx_password_setup_link_after_confirmed_signup import (
+    create_dcx_password_setup_link_after_confirmed_signup,
+)
 from routes.users.dcx_api_routes_users_support import read_public_request_client_ip
 from system.rate_limits.enforce_public_route_rate_limit import (
     enforce_public_route_rate_limit_capability,
@@ -126,6 +129,18 @@ def post_public_email_otp_verification_request(
             verification_page_url=public_email_otp_verification_request.verification_page_url,
             origin_header=origin_header,
         )
+        password_setup_url = None
+        try:
+            password_setup_url = create_dcx_password_setup_link_after_confirmed_signup(
+                confirmed_email=verification_result["confirmed_email"],
+            )["password_set_url"]
+        except RuntimeError as password_setup_runtime_error:
+            logger.info(
+                "public_email_signup_password_setup_link_create_failed client_ip=%s confirmed_email_fingerprint=%s error_code=%s",
+                client_ip,
+                hash_public_email_signup_identifier_for_logs(verification_result["confirmed_email"]),
+                str(password_setup_runtime_error),
+            )
         try:
             confirmation_email_delivery_draft = build_public_email_signup_confirmation_email_delivery_draft(
                 language_code=verification_result["language_code"],
@@ -162,7 +177,9 @@ def post_public_email_otp_verification_request(
 
     return {
         "ok": True,
-        "data": {},
+        "data": {
+            "next_step_url": password_setup_url,
+        },
     }
 
 

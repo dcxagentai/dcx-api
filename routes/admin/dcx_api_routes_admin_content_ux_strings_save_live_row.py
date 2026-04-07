@@ -7,15 +7,15 @@ immutable version while the broader admin auth system is still being built.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
+    read_authenticated_dcx_admin_user_id_or_error_response,
+)
 from admin.content.ux_strings.save_dcx_admin_live_ux_string_row_version import (
     save_dcx_admin_live_ux_string_row_version_capability,
-)
-from routes.admin.dcx_api_routes_admin_support import (
-    read_permitted_local_debug_admin_user_id_or_error_response,
 )
 
 dcx_api_routes_admin_content_ux_strings_save_live_row_router = APIRouter(
@@ -36,14 +36,13 @@ class DcxAdminContentUxStringsSaveLiveRowRequest(BaseModel):
     response_model=None,
 )
 def post_dcx_admin_content_ux_strings_save_live_row(
+    request: Request,
     ux_strings_save_live_row_request: DcxAdminContentUxStringsSaveLiveRowRequest,
-    admin_user_id: int | None = Query(default=None, ge=1),
 ):
     """
     CONTRACT:
       preconditions:
-        - Real admin auth is not wired yet, so local development may temporarily supply one
-          `admin_user_id` query parameter for screen testing.
+        - One authenticated DCX admin/dev session cookie is present.
         - The body contains one current live UX-string row id and one candidate replacement text value.
       postconditions:
         - Saves one new immutable live row version or returns a no-op when the text is unchanged.
@@ -63,24 +62,25 @@ def post_dcx_admin_content_ux_strings_save_live_row(
       WHEN NOT TO USE it:
         - Do not use it to create new string identities or delete content.
       WHAT CAN GO WRONG:
-        - No temporary local admin identity is present yet.
+        - No authenticated admin/dev session is present.
         - The target row can be stale.
         - The edited text can be blank.
         - Database writes can fail.
       WHAT COMES NEXT:
-        - Keep this save route stable while admin auth and permission checks replace the local debug path.
+        - Keep this save route stable while more authenticated translation tooling grows around it.
 
     TESTS:
-      - test_admin_ux_strings_save_live_row_route_returns_save_result_for_local_debug_admin_user_id
-      - test_admin_ux_strings_save_live_row_route_returns_auth_required_without_debug_identity
+      - test_admin_ux_strings_save_live_row_route_returns_save_result_for_authenticated_admin_session
+      - test_admin_ux_strings_save_live_row_route_returns_auth_required_without_authenticated_session
 
     ERRORS:
       - API_DCX_ADMIN_AUTH_REQUIRED:
-          suggested_action: Use `?admin_user_id=` locally until admin auth is connected.
+          suggested_action: Sign in as an admin/dev user, then retry.
           common_causes:
-            - no authenticated admin session yet
+            - no authenticated admin/dev session cookie
+            - expired or revoked session
           recovery_steps:
-            - Add `?admin_user_id=<existing_user_id>` during local development.
+            - Sign in again through the admin login screen.
           retry_safe: true
       - API_DCX_ADMIN_UX_STRING_SAVE_INVALID:
           suggested_action: Refresh the selected row and retry with non-empty text.
@@ -94,7 +94,9 @@ def post_dcx_admin_content_ux_strings_save_live_row(
 
     CODE:
     """
-    _, error_response = read_permitted_local_debug_admin_user_id_or_error_response(admin_user_id)
+    _, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
+        request=request,
+    )
     if error_response is not None:
         return error_response
 
@@ -141,6 +143,6 @@ def post_dcx_admin_content_ux_strings_save_live_row(
             "surface": "admin",
             "view": "ux_strings_catalog",
             "operation": "live_row_saved",
-            "identity_resolution_mode": "temporary_admin_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }

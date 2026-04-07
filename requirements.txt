@@ -7,3 +7,4 @@ python-dotenv>=1.1,<2.0
 resend>=2.13,<3.0
 boto3>=1.40,<2.0
 python-multipart>=0.0.20,<1.0
+argon2-cffi>=25.1,<26.0

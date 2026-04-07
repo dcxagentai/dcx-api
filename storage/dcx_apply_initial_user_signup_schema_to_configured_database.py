@@ -89,6 +89,8 @@ def apply_initial_user_signup_schema_to_configured_database(
             "stephen_dcx_users",
             "stephen_dcx_user_auth_identities",
             "stephen_dcx_user_auth_challenges",
+            "stephen_dcx_user_password_credentials",
+            "stephen_dcx_user_auth_sessions",
             "stephen_dcx_public_route_rate_limits",
         ],
     }

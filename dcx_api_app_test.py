@@ -13,11 +13,9 @@ import routes.admin.dcx_api_routes_admin_content_emails_catalog as admin_emails_
 import routes.admin.dcx_api_routes_admin_content_emails_save_live_row as admin_emails_save_routes
 import routes.admin.dcx_api_routes_admin_content_ux_strings_catalog as admin_ux_strings_catalog_routes
 import routes.admin.dcx_api_routes_admin_content_ux_strings_save_live_row as admin_ux_strings_save_routes
-import routes.admin.dcx_api_routes_admin_support as admin_routes_support
 import routes.admin.dcx_api_routes_admin_users_list as admin_users_list_routes
 import routes.users.dcx_api_routes_users_me_account_settings as me_account_settings_routes
 import routes.users.dcx_api_routes_users_me_account_summary as me_account_summary_routes
-import routes.users.dcx_api_routes_users_support as user_routes_support
 import routes.users.dcx_api_routes_users_signup_email as signup_email_routes
 import routes.users.dcx_api_routes_users_signup_email_resend_otp as resend_otp_routes
 import routes.users.dcx_api_routes_users_signup_email_verify_otp as verify_otp_routes
@@ -30,41 +28,23 @@ def test_root_route_returns_minimal_ready_payload() -> None:
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload == {
-        "ok": True,
-        "data": {
-            "service_name": "dcx_api",
-            "status": "ready",
-            "message": "DCX API is ready.",
-        },
-        "context": {
-            "what_happened": "The backend root route responded successfully with a minimal service-ready payload.",
-            "side_effects_executed": [],
-            "next_steps": [
-                "Use /admin/users/list for the first dcx_admin users surface.",
-                "Use /admin/content/ux-strings/catalog for the admin UX-strings viewer.",
-                "Use /admin/content/ux-strings/save-live-row for immutable admin UX-string updates.",
-                "Use /admin/content/emails/catalog for the admin emails viewer.",
-                "Use /admin/content/emails/save-live-row for immutable admin email-template updates.",
-                "Use the dedicated /users routes for public signup flow interactions.",
-                "Use /users/me/account-summary for the first dcx_app account surface.",
-                "Use /users/me/account-settings for the first dcx_app editable account save path.",
-                "Add dedicated readiness and health routes when deployment needs them.",
-            ],
-            "related_operations": [
-                "dcx_api_routes_admin_users_list_router",
-                "dcx_api_routes_admin_content_ux_strings_catalog_router",
-                "dcx_api_routes_admin_content_ux_strings_save_live_row_router",
-                "dcx_api_routes_admin_content_emails_catalog_router",
-                "dcx_api_routes_admin_content_emails_save_live_row_router",
-                "dcx_api_routes_users_me_account_summary_router",
-                "dcx_api_routes_users_me_account_settings_router",
-                "dcx_api_routes_users_signup_email_router",
-                "dcx_api_routes_users_signup_email_verify_otp_router",
-                "dcx_api_routes_users_signup_email_resend_otp_router",
-            ],
-        },
+    assert payload["ok"] is True
+    assert payload["data"] == {
+        "service_name": "dcx_api",
+        "status": "ready",
+        "message": "DCX API is ready.",
     }
+    assert payload["context"]["what_happened"] == (
+        "The backend root route responded successfully with a minimal service-ready payload."
+    )
+    assert payload["context"]["side_effects_executed"] == []
+    assert "Use /auth/password/request-reset to start the email reset flow." in payload["context"]["next_steps"]
+    assert (
+        "Use /auth/password/complete-set to finish password setup or reset from the one-time token."
+        in payload["context"]["next_steps"]
+    )
+    assert "dcx_api_routes_auth_password_request_reset_router" in payload["context"]["related_operations"]
+    assert "dcx_api_routes_auth_password_complete_set_router" in payload["context"]["related_operations"]
 
 
 def test_root_route_allows_local_frontend_origin() -> None:
@@ -82,8 +62,12 @@ def test_root_route_allows_local_admin_origin() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
 
 
-def test_admin_users_list_route_returns_users_payload_for_local_debug_admin_user_id() -> None:
+def test_admin_users_list_route_returns_users_payload_for_authenticated_admin_session() -> None:
     with patch.object(
+        admin_users_list_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         admin_users_list_routes,
         "read_dcx_admin_user_list_capability",
         return_value={
@@ -111,16 +95,16 @@ def test_admin_users_list_route_returns_users_payload_for_local_debug_admin_user
             "total_user_count": 1,
         },
     ):
-        response = client.get("/admin/users/list?admin_user_id=1")
+        response = client.get("/admin/users/list")
         payload = response.json()
 
     assert response.status_code == 200
     assert payload["ok"] is True
     assert payload["data"]["total_user_count"] == 1
-    assert payload["context"]["identity_resolution_mode"] == "temporary_admin_user_id_query_parameter"
+    assert payload["context"]["identity_resolution_mode"] == "session_cookie"
 
 
-def test_admin_users_list_route_returns_auth_required_without_debug_identity() -> None:
+def test_admin_users_list_route_returns_auth_required_without_authenticated_session() -> None:
     response = client.get("/admin/users/list")
     payload = response.json()
 
@@ -129,34 +113,18 @@ def test_admin_users_list_route_returns_auth_required_without_debug_identity() -
         "ok": False,
         "error": {
             "code": "API_DCX_ADMIN_AUTH_REQUIRED",
-            "message": "No authenticated DCX admin user is available yet.",
-            "suggested_action": "Use ?admin_user_id=<existing_user_id> locally until admin auth is connected.",
+            "message": "No authenticated DCX admin session is active.",
+            "suggested_action": "Sign in as an admin/dev user, then retry.",
         },
     }
 
 
-def test_admin_users_list_route_rejects_debug_identity_outside_local_runtime() -> None:
+def test_admin_ux_strings_catalog_route_returns_payload_for_authenticated_admin_session() -> None:
     with patch.object(
-        admin_routes_support,
-        "read_dcx_runtime_environment",
-        return_value="production",
-    ):
-        response = client.get("/admin/users/list?admin_user_id=1")
-        payload = response.json()
-
-    assert response.status_code == 400
-    assert payload == {
-        "ok": False,
-        "error": {
-            "code": "API_DCX_ADMIN_DEBUG_USER_ID_FORBIDDEN",
-            "message": "The temporary debug admin_user_id path is only allowed in local development.",
-            "suggested_action": "Remove the debug parameter and use the real authenticated admin flow.",
-        },
-    }
-
-
-def test_admin_ux_strings_catalog_route_returns_payload_for_local_debug_admin_user_id() -> None:
-    with patch.object(
+        admin_ux_strings_catalog_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         admin_ux_strings_catalog_routes,
         "read_dcx_admin_live_ux_strings_catalog_capability",
         return_value={
@@ -184,7 +152,7 @@ def test_admin_ux_strings_catalog_route_returns_payload_for_local_debug_admin_us
             "total_live_row_count": 1,
         },
     ):
-        response = client.get("/admin/content/ux-strings/catalog?admin_user_id=1")
+        response = client.get("/admin/content/ux-strings/catalog")
         payload = response.json()
 
     assert response.status_code == 200
@@ -193,8 +161,12 @@ def test_admin_ux_strings_catalog_route_returns_payload_for_local_debug_admin_us
     assert payload["context"]["view"] == "ux_strings_catalog"
 
 
-def test_admin_emails_catalog_route_returns_payload_for_local_debug_admin_user_id() -> None:
+def test_admin_emails_catalog_route_returns_payload_for_authenticated_admin_session() -> None:
     with patch.object(
+        admin_emails_catalog_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         admin_emails_catalog_routes,
         "read_dcx_admin_live_emails_catalog_capability",
         return_value={
@@ -223,7 +195,7 @@ def test_admin_emails_catalog_route_returns_payload_for_local_debug_admin_user_i
             "total_live_row_count": 1,
         },
     ):
-        response = client.get("/admin/content/emails/catalog?admin_user_id=1")
+        response = client.get("/admin/content/emails/catalog")
         payload = response.json()
 
     assert response.status_code == 200
@@ -232,8 +204,12 @@ def test_admin_emails_catalog_route_returns_payload_for_local_debug_admin_user_i
     assert payload["context"]["view"] == "emails_catalog"
 
 
-def test_admin_ux_strings_save_live_row_route_returns_save_result_for_local_debug_admin_user_id() -> None:
+def test_admin_ux_strings_save_live_row_route_returns_save_result_for_authenticated_admin_session() -> None:
     with patch.object(
+        admin_ux_strings_save_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         admin_ux_strings_save_routes,
         "save_dcx_admin_live_ux_string_row_version_capability",
         return_value={
@@ -243,7 +219,7 @@ def test_admin_ux_strings_save_live_row_route_returns_save_result_for_local_debu
         },
     ):
         response = client.post(
-            "/admin/content/ux-strings/save-live-row?admin_user_id=1",
+            "/admin/content/ux-strings/save-live-row",
             json={
                 "ux_string_id": 101,
                 "text": "Updated translated value",
@@ -257,7 +233,7 @@ def test_admin_ux_strings_save_live_row_route_returns_save_result_for_local_debu
     assert payload["context"]["operation"] == "live_row_saved"
 
 
-def test_admin_ux_strings_save_live_row_route_returns_auth_required_without_debug_identity() -> None:
+def test_admin_ux_strings_save_live_row_route_returns_auth_required_without_authenticated_session() -> None:
     response = client.post(
         "/admin/content/ux-strings/save-live-row",
         json={
@@ -272,14 +248,18 @@ def test_admin_ux_strings_save_live_row_route_returns_auth_required_without_debu
         "ok": False,
         "error": {
             "code": "API_DCX_ADMIN_AUTH_REQUIRED",
-            "message": "No authenticated DCX admin user is available yet.",
-            "suggested_action": "Use ?admin_user_id=<existing_user_id> locally until admin auth is connected.",
+            "message": "No authenticated DCX admin session is active.",
+            "suggested_action": "Sign in as an admin/dev user, then retry.",
         },
     }
 
 
-def test_admin_emails_save_live_row_route_returns_save_result_for_local_debug_admin_user_id() -> None:
+def test_admin_emails_save_live_row_route_returns_save_result_for_authenticated_admin_session() -> None:
     with patch.object(
+        admin_emails_save_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         admin_emails_save_routes,
         "save_dcx_admin_live_email_row_version_capability",
         return_value={
@@ -289,7 +269,7 @@ def test_admin_emails_save_live_row_route_returns_save_result_for_local_debug_ad
         },
     ):
         response = client.post(
-            "/admin/content/emails/save-live-row?admin_user_id=1",
+            "/admin/content/emails/save-live-row",
             json={
                 "email_id": 11,
                 "email_subject": "DCX Agentic: Ihr Bestätigungscode",
@@ -304,7 +284,7 @@ def test_admin_emails_save_live_row_route_returns_save_result_for_local_debug_ad
     assert payload["context"]["operation"] == "live_row_saved"
 
 
-def test_admin_emails_save_live_row_route_returns_auth_required_without_debug_identity() -> None:
+def test_admin_emails_save_live_row_route_returns_auth_required_without_authenticated_session() -> None:
     response = client.post(
         "/admin/content/emails/save-live-row",
         json={
@@ -320,14 +300,18 @@ def test_admin_emails_save_live_row_route_returns_auth_required_without_debug_id
         "ok": False,
         "error": {
             "code": "API_DCX_ADMIN_AUTH_REQUIRED",
-            "message": "No authenticated DCX admin user is available yet.",
-            "suggested_action": "Use ?admin_user_id=<existing_user_id> locally until admin auth is connected.",
+            "message": "No authenticated DCX admin session is active.",
+            "suggested_action": "Sign in as an admin/dev user, then retry.",
         },
     }
 
 
-def test_users_me_account_summary_route_returns_account_payload_for_local_debug_user_id() -> None:
+def test_users_me_account_summary_route_returns_account_payload_for_authenticated_session() -> None:
     with patch.object(
+        me_account_summary_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         me_account_summary_routes,
         "read_authenticated_dcx_user_account_summary_capability",
         return_value={
@@ -400,16 +384,16 @@ def test_users_me_account_summary_route_returns_account_payload_for_local_debug_
             ],
         },
     ):
-        response = client.get("/users/me/account-summary?user_id=1")
+        response = client.get("/users/me/account-summary")
         payload = response.json()
 
     assert response.status_code == 200
     assert payload["ok"] is True
     assert payload["data"]["primary_email"] == "matbenet77@gmail.com"
-    assert payload["context"]["identity_resolution_mode"] == "temporary_user_id_query_parameter"
+    assert payload["context"]["identity_resolution_mode"] == "session_cookie"
 
 
-def test_users_me_account_summary_route_returns_auth_required_without_debug_identity() -> None:
+def test_users_me_account_summary_route_returns_auth_required_without_authenticated_session() -> None:
     response = client.get("/users/me/account-summary")
     payload = response.json()
 
@@ -417,35 +401,19 @@ def test_users_me_account_summary_route_returns_auth_required_without_debug_iden
     assert payload == {
         "ok": False,
         "error": {
-            "code": "API_USERS_ME_AUTH_REQUIRED",
-            "message": "No authenticated DCX app user is available yet.",
-            "suggested_action": "Use ?user_id=<existing_user_id> locally until app auth is connected.",
+            "code": "API_DCX_AUTH_SESSION_REQUIRED",
+            "message": "No authenticated DCX app session is active.",
+            "suggested_action": "Sign in through the DCX app login flow, then retry.",
         },
     }
 
 
-def test_users_me_account_summary_route_rejects_debug_user_id_outside_local_runtime() -> None:
+def test_users_me_account_settings_route_saves_and_returns_refreshed_account_payload_for_authenticated_session() -> None:
     with patch.object(
-        user_routes_support,
-        "read_dcx_runtime_environment",
-        return_value="production",
-    ):
-        response = client.get("/users/me/account-summary?user_id=1")
-        payload = response.json()
-
-    assert response.status_code == 400
-    assert payload == {
-        "ok": False,
-        "error": {
-            "code": "API_USERS_ME_DEBUG_USER_ID_FORBIDDEN",
-            "message": "The temporary debug user_id path is only allowed in local development.",
-            "suggested_action": "Remove the debug parameter and use the real authenticated account flow.",
-        },
-    }
-
-
-def test_users_me_account_settings_route_saves_and_returns_refreshed_account_payload_for_local_debug_user_id() -> None:
-    with patch.object(
+        me_account_settings_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
         me_account_settings_routes,
         "save_authenticated_dcx_user_account_editable_settings_capability",
         return_value={
@@ -528,7 +496,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
         },
     ):
         response = client.post(
-            "/users/me/account-settings?user_id=1",
+            "/users/me/account-settings",
             json={
                 "preferred_language_id": 2,
                 "preferred_timezone_id": 2,
@@ -544,7 +512,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
     assert payload["context"]["operation"] == "account_settings_saved"
 
 
-def test_users_me_account_settings_route_returns_auth_required_without_debug_identity() -> None:
+def test_users_me_account_settings_route_returns_auth_required_without_authenticated_session() -> None:
     response = client.post(
         "/users/me/account-settings",
         json={
@@ -559,9 +527,9 @@ def test_users_me_account_settings_route_returns_auth_required_without_debug_ide
     assert payload == {
         "ok": False,
         "error": {
-            "code": "API_USERS_ME_AUTH_REQUIRED",
-            "message": "No authenticated DCX app user is available yet.",
-            "suggested_action": "Use ?user_id=<existing_user_id> locally until app auth is connected.",
+            "code": "API_DCX_AUTH_SESSION_REQUIRED",
+            "message": "No authenticated DCX app session is active.",
+            "suggested_action": "Sign in through the DCX app login flow, then retry.",
         },
     }
 
@@ -712,6 +680,12 @@ def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_pay
         verify_otp_routes,
         "send_public_email_signup_confirmation",
         return_value={"provider": "resend", "status": "accepted", "confirmed_email": "user@example.com"},
+    ), patch.object(
+        verify_otp_routes,
+        "create_dcx_password_setup_link_after_confirmed_signup",
+        return_value={
+            "password_set_url": "http://localhost:5173/password/set?mode=password_setup#password_challenge_token=test-token"
+        },
     ) as confirmation_send_mock:
         response = client.post(
             "/users/signup-email/verify-otp",
@@ -728,7 +702,9 @@ def test_users_email_verify_route_sends_confirmation_email_but_keeps_browser_pay
     confirmation_send_mock.assert_called_once()
     assert payload == {
         "ok": True,
-        "data": {},
+        "data": {
+            "next_step_url": "http://localhost:5173/password/set?mode=password_setup#password_challenge_token=test-token",
+        },
     }
 
 
@@ -758,6 +734,12 @@ def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() 
         verify_otp_routes,
         "send_public_email_signup_confirmation",
         side_effect=RuntimeError("API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED"),
+    ), patch.object(
+        verify_otp_routes,
+        "create_dcx_password_setup_link_after_confirmed_signup",
+        return_value={
+            "password_set_url": "http://localhost:5173/password/set?mode=password_setup#password_challenge_token=test-token"
+        },
     ):
         response = client.post(
             "/users/signup-email/verify-otp",
@@ -773,7 +755,9 @@ def test_users_email_verify_route_ignores_confirmation_email_delivery_failure() 
 
     assert payload == {
         "ok": True,
-        "data": {},
+        "data": {
+            "next_step_url": "http://localhost:5173/password/set?mode=password_setup#password_challenge_token=test-token",
+        },
     }
 
 

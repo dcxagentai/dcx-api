@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS stephen_dcx_users (
     primary_email_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
     primary_email_confirmed_at_ts_ms BIGINT,
     preferred_language_id BIGINT REFERENCES stephen_dcx_languages (id) ON DELETE SET NULL,
+    user_role TEXT NOT NULL DEFAULT 'user',
     account_status TEXT NOT NULL DEFAULT 'pending_email_verification',
     email_communication_preference TEXT NOT NULL DEFAULT 'announcements',
     last_seen_at_ts_ms BIGINT,
@@ -96,6 +97,36 @@ ADD COLUMN IF NOT EXISTS send_budget_window_started_at_ts_ms BIGINT;
 ALTER TABLE stephen_dcx_user_auth_challenges
 ADD COLUMN IF NOT EXISTS send_budget_request_count INTEGER NOT NULL DEFAULT 0;
 
+ALTER TABLE stephen_dcx_users
+ADD COLUMN IF NOT EXISTS user_role TEXT NOT NULL DEFAULT 'user';
+
+CREATE TABLE IF NOT EXISTS stephen_dcx_user_password_credentials (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES stephen_dcx_users (id) ON DELETE CASCADE,
+    password_hash TEXT NOT NULL,
+    password_algorithm TEXT NOT NULL DEFAULT 'argon2id',
+    password_set_at_ts_ms BIGINT NOT NULL,
+    password_reset_required BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT,
+    updated_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT,
+    UNIQUE (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS stephen_dcx_user_auth_sessions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES stephen_dcx_users (id) ON DELETE CASCADE,
+    session_token_hash TEXT NOT NULL UNIQUE,
+    session_status TEXT NOT NULL DEFAULT 'active',
+    issued_at_ts_ms BIGINT NOT NULL,
+    expires_at_ts_ms BIGINT NOT NULL,
+    revoked_at_ts_ms BIGINT,
+    last_seen_at_ts_ms BIGINT,
+    created_from_ip TEXT,
+    created_from_user_agent TEXT,
+    created_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT,
+    updated_at_ts_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT
+);
+
 CREATE TABLE IF NOT EXISTS stephen_dcx_public_route_rate_limits (
     route_key TEXT NOT NULL,
     client_ip TEXT NOT NULL,
@@ -120,6 +151,9 @@ ON stephen_dcx_users (preferred_language_id);
 CREATE INDEX IF NOT EXISTS stephen_dcx_users_account_status_idx
 ON stephen_dcx_users (account_status);
 
+CREATE INDEX IF NOT EXISTS stephen_dcx_users_user_role_idx
+ON stephen_dcx_users (user_role);
+
 CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_identities_user_id_idx
 ON stephen_dcx_user_auth_identities (user_id);
 
@@ -143,6 +177,18 @@ ON stephen_dcx_user_auth_challenges (user_auth_identity_id, challenge_type, chal
 WHERE challenge_status = 'pending'
   AND consumed_at_ts_ms IS NULL
   AND invalidated_at_ts_ms IS NULL;
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_user_password_credentials_user_id_idx
+ON stephen_dcx_user_password_credentials (user_id);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_sessions_user_id_idx
+ON stephen_dcx_user_auth_sessions (user_id);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_sessions_status_idx
+ON stephen_dcx_user_auth_sessions (session_status);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_sessions_expires_at_idx
+ON stephen_dcx_user_auth_sessions (expires_at_ts_ms);
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_public_route_rate_limits_lookup_idx
 ON stephen_dcx_public_route_rate_limits (route_key, client_ip, window_started_at_ts_ms);
@@ -201,6 +247,36 @@ BEGIN
     ) THEN
         CREATE TRIGGER stephen_dcx_user_auth_challenges_set_updated_at_ts_ms
         BEFORE UPDATE ON stephen_dcx_user_auth_challenges
+        FOR EACH ROW
+        EXECUTE FUNCTION stephen_dcx_set_updated_at_ts_ms();
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'stephen_dcx_user_password_credentials_set_updated_at_ts_ms'
+    ) THEN
+        CREATE TRIGGER stephen_dcx_user_password_credentials_set_updated_at_ts_ms
+        BEFORE UPDATE ON stephen_dcx_user_password_credentials
+        FOR EACH ROW
+        EXECUTE FUNCTION stephen_dcx_set_updated_at_ts_ms();
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'stephen_dcx_user_auth_sessions_set_updated_at_ts_ms'
+    ) THEN
+        CREATE TRIGGER stephen_dcx_user_auth_sessions_set_updated_at_ts_ms
+        BEFORE UPDATE ON stephen_dcx_user_auth_sessions
         FOR EACH ROW
         EXECUTE FUNCTION stephen_dcx_set_updated_at_ts_ms();
     END IF;

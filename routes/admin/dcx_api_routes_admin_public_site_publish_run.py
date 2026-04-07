@@ -7,14 +7,14 @@ edits land in Postgres and the public Astro build now reads the live bundle from
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
+    read_authenticated_dcx_admin_user_id_or_error_response,
+)
 from admin.publish.public_site.trigger_dcx_admin_public_site_publish_run import (
     trigger_dcx_admin_public_site_publish_run_capability,
-)
-from routes.admin.dcx_api_routes_admin_support import (
-    read_permitted_local_debug_admin_user_id_or_error_response,
 )
 
 dcx_api_routes_admin_public_site_publish_run_router = APIRouter(
@@ -28,13 +28,12 @@ dcx_api_routes_admin_public_site_publish_run_router = APIRouter(
     response_model=None,
 )
 def post_dcx_admin_public_site_publish_run(
-    admin_user_id: int | None = Query(default=None, ge=1),
+    request: Request,
 ):
     """
     CONTRACT:
       preconditions:
-        - Real admin auth is not wired yet, so local development may temporarily supply one
-          `admin_user_id` query parameter for screen testing.
+        - One authenticated DCX admin/dev session cookie is present.
         - The backend environment includes a valid Cloudflare Pages deploy hook URL.
       postconditions:
         - Records one attempted publish trigger and calls the configured Cloudflare Pages deploy hook.
@@ -55,22 +54,23 @@ def post_dcx_admin_public_site_publish_run(
       WHEN NOT TO USE it:
         - Do not use it as a substitute for final admin auth/permissions.
       WHAT CAN GO WRONG:
-        - No temporary local admin identity is present yet.
+        - No authenticated admin/dev session is present.
         - The deploy hook can be missing or unavailable.
         - The publish-state table can be missing before its SQL is applied.
       WHAT COMES NEXT:
         - Auth can later protect this route in production while keeping the same publish contract.
 
     TESTS:
-      - test_public_site_publish_run_route_returns_payload_for_local_debug_admin_user_id
+      - test_public_site_publish_run_route_returns_payload_for_authenticated_admin_session
 
     ERRORS:
       - API_DCX_ADMIN_AUTH_REQUIRED:
-          suggested_action: Use `?admin_user_id=` locally until admin auth is connected.
+          suggested_action: Sign in as an admin/dev user, then retry.
           common_causes:
-            - no authenticated admin session yet
+            - no authenticated admin/dev session cookie
+            - expired or revoked session
           recovery_steps:
-            - Add `?admin_user_id=<existing_user_id>` during local development.
+            - Sign in again through the admin login screen.
           retry_safe: true
       - API_DCX_ADMIN_PUBLIC_SITE_DEPLOY_HOOK_NOT_CONFIGURED:
           suggested_action: Set DCX_PUBLIC_CLOUDFLARE_PAGES_DEPLOY_HOOK_URL on the backend and retry.
@@ -93,8 +93,8 @@ def post_dcx_admin_public_site_publish_run(
 
     CODE:
     """
-    resolved_admin_user_id, error_response = read_permitted_local_debug_admin_user_id_or_error_response(
-        admin_user_id
+    resolved_admin_user_id, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
+        request=request,
     )
     if error_response is not None:
         return error_response
@@ -138,6 +138,6 @@ def post_dcx_admin_public_site_publish_run(
             "surface": "admin",
             "view": "public_site_publish_status",
             "operation": "publish_triggered",
-            "identity_resolution_mode": "temporary_admin_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }

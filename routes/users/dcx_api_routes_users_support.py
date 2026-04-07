@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
 
 
 def read_public_request_client_ip(request: Request) -> str:
@@ -158,84 +157,3 @@ def read_allowed_dcx_frontend_origins() -> set[str]:
         }
 
     return configured_additional_origins | local_development_origins
-
-
-def read_permitted_local_debug_user_id_or_error_response(
-    user_id: int | None,
-) -> tuple[int | None, JSONResponse | None]:
-    """
-    CONTRACT:
-      preconditions:
-        - The caller provides the optional temporary `user_id` query parameter from one
-          app-facing HTTP boundary.
-      postconditions:
-        - Returns the permitted local debug user id when temporary local testing is allowed.
-        - Returns one canonical error response when no temporary user identity is available or
-          when the temporary debug path is attempted outside local/development.
-      side_effects: []
-      idempotent: true
-      retry_safe: true
-      async: false
-
-    NARRATIVE:
-      WHY this exists:
-        - The first app-facing account routes all need the same temporary identity rule before durable auth exists.
-      WHEN TO USE it:
-        - Use it in app HTTP boundaries that are temporarily testable with `?user_id=`.
-      WHEN NOT TO USE it:
-        - Do not mistake this for real user authentication.
-      WHAT CAN GO WRONG:
-        - The frontend forgets to supply the debug user id locally.
-        - The temporary debug path is accidentally attempted in a hosted environment.
-      WHAT COMES NEXT:
-        - Replace this helper with real session-backed identity while keeping route contracts stable.
-
-    TESTS:
-      - covered_indirectly_by_app_route_tests_in_dcx_api_app_test
-
-    ERRORS:
-      - API_USERS_ME_AUTH_REQUIRED:
-          suggested_action: Use `?user_id=<existing_user_id>` locally until app auth is connected.
-          common_causes:
-            - no authenticated app session yet
-          recovery_steps:
-            - Add `?user_id=<existing_user_id>` during local development.
-          retry_safe: true
-      - API_USERS_ME_DEBUG_USER_ID_FORBIDDEN:
-          suggested_action: Remove the debug parameter and use the real authenticated account flow.
-          common_causes:
-            - local-only debug behavior attempted in staging or production
-          recovery_steps:
-            - Remove the query parameter.
-            - Retry through the real app auth flow once it exists.
-          retry_safe: true
-
-    CODE:
-    """
-    if user_id is None:
-        return None, JSONResponse(
-            status_code=401,
-            content={
-                "ok": False,
-                "error": {
-                    "code": "API_USERS_ME_AUTH_REQUIRED",
-                    "message": "No authenticated DCX app user is available yet.",
-                    "suggested_action": "Use ?user_id=<existing_user_id> locally until app auth is connected.",
-                },
-            },
-        )
-
-    if read_dcx_runtime_environment() not in {"local", "development"}:
-        return None, JSONResponse(
-            status_code=400,
-            content={
-                "ok": False,
-                "error": {
-                    "code": "API_USERS_ME_DEBUG_USER_ID_FORBIDDEN",
-                    "message": "The temporary debug user_id path is only allowed in local development.",
-                    "suggested_action": "Remove the debug parameter and use the real authenticated account flow.",
-                },
-            },
-        )
-
-    return user_id, None

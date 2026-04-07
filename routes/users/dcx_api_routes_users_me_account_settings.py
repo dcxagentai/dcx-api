@@ -2,17 +2,17 @@
 CONTEXT:
 This file owns the first DCX app-facing `/users/me/account-settings` HTTP boundary.
 It exists so the user app can autosave a small set of low-risk account fields from one
-stable backend contract before real auth and more complex verification flows are added.
+stable authenticated backend contract while more complex verification flows are added.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 from fastapi.responses import JSONResponse
 
-from routes.users.dcx_api_routes_users_support import (
-    read_permitted_local_debug_user_id_or_error_response,
+from auth.authorization.read_authenticated_dcx_user_id_or_error_response import (
+    read_authenticated_dcx_user_id_or_error_response,
 )
 from users.account.read_authenticated_dcx_user_account_summary import (
     read_authenticated_dcx_user_account_summary_capability,
@@ -34,14 +34,13 @@ class DcxUsersMeAccountSettingsSaveRequest(BaseModel):
 
 @dcx_api_routes_users_me_account_settings_router.post("/me/account-settings", response_model=None)
 def post_authenticated_dcx_user_account_settings(
+    request: Request,
     account_settings_save_request: DcxUsersMeAccountSettingsSaveRequest,
-    user_id: int | None = Query(default=None, ge=1),
 ):
     """
     CONTRACT:
       preconditions:
-        - Real auth is not wired yet, so local development may temporarily supply one `user_id`
-          query parameter for account-page testing.
+        - One authenticated DCX app session cookie is present.
         - The body contains only the currently editable account fields.
       postconditions:
         - Saves the requested account settings for the current user.
@@ -61,26 +60,24 @@ def post_authenticated_dcx_user_account_settings(
       WHEN NOT TO USE it:
         - Do not use it for primary-email changes or admin-side user edits.
       WHAT CAN GO WRONG:
-        - No authenticated identity is available yet.
-        - The user id can be stale.
+        - No authenticated identity is available.
         - The selected language or preference can be invalid.
         - Database access can fail.
       WHAT COMES NEXT:
         - Keep this route stable while auth becomes real and more settings become editable.
 
     TESTS:
-      - test_users_me_account_settings_route_saves_and_returns_refreshed_account_payload_for_local_debug_user_id
-      - test_users_me_account_settings_route_returns_auth_required_without_debug_identity
+      - test_users_me_account_settings_route_saves_and_returns_refreshed_account_payload_for_authenticated_session
+      - test_users_me_account_settings_route_returns_auth_required_without_authenticated_session
 
     ERRORS:
-      - API_USERS_ME_AUTH_REQUIRED:
-          suggested_action: Sign in once auth is connected, or use `?user_id=` locally while the
-            account page is still in the temporary bootstrap phase.
+      - API_DCX_AUTH_SESSION_REQUIRED:
+          suggested_action: Sign in through the DCX app login flow, then retry.
           common_causes:
-            - no authenticated session yet
-            - no local debug user id supplied
+            - no authenticated session cookie
+            - expired or revoked session
           recovery_steps:
-            - Add `?user_id=<existing_user_id>` during local development.
+            - Sign in again through the app login screen.
           retry_safe: true
       - API_USERS_ME_ACCOUNT_SETTINGS_INVALID:
           suggested_action: Refresh the page options and retry with a supported value.
@@ -94,7 +91,11 @@ def post_authenticated_dcx_user_account_settings(
 
     CODE:
     """
-    authenticated_user_id, error_response = read_permitted_local_debug_user_id_or_error_response(user_id)
+    authenticated_user_id, identity_resolution_mode, error_response = (
+        read_authenticated_dcx_user_id_or_error_response(
+            request=request,
+        )
+    )
     if error_response is not None:
         return error_response
 
@@ -119,7 +120,7 @@ def post_authenticated_dcx_user_account_settings(
                     "error": {
                         "code": "API_USERS_ME_ACCOUNT_SETTINGS_NOT_FOUND",
                         "message": "We could not find that DCX user account.",
-                        "suggested_action": "Retry with a valid local debug user id.",
+                        "suggested_action": "Recreate the user through signup or inspect the backing account row.",
                     },
                 },
             )
@@ -160,6 +161,6 @@ def post_authenticated_dcx_user_account_settings(
             "surface": "app",
             "view": "account_summary",
             "operation": "account_settings_saved",
-            "identity_resolution_mode": "temporary_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }

@@ -23,6 +23,21 @@ from routes.public.dcx_api_routes_public_build_time_api_test import (
 from routes.public.dcx_api_routes_public_build_time_ux_strings_bundle import (
     dcx_api_routes_public_build_time_ux_strings_bundle_router,
 )
+from routes.auth.dcx_api_routes_auth_login_password import (
+    dcx_api_routes_auth_login_password_router,
+)
+from routes.auth.dcx_api_routes_auth_logout import (
+    dcx_api_routes_auth_logout_router,
+)
+from routes.auth.dcx_api_routes_auth_password_complete_set import (
+    dcx_api_routes_auth_password_complete_set_router,
+)
+from routes.auth.dcx_api_routes_auth_password_request_reset import (
+    dcx_api_routes_auth_password_request_reset_router,
+)
+from routes.auth.dcx_api_routes_auth_session import (
+    dcx_api_routes_auth_session_router,
+)
 from routes.admin.dcx_api_routes_admin_users_list import (
     dcx_api_routes_admin_users_list_router,
 )
@@ -137,11 +152,16 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(read_allowed_dcx_frontend_origins()),
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Origin"],
 )
 
+app.include_router(dcx_api_routes_auth_login_password_router)
+app.include_router(dcx_api_routes_auth_logout_router)
+app.include_router(dcx_api_routes_auth_password_complete_set_router)
+app.include_router(dcx_api_routes_auth_password_request_reset_router)
+app.include_router(dcx_api_routes_auth_session_router)
 app.include_router(dcx_api_routes_admin_users_list_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
@@ -233,6 +253,11 @@ def get_dcx_api_root_welcome_response() -> dict:
             "side_effects_executed": [],
             "next_steps": [
                 "Use /admin/users/list for the first dcx_admin users surface.",
+                "Use /auth/login/password to create a shared app/admin browser session.",
+                "Use /auth/session to check the current authenticated browser session.",
+                "Use /auth/logout to revoke the current shared browser session.",
+                "Use /auth/password/request-reset to start the email reset flow.",
+                "Use /auth/password/complete-set to finish password setup or reset from the one-time token.",
                 "Use /admin/content/ux-strings/catalog for the admin UX-strings viewer.",
                 "Use /admin/content/ux-strings/save-live-row for immutable admin UX-string updates.",
                 "Use /admin/content/emails/catalog for the admin emails viewer.",
@@ -244,6 +269,11 @@ def get_dcx_api_root_welcome_response() -> dict:
             ],
             "related_operations": [
                 "dcx_api_routes_admin_users_list_router",
+                "dcx_api_routes_auth_login_password_router",
+                "dcx_api_routes_auth_session_router",
+                "dcx_api_routes_auth_logout_router",
+                "dcx_api_routes_auth_password_request_reset_router",
+                "dcx_api_routes_auth_password_complete_set_router",
                 "dcx_api_routes_admin_content_ux_strings_catalog_router",
                 "dcx_api_routes_admin_content_ux_strings_save_live_row_router",
                 "dcx_api_routes_admin_content_emails_catalog_router",

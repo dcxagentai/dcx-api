@@ -7,14 +7,14 @@ Cloudflare Pages rebuild after the public site switched to build-time reads from
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
+    read_authenticated_dcx_admin_user_id_or_error_response,
+)
 from admin.publish.public_site.read_dcx_admin_public_site_publish_status import (
     read_dcx_admin_public_site_publish_status_capability,
-)
-from routes.admin.dcx_api_routes_admin_support import (
-    read_permitted_local_debug_admin_user_id_or_error_response,
 )
 
 dcx_api_routes_admin_public_site_publish_status_router = APIRouter(
@@ -28,16 +28,15 @@ dcx_api_routes_admin_public_site_publish_status_router = APIRouter(
     response_model=None,
 )
 def get_dcx_admin_public_site_publish_status(
-    admin_user_id: int | None = Query(default=None, ge=1),
+    request: Request,
 ):
     """
     CONTRACT:
       preconditions:
-        - Real admin auth is not wired yet, so local development may temporarily supply one
-          `admin_user_id` query parameter for screen testing.
+        - One authenticated DCX admin/dev session cookie is present.
       postconditions:
         - Returns the canonical success wrapper containing the current public-site publish status.
-        - Returns the canonical error wrapper when no temporary local admin identity is supplied yet.
+        - Returns the canonical error wrapper when no authenticated admin/dev session is available.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -52,7 +51,7 @@ def get_dcx_admin_public_site_publish_status(
       WHEN NOT TO USE it:
         - Do not use it as a replacement for real admin authorization.
       WHAT CAN GO WRONG:
-        - No temporary local admin identity is present yet.
+        - No authenticated admin/dev session is present.
         - The publish-state SQL may not be applied yet.
         - Database reads can fail.
       WHAT COMES NEXT:
@@ -60,15 +59,16 @@ def get_dcx_admin_public_site_publish_status(
           route can then reflect the latest accepted publish attempt.
 
     TESTS:
-      - test_public_site_publish_status_route_returns_payload_for_local_debug_admin_user_id
+      - test_public_site_publish_status_route_returns_payload_for_authenticated_admin_session
 
     ERRORS:
       - API_DCX_ADMIN_AUTH_REQUIRED:
-          suggested_action: Use `?admin_user_id=` locally until admin auth is connected.
+          suggested_action: Sign in as an admin/dev user, then retry.
           common_causes:
-            - no authenticated admin session yet
+            - no authenticated admin/dev session cookie
+            - expired or revoked session
           recovery_steps:
-            - Add `?admin_user_id=<existing_user_id>` during local development.
+            - Sign in again through the admin login screen.
           retry_safe: true
       - API_DCX_ADMIN_PUBLIC_SITE_PUBLISH_STATUS_READ_FAILED:
           suggested_action: Confirm the publish-state table exists and retry after backend/database health is restored.
@@ -82,7 +82,9 @@ def get_dcx_admin_public_site_publish_status(
 
     CODE:
     """
-    _, error_response = read_permitted_local_debug_admin_user_id_or_error_response(admin_user_id)
+    _, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
+        request=request,
+    )
     if error_response is not None:
         return error_response
 
@@ -107,6 +109,6 @@ def get_dcx_admin_public_site_publish_status(
         "context": {
             "surface": "admin",
             "view": "public_site_publish_status",
-            "identity_resolution_mode": "temporary_admin_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }

@@ -6,14 +6,14 @@ It exists so the admin frontend can browse multilingual email-template rows with
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
+    read_authenticated_dcx_admin_user_id_or_error_response,
+)
 from admin.content.emails.read_dcx_admin_live_emails_catalog import (
     read_dcx_admin_live_emails_catalog_capability,
-)
-from routes.admin.dcx_api_routes_admin_support import (
-    read_permitted_local_debug_admin_user_id_or_error_response,
 )
 
 dcx_api_routes_admin_content_emails_catalog_router = APIRouter(
@@ -27,16 +27,15 @@ dcx_api_routes_admin_content_emails_catalog_router = APIRouter(
     response_model=None,
 )
 def get_dcx_admin_content_emails_catalog(
-    admin_user_id: int | None = Query(default=None, ge=1),
+    request: Request,
 ):
     """
     CONTRACT:
       preconditions:
-        - Real admin auth is not wired yet, so local development may temporarily supply one
-          `admin_user_id` query parameter for screen testing.
+        - One authenticated DCX admin/dev session cookie is present.
       postconditions:
         - Returns a canonical success wrapper containing the live email-template catalog.
-        - Returns a canonical error wrapper when no temporary local admin identity is supplied yet.
+        - Returns a canonical error wrapper when no authenticated admin/dev session is available.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -51,22 +50,22 @@ def get_dcx_admin_content_emails_catalog(
       WHEN NOT TO USE it:
         - Do not treat this as the final admin authorization design.
       WHAT CAN GO WRONG:
-        - No temporary local admin identity is present yet.
+        - No authenticated admin/dev session is present.
         - Database reads can fail.
       WHAT COMES NEXT:
-        - Keep this read contract stable while real admin session and role checks replace the
-          temporary debug-identity path.
+        - Keep this read contract stable while more authenticated admin tools reuse the same session gate.
 
     TESTS:
-      - test_admin_emails_catalog_route_returns_payload_for_local_debug_admin_user_id
+      - test_admin_emails_catalog_route_returns_payload_for_authenticated_admin_session
 
     ERRORS:
       - API_DCX_ADMIN_AUTH_REQUIRED:
-          suggested_action: Use `?admin_user_id=` locally until admin auth is connected.
+          suggested_action: Sign in as an admin/dev user, then retry.
           common_causes:
-            - no authenticated admin session yet
+            - no authenticated admin/dev session cookie
+            - expired or revoked session
           recovery_steps:
-            - Add `?admin_user_id=<existing_user_id>` during local development.
+            - Sign in again through the admin login screen.
           retry_safe: true
       - API_DCX_ADMIN_EMAILS_CATALOG_READ_FAILED:
           suggested_action: Retry after backend/database health is restored.
@@ -80,7 +79,9 @@ def get_dcx_admin_content_emails_catalog(
 
     CODE:
     """
-    _, error_response = read_permitted_local_debug_admin_user_id_or_error_response(admin_user_id)
+    _, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
+        request=request,
+    )
     if error_response is not None:
         return error_response
 
@@ -105,6 +106,6 @@ def get_dcx_admin_content_emails_catalog(
         "context": {
             "surface": "admin",
             "view": "emails_catalog",
-            "identity_resolution_mode": "temporary_admin_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }

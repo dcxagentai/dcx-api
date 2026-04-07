@@ -7,14 +7,14 @@ public-change baseline without calling Cloudflare Pages.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
+    read_authenticated_dcx_admin_user_id_or_error_response,
+)
 from admin.publish.public_site.mark_dcx_admin_public_site_local_rebuild_complete import (
     mark_dcx_admin_public_site_local_rebuild_complete_capability,
-)
-from routes.admin.dcx_api_routes_admin_support import (
-    read_permitted_local_debug_admin_user_id_or_error_response,
 )
 
 dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router = APIRouter(
@@ -28,7 +28,7 @@ dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router = APIRouter(
     response_model=None,
 )
 def post_dcx_admin_public_site_mark_local_rebuild_complete(
-    admin_user_id: int | None = Query(default=None, ge=1),
+    request: Request,
 ):
     """
     CONTRACT:
@@ -83,8 +83,8 @@ def post_dcx_admin_public_site_mark_local_rebuild_complete(
 
     CODE:
     """
-    resolved_admin_user_id, error_response = read_permitted_local_debug_admin_user_id_or_error_response(
-        admin_user_id
+    resolved_admin_user_id, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
+        request=request,
     )
     if error_response is not None:
         return error_response
@@ -128,6 +128,6 @@ def post_dcx_admin_public_site_mark_local_rebuild_complete(
             "surface": "admin",
             "view": "public_site_publish_status",
             "operation": "local_rebuild_completed",
-            "identity_resolution_mode": "temporary_admin_user_id_query_parameter",
+            "identity_resolution_mode": identity_resolution_mode,
         },
     }
