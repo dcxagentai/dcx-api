@@ -26,6 +26,7 @@ def create_or_refresh_dcx_password_link_challenge(
     authenticated_user_identity_id: int,
     challenge_purpose: str,
     delivery_target_email: str,
+    language_code: str | None = None,
     connect_to_database: Callable[..., Any] | None = None,
     current_timestamp_ms_provider: Callable[[], int] | None = None,
     raw_token_provider: Callable[[], str] | None = None,
@@ -37,6 +38,7 @@ def create_or_refresh_dcx_password_link_challenge(
         - authenticated_user_identity_id identifies that user's email auth identity.
         - challenge_purpose is one supported password-link purpose such as `password_setup` or `password_reset`.
         - delivery_target_email is the canonical email address for the user.
+        - language_code is the best UX language code for the app handoff URL.
       postconditions:
         - Ensures one active pending password-link challenge exists for the user identity and purpose.
         - Rotates the challenge token and expiry each time this capability is called.
@@ -198,6 +200,7 @@ def create_or_refresh_dcx_password_link_challenge(
         "password_set_url": build_dcx_password_set_page_url(
             challenge_purpose=challenge_purpose,
             raw_password_link_token=raw_password_link_token,
+            language_code=language_code,
         ),
         "challenge_purpose": challenge_purpose,
         "expires_at_ts_ms": password_link_expires_at_ts_ms,

@@ -204,7 +204,7 @@ def read_authenticated_dcx_user_account_summary_capability(
     ]
 
     ux_strings = read_dcx_app_account_page_ux_strings_capability(
-        preferred_language_id=preferred_language["id"] if preferred_language else None,
+        preferred_language_code=preferred_language["language_code"] if preferred_language else None,
         connect_to_database=connect,
     )
 
@@ -231,11 +231,11 @@ def read_authenticated_dcx_user_account_summary_capability(
         "available_email_communication_preferences": [
             {
                 "value": "announcements",
-                "label": "Announcements",
+                "label": ux_strings["email_preference_announcements"],
             },
             {
                 "value": "essential_only",
-                "label": "Essential only",
+                "label": ux_strings["email_preference_essential_only"],
             },
         ],
     }

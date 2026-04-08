@@ -48,7 +48,11 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
     with patch.object(
         account_summary_module,
         "read_dcx_app_account_page_ux_strings_capability",
-        return_value={"page_title": "Konto"},
+        return_value={
+            "page_title": "Konto",
+            "email_preference_announcements": "Ankündigungen",
+            "email_preference_essential_only": "Nur wichtiges",
+        },
     ):
         result = account_summary_module.read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=1,
@@ -153,15 +157,17 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
         ],
         "ux_strings": {
             "page_title": "Konto",
+            "email_preference_announcements": "Ankündigungen",
+            "email_preference_essential_only": "Nur wichtiges",
         },
         "available_email_communication_preferences": [
             {
                 "value": "announcements",
-                "label": "Announcements",
+                "label": "Ankündigungen",
             },
             {
                 "value": "essential_only",
-                "label": "Essential only",
+                "label": "Nur wichtiges",
             },
         ],
     }
@@ -171,7 +177,11 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     with patch.object(
         account_summary_module,
         "read_dcx_app_account_page_ux_strings_capability",
-        return_value={"page_title": "Account"},
+        return_value={
+            "page_title": "Account",
+            "email_preference_announcements": "Announcements",
+            "email_preference_essential_only": "Essential only",
+        },
     ):
         result = account_summary_module.read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=6,

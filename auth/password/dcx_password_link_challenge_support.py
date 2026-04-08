@@ -150,6 +150,7 @@ def hash_dcx_password_link_challenge_token(raw_token: str) -> str:
 def build_dcx_password_set_page_url(
     challenge_purpose: str,
     raw_password_link_token: str,
+    language_code: str | None = None,
 ) -> str:
     """
     CONTRACT:
@@ -157,7 +158,7 @@ def build_dcx_password_set_page_url(
         - challenge_purpose is `password_setup` or `password_reset`.
         - raw_password_link_token is the one-time token for this flow.
       postconditions:
-        - Returns one app-domain password-set URL carrying the challenge purpose in query state and the token in the fragment.
+        - Returns one app-domain password-set URL carrying the challenge purpose and language code in query state and the token in the fragment.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -195,9 +196,16 @@ def build_dcx_password_set_page_url(
     }:
         raise RuntimeError("API_DCX_PASSWORD_LINK_PURPOSE_INVALID")
 
+    normalized_language_code = (
+        language_code.strip().lower()
+        if isinstance(language_code, str) and language_code.strip() != ""
+        else "en"
+    )
+
     return (
         f"{read_dcx_app_base_url().rstrip('/')}/password/set"
-        f"?mode={challenge_purpose}#password_challenge_token={raw_password_link_token}"
+        f"?mode={challenge_purpose}&language_code={normalized_language_code}"
+        f"#password_challenge_token={raw_password_link_token}"
     )
 
 

@@ -26,6 +26,9 @@ from routes.public.dcx_api_routes_public_build_time_ux_strings_bundle import (
 from routes.auth.dcx_api_routes_auth_login_password import (
     dcx_api_routes_auth_login_password_router,
 )
+from routes.auth.dcx_api_routes_auth_app_ux_strings_bundle import (
+    dcx_api_routes_auth_app_ux_strings_bundle_router,
+)
 from routes.auth.dcx_api_routes_auth_logout import (
     dcx_api_routes_auth_logout_router,
 )
@@ -158,6 +161,7 @@ app.add_middleware(
 )
 
 app.include_router(dcx_api_routes_auth_login_password_router)
+app.include_router(dcx_api_routes_auth_app_ux_strings_bundle_router)
 app.include_router(dcx_api_routes_auth_logout_router)
 app.include_router(dcx_api_routes_auth_password_complete_set_router)
 app.include_router(dcx_api_routes_auth_password_request_reset_router)

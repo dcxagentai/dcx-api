@@ -38,7 +38,7 @@ class _FakeConnection:
 
 def test_returns_defaults_when_group_has_not_been_seeded() -> None:
     result = read_dcx_app_account_page_ux_strings_capability(
-        preferred_language_id=1,
+        preferred_language_code="en",
         connect_to_database=lambda **_: _FakeConnection([]),
     )
 
@@ -47,13 +47,13 @@ def test_returns_defaults_when_group_has_not_been_seeded() -> None:
 
 def test_overlays_selected_language_rows_on_top_of_original_rows() -> None:
     result = read_dcx_app_account_page_ux_strings_capability(
-        preferred_language_id=2,
+        preferred_language_code="es",
         connect_to_database=lambda **_: _FakeConnection(
             [
-                ("page_title", "Account", True, 1),
-                ("page_title", "Cuenta", False, 2),
-                ("field_primary_email", "Primary email", True, 1),
-                ("field_primary_phone", "Primary phone", True, 1),
+                ("page_title", "Account", True, "en"),
+                ("page_title", "Cuenta", False, "es"),
+                ("field_primary_email", "Primary email", True, "en"),
+                ("field_primary_phone", "Primary phone", True, "en"),
             ]
         ),
     )

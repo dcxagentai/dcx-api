@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import psycopg2
-
-from storage.db_config import DB_CONFIG
+from languages.read_live_dcx_ux_string_group_with_language_fallback import (
+    read_live_dcx_ux_string_group_with_language_fallback_capability,
+)
 
 DCX_APP_ACCOUNT_PAGE_UX_STRING_GROUP = "app_account_page"
 
@@ -42,6 +42,8 @@ DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS = {
     "field_updated_at": "Updated at",
     "field_not_set": "Not set",
     "field_phone_not_set_yet": "Not set yet",
+    "logout_button_pending_label": "Signing out...",
+    "logout_button_label": "Logout",
     "editable_status_idle": "Blue means editable. Click to adjust.",
     "editable_status_editing": "Editing. Choose a value to autosave.",
     "editable_status_saving": "Saving...",
@@ -49,8 +51,11 @@ DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS = {
     "editable_status_retrying_template": "Retrying save ({attempt}/{total})...",
     "editable_status_save_failed": "Save failed. Please click back in and retry.",
     "editable_status_saving_default_language": "Saving default language...",
+    "error_account_load_suggested_action": "Sign in again through the DCX app login flow, then retry.",
     "activity_eyebrow": "Activity",
     "activity_title": "Account timeline",
+    "email_preference_announcements": "Announcements",
+    "email_preference_essential_only": "Essential only",
     "next_eyebrow": "Next",
     "next_title": "Email and phone changes can come after the field behavior is proven.",
     "next_body": "This pass intentionally keeps primary email and phone read-only. Preferred language, timezone, and communication preference now prove the inline autosave behavior, retry path, and save-state feedback we can reuse later for higher-risk account changes.",
@@ -58,14 +63,14 @@ DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS = {
 
 
 def read_dcx_app_account_page_ux_strings_capability(
-    preferred_language_id: int | None,
+    preferred_language_code: str | None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict[str, str]:
     """
     CONTRACT:
       preconditions:
         - The configured database is reachable when DB-backed UX strings should be loaded.
-        - preferred_language_id is either null or one language id from `stephen_dcx_languages`.
+        - preferred_language_code is either null or one language code from `stephen_dcx_languages`.
       postconditions:
         - Returns one complete app-account-page UX-string map.
         - Falls back to the local English defaults when DB rows are missing or not yet seeded.
@@ -108,53 +113,14 @@ def read_dcx_app_account_page_ux_strings_capability(
 
     CODE:
     """
-    if preferred_language_id is None:
-        return dict(DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS)
-
-    connect = connect_to_database or psycopg2.connect
-
     try:
-        with connect(**DB_CONFIG) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT
-                        string_key,
-                        text,
-                        is_original,
-                        language_id
-                    FROM stephen_dcx_ux_strings
-                    WHERE is_live = TRUE
-                      AND string_group = %s
-                      AND (
-                        language_id = %s
-                        OR is_original = TRUE
-                      )
-                    ORDER BY
-                        string_key ASC,
-                        is_original ASC,
-                        id ASC
-                    """,
-                    (
-                        DCX_APP_ACCOUNT_PAGE_UX_STRING_GROUP,
-                        preferred_language_id,
-                    ),
-                )
-                live_rows = cursor.fetchall()
-    except Exception as exc:  # pragma: no cover - integration path
-        raise RuntimeError("API_DCX_APP_ACCOUNT_PAGE_UX_STRINGS_READ_FAILED") from exc
-
-    resolved_strings = dict(DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS)
-
-    for string_key, text, is_original, language_id in live_rows:
-        if string_key not in resolved_strings:
-            continue
-
-        if is_original and resolved_strings[string_key] == DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS[string_key]:
-            resolved_strings[string_key] = text
-            continue
-
-        if language_id == preferred_language_id:
-            resolved_strings[string_key] = text
-
-    return resolved_strings
+        return read_live_dcx_ux_string_group_with_language_fallback_capability(
+            string_group=DCX_APP_ACCOUNT_PAGE_UX_STRING_GROUP,
+            language_code=preferred_language_code or "en",
+            default_ux_strings=DCX_APP_ACCOUNT_PAGE_DEFAULT_UX_STRINGS,
+            connect_to_database=connect_to_database,
+        )
+    except RuntimeError as exc:
+        if str(exc) == "API_LIVE_DCX_UX_STRING_GROUP_READ_FAILED":
+            raise RuntimeError("API_DCX_APP_ACCOUNT_PAGE_UX_STRINGS_READ_FAILED") from exc
+        raise

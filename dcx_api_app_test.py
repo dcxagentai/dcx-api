@@ -14,6 +14,7 @@ import routes.admin.dcx_api_routes_admin_content_emails_save_live_row as admin_e
 import routes.admin.dcx_api_routes_admin_content_ux_strings_catalog as admin_ux_strings_catalog_routes
 import routes.admin.dcx_api_routes_admin_content_ux_strings_save_live_row as admin_ux_strings_save_routes
 import routes.admin.dcx_api_routes_admin_users_list as admin_users_list_routes
+import routes.auth.dcx_api_routes_auth_app_ux_strings_bundle as auth_app_ux_bundle_routes
 import routes.users.dcx_api_routes_users_me_account_settings as me_account_settings_routes
 import routes.users.dcx_api_routes_users_me_account_summary as me_account_summary_routes
 import routes.users.dcx_api_routes_users_signup_email as signup_email_routes
@@ -60,6 +61,28 @@ def test_root_route_allows_local_app_origin() -> None:
 def test_root_route_allows_local_admin_origin() -> None:
     response = client.get("/", headers={"Origin": "http://localhost:5174"})
     assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
+
+
+def test_auth_app_ux_strings_bundle_route_returns_requested_language_bundle() -> None:
+    with patch.object(
+        auth_app_ux_bundle_routes,
+        "read_dcx_app_auth_ux_strings_bundle_capability",
+        return_value={
+            "language_code": "fr",
+            "common": {"checking_session": "Verification de session..."},
+            "login_page": {"page_title": "Connexion"},
+            "password_reset_request_page": {"page_title": "Reinitialiser le mot de passe"},
+            "password_set_page": {"page_title": "Mot de passe"},
+        },
+    ):
+        response = client.get("/auth/app-ux-strings-bundle?language_code=fr")
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["language_code"] == "fr"
+    assert payload["data"]["login_page"]["page_title"] == "Connexion"
+    assert payload["context"]["view"] == "auth_ux_strings_bundle"
 
 
 def test_admin_users_list_route_returns_users_payload_for_authenticated_admin_session() -> None:

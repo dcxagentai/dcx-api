@@ -53,7 +53,7 @@ def test_creates_new_pending_password_link_challenge_when_none_exists() -> None:
     assert payload["challenge_id"] == 301
     assert payload["challenge_purpose"] == "password_setup"
     assert payload["password_set_url"].endswith(
-        "/password/set?mode=password_setup#password_challenge_token=raw-setup-password-token-value"
+        "/password/set?mode=password_setup&language_code=en#password_challenge_token=raw-setup-password-token-value"
     )
 
 
@@ -72,3 +72,22 @@ def test_refreshes_existing_pending_password_link_challenge() -> None:
 
     assert payload["challenge_id"] == 401
     assert payload["challenge_purpose"] == "password_reset"
+
+
+def test_builds_password_link_url_with_requested_language_code() -> None:
+    fake_connection = _FakeConnection([None, (901,)])
+
+    payload = create_or_refresh_dcx_password_link_challenge(
+        authenticated_user_id=13,
+        authenticated_user_identity_id=23,
+        challenge_purpose="password_reset",
+        delivery_target_email="reset@example.com",
+        language_code="fr",
+        connect_to_database=lambda **_: fake_connection,
+        current_timestamp_ms_provider=lambda: 1775000000000,
+        raw_token_provider=lambda: "raw-reset-password-token-value",
+    )
+
+    assert payload["password_set_url"].endswith(
+        "/password/set?mode=password_reset&language_code=fr#password_challenge_token=raw-reset-password-token-value"
+    )
