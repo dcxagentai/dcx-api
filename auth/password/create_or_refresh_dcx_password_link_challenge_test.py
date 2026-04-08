@@ -53,7 +53,7 @@ def test_creates_new_pending_password_link_challenge_when_none_exists() -> None:
     assert payload["challenge_id"] == 301
     assert payload["challenge_purpose"] == "password_setup"
     assert payload["password_set_url"].endswith(
-        "/password/set?mode=password_setup&language_code=en#password_challenge_token=raw-setup-password-token-value"
+        "/en/t/password/set?mode=password_setup#password_challenge_token=raw-setup-password-token-value"
     )
 
 
@@ -89,5 +89,5 @@ def test_builds_password_link_url_with_requested_language_code() -> None:
     )
 
     assert payload["password_set_url"].endswith(
-        "/password/set?mode=password_reset&language_code=fr#password_challenge_token=raw-reset-password-token-value"
+        "/fr/t/password/set?mode=password_reset#password_challenge_token=raw-reset-password-token-value"
     )

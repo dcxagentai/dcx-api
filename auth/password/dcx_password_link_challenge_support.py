@@ -158,7 +158,7 @@ def build_dcx_password_set_page_url(
         - challenge_purpose is `password_setup` or `password_reset`.
         - raw_password_link_token is the one-time token for this flow.
       postconditions:
-        - Returns one app-domain password-set URL carrying the challenge purpose and language code in query state and the token in the fragment.
+        - Returns one app-domain password-set URL carrying the language code in the path, the challenge purpose in query state, and the token in the fragment.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -203,8 +203,8 @@ def build_dcx_password_set_page_url(
     )
 
     return (
-        f"{read_dcx_app_base_url().rstrip('/')}/password/set"
-        f"?mode={challenge_purpose}&language_code={normalized_language_code}"
+        f"{read_dcx_app_base_url().rstrip('/')}/{normalized_language_code}/t/password/set"
+        f"?mode={challenge_purpose}"
         f"#password_challenge_token={raw_password_link_token}"
     )
 
