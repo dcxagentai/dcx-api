@@ -60,6 +60,10 @@ def test_creates_translation_row_from_source_page() -> None:
         "page_key": "weekly-page",
         "language_code": "fr",
     }
+    insert_query, insert_params = fake_connection.cursor_instance.executed_queries[-1]
+    assert "INSERT INTO stephen_dcx_content_pages" in insert_query
+    assert insert_params[9] == "draft"
+    assert insert_params[10] is None
 
 
 def test_raises_clear_error_when_translation_already_exists() -> None:

@@ -65,6 +65,18 @@ from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
 from routes.admin.dcx_api_routes_admin_content_page_categories_catalog import (
     dcx_api_routes_admin_content_page_categories_catalog_router,
 )
+from routes.admin.dcx_api_routes_admin_content_page_category_detail import (
+    dcx_api_routes_admin_content_page_category_detail_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_category_create_draft import (
+    dcx_api_routes_admin_content_page_category_create_draft_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_category_create_translation import (
+    dcx_api_routes_admin_content_page_category_create_translation_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_category_save_live_row import (
+    dcx_api_routes_admin_content_page_category_save_live_row_router,
+)
 from routes.admin.dcx_api_routes_admin_content_pages_catalog import (
     dcx_api_routes_admin_content_pages_catalog_router,
 )
@@ -225,6 +237,10 @@ app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
 app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_categories_catalog_router)
+app.include_router(dcx_api_routes_admin_content_page_category_detail_router)
+app.include_router(dcx_api_routes_admin_content_page_category_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_page_category_create_translation_router)
+app.include_router(dcx_api_routes_admin_content_page_category_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_pages_catalog_router)
 app.include_router(dcx_api_routes_admin_content_page_detail_router)
 app.include_router(dcx_api_routes_admin_content_page_create_draft_router)

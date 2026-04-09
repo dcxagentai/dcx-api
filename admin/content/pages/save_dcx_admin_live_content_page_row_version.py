@@ -64,7 +64,7 @@ def save_dcx_admin_live_content_page_row_version_capability(
       WHAT CAN GO WRONG:
         - The target row can be stale.
         - Required fields can be blank.
-        - Category identity can be invalid for this language.
+        - Category identity can be invalid for this language and no live original category fallback exists.
         - A slug conflict can already exist on another live row.
         - Database writes can fail.
       WHAT COMES NEXT:
@@ -108,7 +108,7 @@ def save_dcx_admin_live_content_page_row_version_capability(
           suggested_action: Refresh the categories list and retry with one valid category.
           common_causes:
             - stale category selection
-            - missing category translation row
+            - missing category translation row and no live original category row exists
           recovery_steps:
             - Reload the category catalog.
             - Retry with one current category.
@@ -191,11 +191,21 @@ def save_dcx_admin_live_content_page_row_version_capability(
                     SELECT 1
                     FROM stephen_dcx_content_page_categories
                     WHERE category_key = %s
-                      AND language_id = %s
                       AND is_live = TRUE
+                      AND (language_id = %s OR is_original = TRUE)
+                    ORDER BY
+                        CASE
+                            WHEN language_id = %s THEN 0
+                            WHEN is_original = TRUE THEN 1
+                            ELSE 2
+                        END
                     LIMIT 1
                     """,
-                    (normalized_category_key, existing_live_row[3]),
+                    (
+                        normalized_category_key,
+                        existing_live_row[3],
+                        existing_live_row[3],
+                    ),
                 )
                 if cursor.fetchone() is None:
                     raise RuntimeError("API_DCX_ADMIN_CONTENT_PAGE_CATEGORY_NOT_FOUND")

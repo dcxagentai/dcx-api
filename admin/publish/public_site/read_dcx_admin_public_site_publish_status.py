@@ -22,6 +22,7 @@ DCX_ADMIN_PUBLIC_SITE_SURFACE_KEY = "dcx_public"
 DCX_ADMIN_PUBLIC_SITE_PENDING_CHANGES_PREVIEW_LIMIT = 8
 DCX_ADMIN_PUBLIC_SITE_MANAGED_CONTENT_KINDS = [
     "ux_strings",
+    "content_page_categories",
     "content_pages",
 ]
 
@@ -150,6 +151,17 @@ def read_dcx_admin_public_site_publish_status_capability(
                 cursor.execute(
                     """
                     SELECT COUNT(*)
+                    FROM stephen_dcx_content_page_categories AS dcx_content_page_categories
+                    WHERE dcx_content_page_categories.is_live = TRUE
+                      AND dcx_content_page_categories.updated_at_ts_ms > COALESCE(%s, 0)
+                    """,
+                    (last_successful_publish_at_ts_ms,),
+                )
+                pending_content_page_category_count = cursor.fetchone()[0]
+
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
                     FROM stephen_dcx_content_pages AS dcx_content_pages
                     WHERE dcx_content_pages.is_live = TRUE
                       AND dcx_content_pages.publication_status = 'published'
@@ -188,9 +200,36 @@ def read_dcx_admin_public_site_publish_status_capability(
                 cursor.execute(
                     """
                     SELECT
+                        dcx_content_page_categories.id,
+                        dcx_content_page_categories.category_name,
+                        dcx_content_page_categories.category_slug,
+                        dcx_languages.language_code,
+                        dcx_languages.language_name_native,
+                        dcx_content_page_categories.updated_at_ts_ms
+                    FROM stephen_dcx_content_page_categories AS dcx_content_page_categories
+                    JOIN stephen_dcx_languages AS dcx_languages
+                      ON dcx_languages.id = dcx_content_page_categories.language_id
+                    WHERE dcx_content_page_categories.is_live = TRUE
+                      AND dcx_content_page_categories.updated_at_ts_ms > COALESCE(%s, 0)
+                    ORDER BY dcx_content_page_categories.updated_at_ts_ms DESC, dcx_content_page_categories.id DESC
+                    LIMIT %s
+                    """,
+                    (
+                        last_successful_publish_at_ts_ms,
+                        DCX_ADMIN_PUBLIC_SITE_PENDING_CHANGES_PREVIEW_LIMIT,
+                    ),
+                )
+                pending_content_page_category_preview_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
                         dcx_content_pages.id,
                         dcx_content_pages.page_title,
-                        dcx_content_page_categories.category_slug,
+                        COALESCE(
+                            dcx_content_page_categories_localized.category_slug,
+                            dcx_content_page_categories_original.category_slug
+                        ),
                         dcx_content_pages.page_slug,
                         dcx_languages.language_code,
                         dcx_languages.language_name_native,
@@ -198,10 +237,14 @@ def read_dcx_admin_public_site_publish_status_capability(
                     FROM stephen_dcx_content_pages AS dcx_content_pages
                     JOIN stephen_dcx_languages AS dcx_languages
                       ON dcx_languages.id = dcx_content_pages.language_id
-                    JOIN stephen_dcx_content_page_categories AS dcx_content_page_categories
-                      ON dcx_content_page_categories.category_key = dcx_content_pages.category_key
-                     AND dcx_content_page_categories.language_id = dcx_content_pages.language_id
-                     AND dcx_content_page_categories.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS dcx_content_page_categories_localized
+                      ON dcx_content_page_categories_localized.category_key = dcx_content_pages.category_key
+                     AND dcx_content_page_categories_localized.language_id = dcx_content_pages.language_id
+                     AND dcx_content_page_categories_localized.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS dcx_content_page_categories_original
+                      ON dcx_content_page_categories_original.category_key = dcx_content_pages.category_key
+                     AND dcx_content_page_categories_original.is_original = TRUE
+                     AND dcx_content_page_categories_original.is_live = TRUE
                     WHERE dcx_content_pages.is_live = TRUE
                       AND dcx_content_pages.publication_status = 'published'
                       AND dcx_content_pages.updated_at_ts_ms > COALESCE(%s, 0)
@@ -217,7 +260,11 @@ def read_dcx_admin_public_site_publish_status_capability(
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_DCX_ADMIN_PUBLIC_SITE_PUBLISH_STATUS_READ_FAILED") from exc
 
-    pending_change_count = pending_ux_string_count + pending_content_page_count
+    pending_change_count = (
+        pending_ux_string_count
+        + pending_content_page_category_count
+        + pending_content_page_count
+    )
     pending_changes_preview = [
         {
             "content_kind": "ux_string",
@@ -230,6 +277,18 @@ def read_dcx_admin_public_site_publish_status_capability(
             "updated_at_ts_ms": pending_preview_row[5],
         }
         for pending_preview_row in pending_ux_string_preview_rows
+    ] + [
+        {
+            "content_kind": "content_page_category",
+            "item_id": pending_preview_row[0],
+            "primary_label": pending_preview_row[1],
+            "secondary_label": pending_preview_row[2],
+            "public_path": f"/{pending_preview_row[3]}/{pending_preview_row[2]}",
+            "language_code": pending_preview_row[3],
+            "language_name_native": pending_preview_row[4],
+            "updated_at_ts_ms": pending_preview_row[5],
+        }
+        for pending_preview_row in pending_content_page_category_preview_rows
     ] + [
         {
             "content_kind": "content_page",

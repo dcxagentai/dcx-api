@@ -76,20 +76,24 @@ def read_dcx_public_live_content_pages_bundle(
                         page.page_slug,
                         page.published_at_ts_ms,
                         page.updated_at_ts_ms,
-                        category.category_name,
-                        category.category_slug
+                        COALESCE(category_localized.category_name, category_original.category_name),
+                        COALESCE(category_localized.category_slug, category_original.category_slug)
                     FROM stephen_dcx_content_pages AS page
                     JOIN stephen_dcx_languages AS language
                       ON language.id = page.language_id
-                    JOIN stephen_dcx_content_page_categories AS category
-                      ON category.category_key = page.category_key
-                     AND category.language_id = page.language_id
-                     AND category.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_localized
+                      ON category_localized.category_key = page.category_key
+                     AND category_localized.language_id = page.language_id
+                     AND category_localized.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_original
+                      ON category_original.category_key = page.category_key
+                     AND category_original.is_original = TRUE
+                     AND category_original.is_live = TRUE
                     WHERE page.is_live = TRUE
                       AND page.publication_status = 'published'
                     ORDER BY
                         language.language_code ASC,
-                        category.category_slug ASC,
+                        COALESCE(category_localized.category_slug, category_original.category_slug) ASC,
                         page.page_slug ASC,
                         page.id ASC
                     """

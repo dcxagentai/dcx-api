@@ -234,8 +234,8 @@ def create_dcx_admin_content_page_translation_capability(
                         source_row[6],
                         source_row[7],
                         source_row[8],
-                        source_row[9],
-                        source_row[10],
+                        "draft",
+                        None,
                         translation_of_id,
                     ),
                 )
