@@ -26,6 +26,9 @@ from routes.public.dcx_api_routes_public_build_time_api_test import (
 from routes.public.dcx_api_routes_public_build_time_ux_strings_bundle import (
     dcx_api_routes_public_build_time_ux_strings_bundle_router,
 )
+from routes.public.dcx_api_routes_public_build_time_content_pages_bundle import (
+    dcx_api_routes_public_build_time_content_pages_bundle_router,
+)
 from routes.auth.dcx_api_routes_auth_login_password import (
     dcx_api_routes_auth_login_password_router,
 )
@@ -58,6 +61,36 @@ from routes.admin.dcx_api_routes_admin_content_emails_catalog import (
 )
 from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
     dcx_api_routes_admin_content_emails_save_live_row_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_categories_catalog import (
+    dcx_api_routes_admin_content_page_categories_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_pages_catalog import (
+    dcx_api_routes_admin_content_pages_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_detail import (
+    dcx_api_routes_admin_content_page_detail_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_create_draft import (
+    dcx_api_routes_admin_content_page_create_draft_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_save_live_row import (
+    dcx_api_routes_admin_content_page_save_live_row_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_publish_live_row import (
+    dcx_api_routes_admin_content_page_publish_live_row_router,
+)
+from routes.admin.dcx_api_routes_admin_content_page_archive_live_row import (
+    dcx_api_routes_admin_content_page_archive_live_row_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletters_catalog import (
+    dcx_api_routes_admin_content_newsletters_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletter_detail import (
+    dcx_api_routes_admin_content_newsletter_detail_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletter_create_draft import (
+    dcx_api_routes_admin_content_newsletter_create_draft_router,
 )
 from routes.admin.dcx_api_routes_admin_public_site_publish_status import (
     dcx_api_routes_admin_public_site_publish_status_router,
@@ -176,6 +209,16 @@ app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
 app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
+app.include_router(dcx_api_routes_admin_content_page_categories_catalog_router)
+app.include_router(dcx_api_routes_admin_content_pages_catalog_router)
+app.include_router(dcx_api_routes_admin_content_page_detail_router)
+app.include_router(dcx_api_routes_admin_content_page_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_page_save_live_row_router)
+app.include_router(dcx_api_routes_admin_content_page_publish_live_row_router)
+app.include_router(dcx_api_routes_admin_content_page_archive_live_row_router)
+app.include_router(dcx_api_routes_admin_content_newsletters_catalog_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_detail_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_create_draft_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
@@ -186,6 +229,7 @@ app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)
 app.include_router(dcx_api_routes_public_build_time_api_test_router)
 app.include_router(dcx_api_routes_public_build_time_ux_strings_bundle_router)
+app.include_router(dcx_api_routes_public_build_time_content_pages_bundle_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 

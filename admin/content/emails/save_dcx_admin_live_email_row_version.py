@@ -27,7 +27,8 @@ def save_dcx_admin_live_email_row_version_capability(
     CONTRACT:
       preconditions:
         - target_email_id identifies one current live row in `stephen_dcx_emails`.
-        - next_email_subject and next_email_body are non-empty candidate edited values.
+        - next_email_subject is one non-empty candidate edited value.
+        - next_email_body is one candidate edited value and may be empty only for newsletter drafts.
         - The configured database is reachable.
       postconditions:
         - Saves a new immutable live email row version when the subject or body changed.
@@ -55,7 +56,8 @@ def save_dcx_admin_live_email_row_version_capability(
         - Do not use it to create entirely new email identities or to send outbound email.
       WHAT CAN GO WRONG:
         - The target row can be stale or no longer live.
-        - The edited subject or body can be blank.
+        - The edited subject can be blank.
+        - The edited body can be blank for non-newsletter templates.
         - Required placeholders can be missing or malformed.
         - Database writes can fail.
       WHAT COMES NEXT:
@@ -70,10 +72,10 @@ def save_dcx_admin_live_email_row_version_capability(
 
     ERRORS:
       - API_DCX_ADMIN_EMAIL_TEMPLATE_CONTENT_INVALID:
-          suggested_action: Enter non-empty email subject and body before saving.
+          suggested_action: Enter a non-empty email subject and, for non-newsletter templates, a non-empty body before saving.
           common_causes:
             - empty subject
-            - empty body
+            - empty body for non-newsletter templates
           recovery_steps:
             - Fill in both fields and retry.
           retry_safe: true
@@ -126,7 +128,6 @@ def save_dcx_admin_live_email_row_version_capability(
         not isinstance(next_email_subject, str)
         or next_email_subject.strip() == ""
         or not isinstance(next_email_body, str)
-        or next_email_body.strip() == ""
     ):
         raise RuntimeError("API_DCX_ADMIN_EMAIL_TEMPLATE_CONTENT_INVALID")
 
@@ -157,6 +158,9 @@ def save_dcx_admin_live_email_row_version_capability(
 
                 if existing_live_row is None:
                     raise RuntimeError("API_DCX_ADMIN_EMAIL_LIVE_ROW_NOT_FOUND")
+
+                if existing_live_row[1] != "newsletter" and next_email_body.strip() == "":
+                    raise RuntimeError("API_DCX_ADMIN_EMAIL_TEMPLATE_CONTENT_INVALID")
 
                 if (
                     existing_live_row[4] == next_email_subject
