@@ -4,6 +4,8 @@ This file verifies the durable DCX user-signup schema apply capability next to t
 implementation so the startup schema-init contract stays executable.
 """
 
+import psycopg2
+
 from storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
     apply_initial_user_signup_schema_to_configured_database,
 )
@@ -67,6 +69,8 @@ def test_schema_sql_contains_signup_challenge_hardening_columns() -> None:
         "stephen_dcx_users",
         "stephen_dcx_user_auth_identities",
         "stephen_dcx_user_auth_challenges",
+        "stephen_dcx_user_password_credentials",
+        "stephen_dcx_user_auth_sessions",
         "stephen_dcx_public_route_rate_limits",
     ]
 
@@ -79,3 +83,20 @@ def test_schema_sql_contains_rate_limit_table() -> None:
     )
 
     assert "CREATE TABLE IF NOT EXISTS stephen_dcx_public_route_rate_limits" in fake_connection.cursor_instance.executed_sql
+
+
+def test_retries_transient_operational_error_before_succeeding() -> None:
+    attempts = {"count": 0}
+
+    def flaky_connect(**_):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise psycopg2.OperationalError("temporary timeout")
+        return FakeConnection()
+
+    payload = apply_initial_user_signup_schema_to_configured_database(
+        connect_to_database=flaky_connect,
+    )
+
+    assert payload["status"] == "applied"
+    assert attempts["count"] == 3

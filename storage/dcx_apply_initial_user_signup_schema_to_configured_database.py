@@ -8,6 +8,7 @@ tables and non-breaking hardening additions are present without deleting existin
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any, Callable
 
 import psycopg2
@@ -74,12 +75,25 @@ def apply_initial_user_signup_schema_to_configured_database(
     connect = connect_to_database or psycopg2.connect
     schema_sql = _read_initial_user_signup_schema_sql()
 
-    try:
-        with connect(**DB_CONFIG) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(schema_sql)
-    except Exception as exc:  # pragma: no cover - integration path
-        raise RuntimeError("API_INITIAL_USER_SIGNUP_SCHEMA_APPLY_FAILED") from exc
+    last_error: Exception | None = None
+
+    for attempt_number in range(1, 5):
+        try:
+            with connect(**DB_CONFIG) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(schema_sql)
+            last_error = None
+            break
+        except psycopg2.OperationalError as exc:  # pragma: no cover - integration path
+            last_error = exc
+            if attempt_number >= 4:
+                break
+            time.sleep(min(attempt_number * 2, 6))
+        except Exception as exc:  # pragma: no cover - integration path
+            raise RuntimeError("API_INITIAL_USER_SIGNUP_SCHEMA_APPLY_FAILED") from exc
+
+    if last_error is not None:  # pragma: no cover - integration path
+        raise RuntimeError("API_INITIAL_USER_SIGNUP_SCHEMA_APPLY_FAILED") from last_error
 
     return {
         "status": "applied",
