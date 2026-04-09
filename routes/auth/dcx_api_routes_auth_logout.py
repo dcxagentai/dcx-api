@@ -10,6 +10,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.logout.logout_authenticated_dcx_user import logout_authenticated_dcx_user
 from auth.session.clear_dcx_auth_session_cookie_on_response import (
     clear_dcx_auth_session_cookie_on_response,
@@ -56,6 +59,10 @@ def post_dcx_auth_logout(request: Request):
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     cookie_settings = read_dcx_auth_session_cookie_settings()
     raw_session_token = request.cookies.get(cookie_settings["cookie_name"])
     logout_result = logout_authenticated_dcx_user(raw_session_token)

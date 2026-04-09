@@ -13,6 +13,9 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.password.request_dcx_password_reset_email_challenge import (
     request_dcx_password_reset_email_challenge,
 )
@@ -75,6 +78,10 @@ def post_dcx_auth_password_request_reset(
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     client_ip = read_public_request_client_ip(request)
 
     try:

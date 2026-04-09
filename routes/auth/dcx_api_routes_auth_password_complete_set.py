@@ -7,10 +7,13 @@ reset using one token-driven backend contract.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.password.complete_dcx_password_set_from_challenge import (
     complete_dcx_password_set_from_challenge,
 )
@@ -28,6 +31,7 @@ class DcxAuthPasswordCompleteSetRequest(BaseModel):
 
 @dcx_api_routes_auth_password_complete_set_router.post("/password/complete-set")
 def post_dcx_auth_password_complete_set(
+    request: Request,
     complete_set_request: DcxAuthPasswordCompleteSetRequest,
 ):
     """
@@ -64,6 +68,10 @@ def post_dcx_auth_password_complete_set(
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     try:
         completion_result = complete_dcx_password_set_from_challenge(
             raw_password_link_token=complete_set_request.password_challenge_token,

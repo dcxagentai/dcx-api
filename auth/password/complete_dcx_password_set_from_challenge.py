@@ -18,9 +18,6 @@ from auth.password.dcx_password_link_challenge_support import (
     normalize_dcx_password_link_challenge_token,
 )
 from auth.password.validate_dcx_candidate_password import validate_dcx_candidate_password
-from auth.session.revoke_all_dcx_auth_sessions_for_user import (
-    revoke_all_dcx_auth_sessions_for_user,
-)
 from storage.db_config import DB_CONFIG
 
 
@@ -41,7 +38,7 @@ def complete_dcx_password_set_from_challenge(
         - Validates the token and password policy.
         - Creates or updates the durable password credential row for the user.
         - Consumes the active password-link challenge row.
-        - Revokes all previously active sessions for the user.
+        - Revokes all previously active sessions for the user inside the same committed write path.
       side_effects:
         - writes to stephen_dcx_user_password_credentials
         - writes to stephen_dcx_user_auth_challenges
@@ -53,7 +50,7 @@ def complete_dcx_password_set_from_challenge(
       locks:
         - row lock on the active password-link challenge row
         - row lock on the target password credential row when it exists
-      contention_strategy: serialize on the active challenge row, then upsert the single password-credential row for the user
+      contention_strategy: serialize on the active challenge row, then upsert the single password-credential row for the user and revoke active sessions in the same transaction
 
     NARRATIVE:
       WHY this exists:
@@ -227,16 +224,29 @@ def complete_dcx_password_set_from_challenge(
                         challenge_id,
                     ),
                 )
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_user_auth_sessions
+                    SET
+                        session_status = %s,
+                        revoked_at_ts_ms = %s,
+                        updated_at_ts_ms = %s
+                    WHERE user_id = %s
+                      AND session_status = %s
+                      AND revoked_at_ts_ms IS NULL
+                    """,
+                    (
+                        "revoked",
+                        now_ts_ms,
+                        now_ts_ms,
+                        authenticated_user_id,
+                        "active",
+                    ),
+                )
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_DCX_PASSWORD_SET_PERSISTENCE_FAILED") from exc
-
-    revoke_all_dcx_auth_sessions_for_user(
-        authenticated_user_id=authenticated_user_id,
-        connect_to_database=connect,
-        current_timestamp_ms_provider=lambda: now_ts_ms,
-    )
 
     return {
         "user_id": authenticated_user_id,

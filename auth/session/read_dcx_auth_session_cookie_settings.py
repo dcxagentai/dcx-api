@@ -49,7 +49,7 @@ def read_dcx_auth_session_cookie_settings() -> dict:
     raw_ttl_hours = os.getenv("DCX_AUTH_SESSION_TTL_HOURS", "").strip()
     raw_secure_override = os.getenv("DCX_AUTH_SESSION_COOKIE_SECURE", "").strip().lower()
 
-    max_age_seconds = int(raw_ttl_hours) * 60 * 60 if raw_ttl_hours.isdigit() else 14 * 24 * 60 * 60
+    max_age_seconds = int(raw_ttl_hours) * 60 * 60 if raw_ttl_hours.isdigit() else 24 * 60 * 60
     secure_default = runtime_environment not in {"local", "development"}
     secure = (
         raw_secure_override == "true"

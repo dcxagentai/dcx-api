@@ -38,34 +38,34 @@ class _FakeConnection:
 
 
 def test_complete_password_set_creates_password_credential_and_consumes_challenge() -> None:
+    fake_connection = _FakeConnection(
+        [
+            (
+                701,
+                81,
+                "password_setup",
+                1775003600000,
+            )
+        ]
+    )
     with patch.object(
         complete_password_module,
         "create_dcx_password_hash",
         return_value="$argon2id$hashed",
-    ), patch.object(
-        complete_password_module,
-        "revoke_all_dcx_auth_sessions_for_user",
-        return_value={"revoked_count": 1},
-    ) as revoke_mock:
+    ):
         payload = complete_password_module.complete_dcx_password_set_from_challenge(
             raw_password_link_token="complete-token-value-1234567890",
             candidate_password="correct horse battery",
             confirmed_password="correct horse battery",
-            connect_to_database=lambda **_: _FakeConnection(
-                [
-                    (
-                        701,
-                        81,
-                        "password_setup",
-                        1775003600000,
-                    )
-                ]
-            ),
+            connect_to_database=lambda **_: fake_connection,
             current_timestamp_ms_provider=lambda: 1775000000000,
         )
 
     assert payload["user_id"] == 81
-    revoke_mock.assert_called_once()
+    assert any(
+        "UPDATE stephen_dcx_user_auth_sessions" in query
+        for query, _ in fake_connection._cursor.executed_queries
+    )
 
 
 def test_complete_password_set_rejects_expired_challenge() -> None:

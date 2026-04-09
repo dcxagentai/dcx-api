@@ -14,6 +14,12 @@ from fastapi.responses import JSONResponse
 from auth.login.login_dcx_user_with_email_and_password import (
     login_dcx_user_with_email_and_password,
 )
+from auth.login.enforce_dcx_auth_login_rate_limits import (
+    enforce_dcx_auth_login_rate_limits,
+)
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.session.set_dcx_auth_session_cookie_on_response import (
     set_dcx_auth_session_cookie_on_response,
 )
@@ -78,7 +84,15 @@ def post_dcx_auth_login_password(
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     try:
+        enforce_dcx_auth_login_rate_limits(
+            client_ip=read_public_request_client_ip(request),
+            normalized_email=login_request.email.strip().lower(),
+        )
         login_result = login_dcx_user_with_email_and_password(
             email=login_request.email,
             candidate_password=login_request.password,
@@ -87,6 +101,19 @@ def post_dcx_auth_login_password(
         )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
+        if error_code == "API_DCX_AUTH_LOGIN_RATE_LIMIT_EXCEEDED":
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": error_code,
+                        "message": "Too many DCX login attempts were received for this window.",
+                        "suggested_action": "Wait a little and retry the login.",
+                    },
+                },
+            )
+
         if error_code == "API_DCX_AUTH_LOGIN_INVALID_CREDENTIALS":
             return JSONResponse(
                 status_code=401,

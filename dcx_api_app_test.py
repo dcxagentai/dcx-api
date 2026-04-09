@@ -22,30 +22,18 @@ import routes.users.dcx_api_routes_users_signup_email_resend_otp as resend_otp_r
 import routes.users.dcx_api_routes_users_signup_email_verify_otp as verify_otp_routes
 
 client = TestClient(app)
+LOCAL_APP_ORIGIN_HEADERS = {"Origin": "http://localhost:5173"}
+LOCAL_ADMIN_ORIGIN_HEADERS = {"Origin": "http://localhost:5174"}
 
 
-def test_root_route_returns_minimal_ready_payload() -> None:
+def test_root_route_returns_minimal_placeholder_html() -> None:
     response = client.get("/")
-    payload = response.json()
 
     assert response.status_code == 200
-    assert payload["ok"] is True
-    assert payload["data"] == {
-        "service_name": "dcx_api",
-        "status": "ready",
-        "message": "DCX API is ready.",
-    }
-    assert payload["context"]["what_happened"] == (
-        "The backend root route responded successfully with a minimal service-ready payload."
-    )
-    assert payload["context"]["side_effects_executed"] == []
-    assert "Use /auth/password/request-reset to start the email reset flow." in payload["context"]["next_steps"]
-    assert (
-        "Use /auth/password/complete-set to finish password setup or reset from the one-time token."
-        in payload["context"]["next_steps"]
-    )
-    assert "dcx_api_routes_auth_password_request_reset_router" in payload["context"]["related_operations"]
-    assert "dcx_api_routes_auth_password_complete_set_router" in payload["context"]["related_operations"]
+    assert response.headers["content-type"].startswith("text/html")
+    assert "DCX API" in response.text
+    assert "Private backend" in response.text
+    assert "auth/login/password" not in response.text
 
 
 def test_root_route_allows_local_frontend_origin() -> None:
@@ -247,6 +235,7 @@ def test_admin_ux_strings_save_live_row_route_returns_save_result_for_authentica
                 "ux_string_id": 101,
                 "text": "Updated translated value",
             },
+            headers=LOCAL_ADMIN_ORIGIN_HEADERS,
         )
         payload = response.json()
 
@@ -263,6 +252,7 @@ def test_admin_ux_strings_save_live_row_route_returns_auth_required_without_auth
             "ux_string_id": 101,
             "text": "Updated translated value",
         },
+        headers=LOCAL_ADMIN_ORIGIN_HEADERS,
     )
     payload = response.json()
 
@@ -273,6 +263,28 @@ def test_admin_ux_strings_save_live_row_route_returns_auth_required_without_auth
             "code": "API_DCX_ADMIN_AUTH_REQUIRED",
             "message": "No authenticated DCX admin session is active.",
             "suggested_action": "Sign in as an admin/dev user, then retry.",
+        },
+    }
+
+
+def test_admin_ux_strings_save_live_row_route_rejects_unknown_browser_origin() -> None:
+    response = client.post(
+        "/admin/content/ux-strings/save-live-row",
+        json={
+            "ux_string_id": 101,
+            "text": "Updated translated value",
+        },
+        headers={"Origin": "https://attacker.example"},
+    )
+    payload = response.json()
+
+    assert response.status_code == 403
+    assert payload == {
+        "ok": False,
+        "error": {
+            "code": "API_DCX_FRONTEND_ORIGIN_FORBIDDEN",
+            "message": "This browser request did not come from an allowed DCX frontend origin.",
+            "suggested_action": "Retry the request from an allowed DCX frontend origin.",
         },
     }
 
@@ -298,6 +310,7 @@ def test_admin_emails_save_live_row_route_returns_save_result_for_authenticated_
                 "email_subject": "DCX Agentic: Ihr Bestätigungscode",
                 "email_body": "Code: {{ otp_code }}\nLink: {{ verify_otp_url }}",
             },
+            headers=LOCAL_ADMIN_ORIGIN_HEADERS,
         )
         payload = response.json()
 
@@ -315,6 +328,7 @@ def test_admin_emails_save_live_row_route_returns_auth_required_without_authenti
             "email_subject": "DCX Agentic: Ihr Bestätigungscode",
             "email_body": "Code: {{ otp_code }}\nLink: {{ verify_otp_url }}",
         },
+        headers=LOCAL_ADMIN_ORIGIN_HEADERS,
     )
     payload = response.json()
 
@@ -525,6 +539,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
                 "preferred_timezone_id": 2,
                 "email_communication_preference": "essential_only",
             },
+            headers=LOCAL_APP_ORIGIN_HEADERS,
         )
         payload = response.json()
 
@@ -543,6 +558,7 @@ def test_users_me_account_settings_route_returns_auth_required_without_authentic
             "preferred_timezone_id": 2,
             "email_communication_preference": "announcements",
         },
+        headers=LOCAL_APP_ORIGIN_HEADERS,
     )
     payload = response.json()
 

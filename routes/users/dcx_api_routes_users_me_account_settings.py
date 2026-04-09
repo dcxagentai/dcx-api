@@ -11,6 +11,9 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 from fastapi.responses import JSONResponse
 
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.authorization.read_authenticated_dcx_user_id_or_error_response import (
     read_authenticated_dcx_user_id_or_error_response,
 )
@@ -91,6 +94,10 @@ def post_authenticated_dcx_user_account_settings(
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     authenticated_user_id, identity_resolution_mode, error_response = (
         read_authenticated_dcx_user_id_or_error_response(
             request=request,

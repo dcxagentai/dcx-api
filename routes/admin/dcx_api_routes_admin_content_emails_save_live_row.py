@@ -11,6 +11,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
+    read_allowed_dcx_frontend_origin_or_error_response,
+)
 from auth.authorization.read_authenticated_dcx_admin_user_id_or_error_response import (
     read_authenticated_dcx_admin_user_id_or_error_response,
 )
@@ -97,6 +100,10 @@ def post_dcx_admin_content_emails_save_live_row(
 
     CODE:
     """
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
     _, identity_resolution_mode, error_response = read_authenticated_dcx_admin_user_id_or_error_response(
         request=request,
     )

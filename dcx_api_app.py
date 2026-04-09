@@ -10,6 +10,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
     apply_initial_user_signup_schema_to_configured_database,
@@ -184,16 +185,16 @@ app.include_router(dcx_api_routes_public_build_time_ux_strings_bundle_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 
-@app.get("/")
-def get_dcx_api_root_welcome_response() -> dict:
+@app.get("/", response_class=HTMLResponse)
+def get_dcx_api_root_welcome_response() -> str:
     """
     CONTRACT:
       preconditions:
         - The FastAPI application is running and able to receive HTTP requests from local frontend origins.
         - The configured Postgres database is reachable for one read-only bootstrap query.
       postconditions:
-        - Returns a canonical success wrapper containing the backend welcome payload for the bootstrap shell.
-        - Includes only minimal service metadata rather than public database proof data.
+        - Returns one minimal HTML placeholder page for the API hostname.
+        - Does not expose route hints, backend capability names, or other attacker-oriented discovery detail.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -202,7 +203,7 @@ def get_dcx_api_root_welcome_response() -> dict:
     NARRATIVE:
       why: This exists to make the backend base URL itself useful as the first plumbing-proof route for local development and production on api.dcx.com.
       when_to_use:
-        - During local smoke testing of the backend workspace.
+        - During local smoke testing of the backend hostname.
         - During initial deployment verification of the API service shell.
       when_not_to_use:
         - Do not use this as the long-term health or readiness contract once real service checks exist.
@@ -212,14 +213,14 @@ def get_dcx_api_root_welcome_response() -> dict:
         - The route may fail if the ASGI app is imported from the wrong module path.
         - Browser calls from hosted public shells may fail if CORS does not allow the current public origins.
       what_comes_next:
-        - Add dedicated health/readiness routes.
-        - Add the first real domain capabilities and project them through API routes.
+        - Add dedicated private readiness routes when deployment needs them.
+        - Keep the public API hostname visually quiet while browser consumers use explicit route contracts.
 
     TESTS:
-      - root_route_returns_ok_wrapper
-      - root_route_returns_backend_identity
+      - root_route_returns_minimal_placeholder_html
       - root_route_allows_local_frontend_origin
-      - root_route_allows_public_pages_origin
+      - root_route_allows_local_app_origin
+      - root_route_allows_local_admin_origin
 
     ERRORS:
       - API_HELLO_WORLD_IMPORT_FAILURE:
@@ -245,48 +246,66 @@ def get_dcx_api_root_welcome_response() -> dict:
 
     CODE:
     """
-    return {
-        "ok": True,
-        "data": {
-            "service_name": "dcx_api",
-            "status": "ready",
-            "message": "DCX API is ready.",
-        },
-        "context": {
-            "what_happened": "The backend root route responded successfully with a minimal service-ready payload.",
-            "side_effects_executed": [],
-            "next_steps": [
-                "Use /admin/users/list for the first dcx_admin users surface.",
-                "Use /auth/login/password to create a shared app/admin browser session.",
-                "Use /auth/session to check the current authenticated browser session.",
-                "Use /auth/logout to revoke the current shared browser session.",
-                "Use /auth/password/request-reset to start the email reset flow.",
-                "Use /auth/password/complete-set to finish password setup or reset from the one-time token.",
-                "Use /admin/content/ux-strings/catalog for the admin UX-strings viewer.",
-                "Use /admin/content/ux-strings/save-live-row for immutable admin UX-string updates.",
-                "Use /admin/content/emails/catalog for the admin emails viewer.",
-                "Use /admin/content/emails/save-live-row for immutable admin email-template updates.",
-                "Use the dedicated /users routes for public signup flow interactions.",
-                "Use /users/me/account-summary for the first dcx_app account surface.",
-                "Use /users/me/account-settings for the first dcx_app editable account save path.",
-                "Add dedicated readiness and health routes when deployment needs them.",
-            ],
-            "related_operations": [
-                "dcx_api_routes_admin_users_list_router",
-                "dcx_api_routes_auth_login_password_router",
-                "dcx_api_routes_auth_session_router",
-                "dcx_api_routes_auth_logout_router",
-                "dcx_api_routes_auth_password_request_reset_router",
-                "dcx_api_routes_auth_password_complete_set_router",
-                "dcx_api_routes_admin_content_ux_strings_catalog_router",
-                "dcx_api_routes_admin_content_ux_strings_save_live_row_router",
-                "dcx_api_routes_admin_content_emails_catalog_router",
-                "dcx_api_routes_admin_content_emails_save_live_row_router",
-                "dcx_api_routes_users_me_account_summary_router",
-                "dcx_api_routes_users_me_account_settings_router",
-                "dcx_api_routes_users_signup_email_router",
-                "dcx_api_routes_users_signup_email_verify_otp_router",
-                "dcx_api_routes_users_signup_email_resend_otp_router",
-            ],
-        },
-    }
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DCX API</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #f4f7fb 0%, #ffffff 100%);
+        color: #0e1830;
+      }
+      .dcx_api_placeholder_shell {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 24px 28px;
+        border: 1px solid #d7e0ee;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 60px rgba(16, 34, 70, 0.08);
+      }
+      .dcx_api_placeholder_mark {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        border: 1px solid #d7e0ee;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: #245798;
+      }
+      .dcx_api_placeholder_label {
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #49688f;
+      }
+      .dcx_api_placeholder_title {
+        margin-top: 4px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="dcx_api_placeholder_shell">
+      <div class="dcx_api_placeholder_mark">DCX</div>
+      <div>
+        <div class="dcx_api_placeholder_label">Private backend</div>
+        <div class="dcx_api_placeholder_title">DCX API</div>
+      </div>
+    </main>
+  </body>
+</html>"""
