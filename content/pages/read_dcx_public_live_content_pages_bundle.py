@@ -77,6 +77,7 @@ def read_dcx_public_live_content_pages_bundle(
                         page.published_at_ts_ms,
                         page.updated_at_ts_ms,
                         COALESCE(category_localized.category_name, category_original.category_name),
+                        COALESCE(category_localized.category_description, category_original.category_description),
                         COALESCE(category_localized.category_slug, category_original.category_slug)
                     FROM stephen_dcx_content_pages AS page
                     JOIN stephen_dcx_languages AS language
@@ -118,7 +119,8 @@ def read_dcx_public_live_content_pages_bundle(
                 "published_at_ts_ms": page_row[9],
                 "updated_at_ts_ms": page_row[10],
                 "category_name": page_row[11],
-                "category_slug": page_row[12],
+                "category_description": page_row[12],
+                "category_slug": page_row[13],
             }
         )
 
