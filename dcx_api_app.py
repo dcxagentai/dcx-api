@@ -92,6 +92,15 @@ from routes.admin.dcx_api_routes_admin_content_newsletter_detail import (
 from routes.admin.dcx_api_routes_admin_content_newsletter_create_draft import (
     dcx_api_routes_admin_content_newsletter_create_draft_router,
 )
+from routes.admin.dcx_api_routes_admin_content_newsletter_sends_catalog import (
+    dcx_api_routes_admin_content_newsletter_sends_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletter_send_prepare import (
+    dcx_api_routes_admin_content_newsletter_send_prepare_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletter_send_cancel import (
+    dcx_api_routes_admin_content_newsletter_send_cancel_router,
+)
 from routes.admin.dcx_api_routes_admin_public_site_publish_status import (
     dcx_api_routes_admin_public_site_publish_status_router,
 )
@@ -219,6 +228,9 @@ app.include_router(dcx_api_routes_admin_content_page_archive_live_row_router)
 app.include_router(dcx_api_routes_admin_content_newsletters_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_detail_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_sends_catalog_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_send_prepare_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_send_cancel_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
