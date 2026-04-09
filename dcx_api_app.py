@@ -74,6 +74,9 @@ from routes.admin.dcx_api_routes_admin_content_page_detail import (
 from routes.admin.dcx_api_routes_admin_content_page_create_draft import (
     dcx_api_routes_admin_content_page_create_draft_router,
 )
+from routes.admin.dcx_api_routes_admin_content_page_create_translation import (
+    dcx_api_routes_admin_content_page_create_translation_router,
+)
 from routes.admin.dcx_api_routes_admin_content_page_save_live_row import (
     dcx_api_routes_admin_content_page_save_live_row_router,
 )
@@ -91,6 +94,9 @@ from routes.admin.dcx_api_routes_admin_content_newsletter_detail import (
 )
 from routes.admin.dcx_api_routes_admin_content_newsletter_create_draft import (
     dcx_api_routes_admin_content_newsletter_create_draft_router,
+)
+from routes.admin.dcx_api_routes_admin_content_newsletter_create_translation import (
+    dcx_api_routes_admin_content_newsletter_create_translation_router,
 )
 from routes.admin.dcx_api_routes_admin_content_newsletter_sends_catalog import (
     dcx_api_routes_admin_content_newsletter_sends_catalog_router,
@@ -222,12 +228,14 @@ app.include_router(dcx_api_routes_admin_content_page_categories_catalog_router)
 app.include_router(dcx_api_routes_admin_content_pages_catalog_router)
 app.include_router(dcx_api_routes_admin_content_page_detail_router)
 app.include_router(dcx_api_routes_admin_content_page_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_page_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_page_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_publish_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_archive_live_row_router)
 app.include_router(dcx_api_routes_admin_content_newsletters_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_detail_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_sends_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_prepare_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_cancel_router)

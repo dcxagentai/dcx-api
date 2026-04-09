@@ -77,11 +77,12 @@ def test_creates_send_row_recipient_snapshots_and_link_rows() -> None:
         "prepared_recipient_count": 2,
         "send_candidate_count": 1,
         "skipped_recipient_count": 1,
+        "blocked_missing_translation_count": 0,
         "tracked_link_count": 1,
     }
 
 
-def test_falls_back_to_source_newsletter_when_no_language_match_exists() -> None:
+def test_skips_users_when_newsletter_translation_is_missing_for_their_preferred_language() -> None:
     fake_connection = _FakeConnection(
         fetchone_results=[
             (101, "weekly-alpha", 1, "Weekly Alpha", "https://dcxagent.ai/en/access", "en"),
@@ -108,7 +109,8 @@ def test_falls_back_to_source_newsletter_when_no_language_match_exists() -> None
         tracking_token_provider=lambda: "track-token-2",
     )
 
-    assert payload["summary"]["send_candidate_count"] == 1
+    assert payload["summary"]["send_candidate_count"] == 0
+    assert payload["summary"]["blocked_missing_translation_count"] == 1
     assert payload["summary"]["tracked_link_count"] == 1
 
 

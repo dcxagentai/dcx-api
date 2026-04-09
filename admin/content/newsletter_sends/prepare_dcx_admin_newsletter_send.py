@@ -40,6 +40,7 @@ def prepare_dcx_admin_newsletter_send_capability(
         - Creates one new row in `stephen_dcx_emails_sends`.
         - Creates one snapshot row in `stephen_dcx_emails_sends_recipients` for each relevant user.
         - Creates one row in `stephen_dcx_emails_sends_links` for each unique outbound link in each resolved newsletter variant used by the send.
+        - Only marks users as `send` candidates when a live newsletter row exists in their preferred language (or in English when no preference exists).
         - Returns one summary of the prepared send.
       side_effects:
         - inserts one prepared newsletter send row
@@ -62,14 +63,14 @@ def prepare_dcx_admin_newsletter_send_capability(
         - Do not use it for actual Resend delivery yet.
       WHAT CAN GO WRONG:
         - The selected newsletter can be missing.
-        - No English fallback may exist if translations are incomplete.
+        - Users may be blocked because the newsletter has not yet been translated into their preferred language.
         - Database writes can fail.
       WHAT COMES NEXT:
         - Later a dispatcher will pick up these scheduled rows and call Resend.
 
     TESTS:
       - creates_send_row_recipient_snapshots_and_link_rows
-      - falls_back_to_source_newsletter_when_no_language_match_exists
+      - skips_users_when_newsletter_translation_is_missing_for_their_preferred_language
       - raises_clear_error_when_source_newsletter_missing
 
     ERRORS:
@@ -232,18 +233,31 @@ def prepare_dcx_admin_newsletter_send_capability(
                 prepared_recipient_count = 0
                 send_candidate_count = 0
                 skipped_recipient_count = 0
+                blocked_missing_translation_count = 0
                 resolved_variant_rows: dict[int, tuple] = {}
 
                 for user_row in user_rows:
-                    resolved_variant = variant_by_language_id.get(user_row[3]) or default_variant
+                    resolved_variant = _read_resolved_newsletter_variant_for_user_row(
+                        user_row=user_row,
+                        variant_by_language_id=variant_by_language_id,
+                        english_variant=english_variant,
+                        default_variant=default_variant,
+                    )
                     resolved_variant_rows[resolved_variant[0]] = resolved_variant
-                    delivery_decision = _read_delivery_decision_for_user_row(user_row)
+                    delivery_decision, failure_reason = _read_delivery_decision_for_user_row(
+                        user_row=user_row,
+                        resolved_variant=resolved_variant,
+                        variant_by_language_id=variant_by_language_id,
+                        english_variant=english_variant,
+                    )
                     delivery_status = "pending" if delivery_decision == "send" else "skipped"
                     prepared_recipient_count += 1
                     if delivery_decision == "send":
                         send_candidate_count += 1
                     else:
                         skipped_recipient_count += 1
+                        if failure_reason is not None and failure_reason.startswith("missing_translation:"):
+                            blocked_missing_translation_count += 1
 
                     cursor.execute(
                         """
@@ -256,9 +270,10 @@ def prepare_dcx_admin_newsletter_send_capability(
                             resolved_language_id_snapshot,
                             email_communication_preference_snapshot,
                             delivery_decision,
-                            delivery_status
+                            delivery_status,
+                            failure_reason
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             email_send_id,
@@ -270,6 +285,7 @@ def prepare_dcx_admin_newsletter_send_capability(
                             user_row[4],
                             delivery_decision,
                             delivery_status,
+                            failure_reason,
                         ),
                     )
 
@@ -303,6 +319,7 @@ def prepare_dcx_admin_newsletter_send_capability(
                     "prepared_recipient_count": prepared_recipient_count,
                     "send_candidate_count": send_candidate_count,
                     "skipped_recipient_count": skipped_recipient_count,
+                    "blocked_missing_translation_count": blocked_missing_translation_count,
                     "tracked_link_count": tracked_link_count,
                 }
                 cursor.execute(
@@ -340,18 +357,42 @@ def _build_tracking_token() -> str:
     return secrets.token_urlsafe(18)
 
 
-def _read_delivery_decision_for_user_row(user_row: tuple) -> str:
+def _read_resolved_newsletter_variant_for_user_row(
+    user_row: tuple,
+    variant_by_language_id: dict[int, tuple],
+    english_variant: tuple | None,
+    default_variant: tuple,
+) -> tuple:
+    preferred_language_id = user_row[3]
+    if preferred_language_id is None:
+        return english_variant or default_variant
+    return variant_by_language_id.get(preferred_language_id) or default_variant
+
+
+def _read_delivery_decision_for_user_row(
+    user_row: tuple,
+    resolved_variant: tuple,
+    variant_by_language_id: dict[int, tuple],
+    english_variant: tuple | None,
+) -> tuple[str, str | None]:
     recipient_email = (user_row[1] or "").strip()
     primary_email_confirmed = bool(user_row[2])
+    preferred_language_id = user_row[3]
     email_communication_preference = (user_row[4] or "").strip().lower()
     account_status = (user_row[5] or "").strip().lower()
 
     if recipient_email == "":
-        return "skip_missing_email"
+        return "skip_missing_email", None
     if primary_email_confirmed is not True:
-        return "skip_unconfirmed_email"
+        return "skip_unconfirmed_email", None
     if account_status != "confirmed":
-        return "skip_other"
+        return "skip_other", None
     if email_communication_preference != "announcements":
-        return "skip_preference"
-    return "send"
+        return "skip_preference", None
+    if preferred_language_id is None:
+        if english_variant is None:
+            return "skip_other", "missing_translation:en"
+        return "send", None
+    if preferred_language_id != resolved_variant[1]:
+        return "skip_other", f"missing_translation:{user_row[3]}"
+    return "send", None

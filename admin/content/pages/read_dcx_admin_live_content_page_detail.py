@@ -28,6 +28,7 @@ def read_dcx_admin_live_content_page_detail_capability(
       postconditions:
         - Returns one current live content-page row for the requested page/language pair.
         - Includes category and language metadata required by the admin editor.
+        - Includes translation summary metadata so the admin can open or create translations from the same editor.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -46,9 +47,11 @@ def read_dcx_admin_live_content_page_detail_capability(
         - Database reads can fail.
       WHAT COMES NEXT:
         - The save and publish capabilities can use the returned row id as the immutable live-row target.
+        - The admin translation controls can use the translation summary to open or create localized variants.
 
     TESTS:
       - returns_requested_live_content_page_detail
+      - falls_back_to_original_category_metadata_when_translated_category_missing
       - raises_clear_error_when_live_content_page_detail_missing
 
     ERRORS:
@@ -108,17 +111,21 @@ def read_dcx_admin_live_content_page_detail_capability(
                         language.language_name_en,
                         language.language_name_native,
                         language.is_rtl,
-                        category.id,
-                        category.category_name,
-                        category.category_description,
-                        category.category_slug
+                        COALESCE(category_localized.id, category_original.id),
+                        COALESCE(category_localized.category_name, category_original.category_name),
+                        COALESCE(category_localized.category_description, category_original.category_description),
+                        COALESCE(category_localized.category_slug, category_original.category_slug)
                     FROM stephen_dcx_content_pages AS page
                     JOIN stephen_dcx_languages AS language
                       ON language.id = page.language_id
-                    JOIN stephen_dcx_content_page_categories AS category
-                      ON category.category_key = page.category_key
-                     AND category.language_id = page.language_id
-                     AND category.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_localized
+                      ON category_localized.category_key = page.category_key
+                     AND category_localized.language_id = page.language_id
+                     AND category_localized.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_original
+                      ON category_original.category_key = page.category_key
+                     AND category_original.is_original = TRUE
+                     AND category_original.is_live = TRUE
                     WHERE page.page_key = %s
                       AND language.language_code = %s
                       AND page.is_live = TRUE
@@ -128,6 +135,46 @@ def read_dcx_admin_live_content_page_detail_capability(
                     (normalized_page_key, normalized_language_code),
                 )
                 page_row = cursor.fetchone()
+                cursor.execute(
+                    """
+                    SELECT
+                        language.id,
+                        language.language_code,
+                        language.language_name_en,
+                        language.language_name_native,
+                        language.is_rtl
+                    FROM stephen_dcx_languages AS language
+                    ORDER BY language.id ASC
+                    """
+                )
+                supported_language_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        translation_page.id,
+                        translation_page.page_key,
+                        translation_page.page_title,
+                        translation_page.page_slug,
+                        translation_page.publication_status,
+                        translation_page.is_original,
+                        translation_page.created_at_ts_ms,
+                        translation_page.updated_at_ts_ms,
+                        translation_language.id,
+                        translation_language.language_code,
+                        translation_language.language_name_en,
+                        translation_language.language_name_native,
+                        translation_language.is_rtl
+                    FROM stephen_dcx_content_pages AS translation_page
+                    JOIN stephen_dcx_languages AS translation_language
+                      ON translation_language.id = translation_page.language_id
+                    WHERE translation_page.page_key = %s
+                      AND translation_page.is_live = TRUE
+                    ORDER BY translation_language.id ASC, translation_page.id DESC
+                    """,
+                    (normalized_page_key,),
+                )
+                translation_rows = cursor.fetchall()
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -135,6 +182,54 @@ def read_dcx_admin_live_content_page_detail_capability(
 
     if page_row is None:
         raise RuntimeError("API_DCX_ADMIN_CONTENT_PAGE_DETAIL_NOT_FOUND")
+
+    existing_translations = []
+    existing_language_codes = set()
+    original_language_code = normalized_language_code
+    original_page_id = page_row[0]
+    current_language_code = page_row[18]
+
+    for translation_row in translation_rows:
+        translation_language = {
+            "id": translation_row[8],
+            "language_code": translation_row[9],
+            "language_name_en": translation_row[10],
+            "language_name_native": translation_row[11],
+            "is_rtl": translation_row[12],
+        }
+        existing_language_codes.add(translation_language["language_code"])
+        if translation_row[5] is True:
+            original_language_code = translation_language["language_code"]
+            original_page_id = translation_row[0]
+        existing_translations.append(
+            {
+                "page_id": translation_row[0],
+                "page_key": translation_row[1],
+                "page_title": translation_row[2],
+                "page_slug": translation_row[3],
+                "publication_status": translation_row[4],
+                "is_original": translation_row[5],
+                "created_at_ts_ms": translation_row[6],
+                "updated_at_ts_ms": translation_row[7],
+                "is_current_language": translation_language["language_code"] == current_language_code,
+                "language": translation_language,
+            }
+        )
+
+    missing_languages = []
+    for language_row in supported_language_rows:
+        language_code = language_row[1]
+        if language_code in existing_language_codes:
+            continue
+        missing_languages.append(
+            {
+                "id": language_row[0],
+                "language_code": language_code,
+                "language_name_en": language_row[2],
+                "language_name_native": language_row[3],
+                "is_rtl": language_row[4],
+            }
+        )
 
     return {
         "page_id": page_row[0],
@@ -166,5 +261,11 @@ def read_dcx_admin_live_content_page_detail_capability(
             "category_name": page_row[23],
             "category_description": page_row[24],
             "category_slug": page_row[25],
+        },
+        "translation_summary": {
+            "original_page_id": original_page_id,
+            "original_language_code": original_language_code,
+            "existing_translations": existing_translations,
+            "missing_languages": missing_languages,
         },
     }

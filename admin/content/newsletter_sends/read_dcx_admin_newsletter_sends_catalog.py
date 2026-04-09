@@ -28,6 +28,7 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
       postconditions:
         - Returns one ordered list of prepared send rows for the requested newsletter key.
         - Includes recipient/link summary counts for each prepared send row.
+        - Includes a count of recipients blocked because newsletter translations are still missing.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -94,6 +95,7 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
                         COUNT(DISTINCT recipient.id) AS total_recipient_count,
                         COUNT(DISTINCT CASE WHEN recipient.delivery_decision = 'send' THEN recipient.id END) AS send_candidate_count,
                         COUNT(DISTINCT CASE WHEN recipient.delivery_status = 'skipped' THEN recipient.id END) AS skipped_recipient_count,
+                        COUNT(DISTINCT CASE WHEN recipient.failure_reason LIKE 'missing_translation:%' THEN recipient.id END) AS blocked_missing_translation_count,
                         COUNT(DISTINCT link.id) AS tracked_link_count
                     FROM stephen_dcx_emails_sends AS email_send
                     INNER JOIN stephen_dcx_emails AS email_row
@@ -145,7 +147,8 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
                 "total_recipient_count": row[12],
                 "send_candidate_count": row[13],
                 "skipped_recipient_count": row[14],
-                "tracked_link_count": row[15],
+                "blocked_missing_translation_count": row[15],
+                "tracked_link_count": row[16],
             }
         )
 
