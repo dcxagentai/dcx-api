@@ -1,16 +1,18 @@
 """
 CONTEXT:
 This file is the composition root for the DCX API workspace.
-It exists to assemble middleware, startup schema application, a minimal root route, and the
-dedicated users router while keeping HTTP route bodies out of the app root.
+It exists to assemble middleware, startup schema application, a quiet branded root route, and the
+dedicated route modules while keeping HTTP route bodies out of the app root.
 """
 
 from contextlib import asynccontextmanager
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from storage.dcx_apply_initial_user_signup_schema_to_configured_database import (
     apply_initial_user_signup_schema_to_configured_database,
@@ -84,6 +86,7 @@ from routes.users.dcx_api_routes_users_signup_email_verify_otp import (
 from routes.users.dcx_api_routes_users_support import read_allowed_dcx_frontend_origins
 
 logger = logging.getLogger("uvicorn.error")
+DCX_API_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
@@ -160,6 +163,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Origin"],
 )
+app.mount("/static", StaticFiles(directory=DCX_API_STATIC_DIR), name="static")
 
 app.include_router(dcx_api_routes_auth_login_password_router)
 app.include_router(dcx_api_routes_auth_app_ux_strings_bundle_router)
@@ -193,7 +197,7 @@ def get_dcx_api_root_welcome_response() -> str:
         - The FastAPI application is running and able to receive HTTP requests from local frontend origins.
         - The configured Postgres database is reachable for one read-only bootstrap query.
       postconditions:
-        - Returns one minimal HTML placeholder page for the API hostname.
+        - Returns one minimal branded HTML placeholder page for the API hostname.
         - Does not expose route hints, backend capability names, or other attacker-oriented discovery detail.
       side_effects: []
       idempotent: true
@@ -201,7 +205,7 @@ def get_dcx_api_root_welcome_response() -> str:
       async: false
 
     NARRATIVE:
-      why: This exists to make the backend base URL itself useful as the first plumbing-proof route for local development and production on api.dcx.com.
+      why: This exists to keep the backend base URL visually quiet and branded without exposing any useful route hints to attackers or curious crawlers.
       when_to_use:
         - During local smoke testing of the backend hostname.
         - During initial deployment verification of the API service shell.
@@ -266,46 +270,25 @@ def get_dcx_api_root_welcome_response() -> str:
         color: #0e1830;
       }
       .dcx_api_placeholder_shell {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 24px 28px;
-        border: 1px solid #d7e0ee;
-        border-radius: 24px;
-        background: rgba(255, 255, 255, 0.94);
-        box-shadow: 0 24px 60px rgba(16, 34, 70, 0.08);
-      }
-      .dcx_api_placeholder_mark {
-        width: 52px;
-        height: 52px;
-        border-radius: 14px;
-        border: 1px solid #d7e0ee;
         display: grid;
         place-items: center;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        color: #245798;
+        width: min(180px, 42vw);
+        aspect-ratio: 1;
       }
-      .dcx_api_placeholder_label {
-        font-size: 12px;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: #49688f;
-      }
-      .dcx_api_placeholder_title {
-        margin-top: 4px;
-        font-size: 28px;
-        font-weight: 700;
+      .dcx_api_placeholder_logo {
+        width: 100%;
+        height: auto;
+        display: block;
       }
     </style>
   </head>
   <body>
     <main class="dcx_api_placeholder_shell">
-      <div class="dcx_api_placeholder_mark">DCX</div>
-      <div>
-        <div class="dcx_api_placeholder_label">Private backend</div>
-        <div class="dcx_api_placeholder_title">DCX API</div>
-      </div>
+      <img
+        class="dcx_api_placeholder_logo"
+        src="/static/dcx_logo.png"
+        alt="DCX"
+      />
     </main>
   </body>
 </html>"""

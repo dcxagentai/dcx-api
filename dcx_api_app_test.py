@@ -31,8 +31,7 @@ def test_root_route_returns_minimal_placeholder_html() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "DCX API" in response.text
-    assert "Private backend" in response.text
+    assert '/static/dcx_logo.png' in response.text
     assert "auth/login/password" not in response.text
 
 
