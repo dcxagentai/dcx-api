@@ -135,7 +135,7 @@ def read_dcx_admin_live_content_page_category_detail_capability(
                       ON language.id = category.language_id
                     WHERE category.category_key = %s
                       AND category.is_live = TRUE
-                    ORDER BY language.display_sort_order ASC, category.id ASC
+                    ORDER BY language.id ASC, category.id ASC
                     """,
                     (normalized_category_key,),
                 )
@@ -156,7 +156,7 @@ def read_dcx_admin_live_content_page_category_detail_capability(
                           AND category.language_id = language.id
                           AND category.is_live = TRUE
                     )
-                    ORDER BY language.display_sort_order ASC, language.id ASC
+                    ORDER BY language.id ASC
                     """,
                     (normalized_category_key,),
                 )
