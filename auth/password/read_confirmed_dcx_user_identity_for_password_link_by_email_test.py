@@ -35,7 +35,7 @@ class _FakeConnection:
         return self._cursor
 
 
-def test_returns_confirmed_user_identity_payload_for_primary_email() -> None:
+def test_returns_confirmed_user_identity_payload_for_verified_login_enabled_email_contact_method() -> None:
     payload = read_confirmed_dcx_user_identity_for_password_link_by_email(
         normalized_email="lookup@example.com",
         connect_to_database=lambda **_: _FakeConnection(
@@ -50,7 +50,7 @@ def test_returns_confirmed_user_identity_payload_for_primary_email() -> None:
 
     assert payload == {
         "user_id": 91,
-        "primary_email": "lookup@example.com",
+        "delivery_email": "lookup@example.com",
         "user_auth_identity_id": 191,
         "language_code": "en",
     }

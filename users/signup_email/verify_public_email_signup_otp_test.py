@@ -70,7 +70,7 @@ def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) 
                 "pending",
                 "user@example.com",
             ),
-            None,
+            (2,),
         ],
     )
     signup_flow_token = build_public_email_signup_flow_token(
@@ -91,6 +91,10 @@ def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) 
     assert payload["status"] == "confirmed"
     assert payload["confirmed_email"] == "user@example.com"
     assert payload["verification_page_url"] == "http://localhost:4321/users/signup-email/verify-otp"
+    assert any(
+        "UPDATE stephen_dcx_users_contact_methods" in sql
+        for sql, _ in fake_connection.cursor_instance.executed_statements
+    )
 
 
 def test_incorrect_otp_increments_attempt_count(monkeypatch) -> None:

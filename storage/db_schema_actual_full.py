@@ -9,7 +9,10 @@ sys.path.insert(0, dcx_project_dir)
 import psycopg2
 from storage.db_config import DB_CONFIG
 
-def get_schema_summary():
+# Change this to None to get ALL tables, or a string like "stephen_dcx_" to filter
+TABLE_PREFIX = "stephen_dcx_"
+
+def get_schema_summary(table_prefix=None):
     conn = None
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -31,6 +34,8 @@ def get_schema_summary():
             ORDER BY table_name;
         """)
         tables = [r[0] for r in cur.fetchall()]
+        if table_prefix:
+            tables = [t for t in tables if t.startswith(table_prefix)]
         
         output.append("TABLE LIST (\\dt):")
         output.append("-" * 30)
@@ -101,7 +106,8 @@ def get_schema_summary():
             output.append("\n")
 
         # Save to file in the same directory as the script
-        report_path = os.path.join(current_dir, "db_schema_actual_full.txt")
+        filename = f"db_schema_{table_prefix}.txt" if table_prefix else "db_schema_actual_full.txt"
+        report_path = os.path.join(current_dir, filename)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write("\n".join(output))
             
@@ -114,4 +120,4 @@ def get_schema_summary():
             conn.close()
 
 if __name__ == "__main__":
-    get_schema_summary()
+    get_schema_summary(TABLE_PREFIX)

@@ -43,11 +43,12 @@ def verify_public_email_signup_otp_capability(
         - signup_flow_token, otp_code, language_code, verification_page_url, and origin_header describe one public OTP verification request.
         - The configured database is reachable and the user-signup schema has been applied.
       postconditions:
-        - Confirms the user primary email and the email auth identity when the OTP matches.
+        - Confirms the verified email contact method and the email auth identity when the OTP matches.
         - Consumes the active challenge row on success.
         - Increments attempt state and lockout state on failure.
       side_effects:
         - writes to stephen_dcx_users
+        - writes to stephen_dcx_users_contact_methods
         - writes to stephen_dcx_user_auth_identities
         - writes to stephen_dcx_user_auth_challenges
       idempotent: false
@@ -72,6 +73,7 @@ def verify_public_email_signup_otp_capability(
         - The OTP can be wrong.
       WHAT COMES NEXT:
         - The route can return one generic confirmation success response and clear the browser flow token.
+        - Later password-setup and login lookup can resolve this email through the verified contact-method layer.
 
     TESTS:
       - correct_otp_confirms_user_identity_and_consumes_challenge
@@ -302,23 +304,76 @@ def verify_public_email_signup_otp_capability(
 
                 cursor.execute(
                     """
-                    UPDATE stephen_dcx_users
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'stephen_dcx_users'
+                      AND column_name IN ('primary_email_confirmed', 'primary_email_confirmed_at_ts_ms')
+                    """
+                )
+                users_table_has_legacy_email_columns = cursor.fetchone()[0] == 2
+
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_users_contact_methods
                     SET
-                        primary_email_confirmed = TRUE,
-                        primary_email_confirmed_at_ts_ms = %s,
-                        account_status = %s,
-                        last_seen_at_ts_ms = %s,
+                        is_verified = TRUE,
+                        verified_at_ts_ms = COALESCE(verified_at_ts_ms, %s),
+                        verification_method = COALESCE(verification_method, %s),
+                        last_used_at_ts_ms = %s,
                         updated_at_ts_ms = %s
-                    WHERE id = %s
+                    WHERE user_id = %s
+                      AND contact_type = %s
+                      AND normalized_value = %s
+                      AND is_active = TRUE
                     """,
                     (
                         now_ts_ms,
-                        "confirmed",
+                        "email_otp",
                         now_ts_ms,
                         now_ts_ms,
                         user_id,
+                        "email",
+                        confirmed_email.strip().lower(),
                     ),
                 )
+                if users_table_has_legacy_email_columns:
+                    cursor.execute(
+                        """
+                        UPDATE stephen_dcx_users
+                        SET
+                            primary_email_confirmed = TRUE,
+                            primary_email_confirmed_at_ts_ms = %s,
+                            account_status = %s,
+                            last_seen_at_ts_ms = %s,
+                            updated_at_ts_ms = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            now_ts_ms,
+                            "confirmed",
+                            now_ts_ms,
+                            now_ts_ms,
+                            user_id,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE stephen_dcx_users
+                        SET
+                            account_status = %s,
+                            last_seen_at_ts_ms = %s,
+                            updated_at_ts_ms = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            "confirmed",
+                            now_ts_ms,
+                            now_ts_ms,
+                            user_id,
+                        ),
+                    )
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_user_auth_identities

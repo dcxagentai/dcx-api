@@ -2,8 +2,8 @@
 CONTEXT:
 This file reads the first admin-facing list of DCX users.
 It exists so `admin.dcxagent.ai/users` can render a real management surface from the
-existing `stephen_dcx_users` table before the full auth, roles, and permissions system
-is connected.
+normalized user plus contact-method model before the full auth, roles, and permissions
+system is connected.
 """
 
 from __future__ import annotations
@@ -72,9 +72,9 @@ def read_dcx_admin_user_list_capability(
                     SELECT
                         u.id,
                         u.user_uuid,
-                        u.primary_email,
-                        u.primary_email_confirmed,
-                        u.primary_email_confirmed_at_ts_ms,
+                        primary_email_contact_method.normalized_value,
+                        primary_email_contact_method.is_verified,
+                        primary_email_contact_method.verified_at_ts_ms,
                         u.account_status,
                         u.email_communication_preference,
                         u.last_seen_at_ts_ms,
@@ -86,12 +86,27 @@ def read_dcx_admin_user_list_capability(
                         l.language_name_native,
                         l.is_rtl
                     FROM stephen_dcx_users u
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            normalized_value,
+                            is_verified,
+                            verified_at_ts_ms
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_email_contact_method
+                      ON TRUE
                     LEFT JOIN stephen_dcx_languages l
                       ON l.id = u.preferred_language_id
                     ORDER BY
                         COALESCE(u.last_seen_at_ts_ms, u.updated_at_ts_ms, u.created_at_ts_ms) DESC,
                         u.id DESC
                     """
+                    ,
+                    ("email",),
                 )
                 user_rows = cursor.fetchall()
     except RuntimeError:

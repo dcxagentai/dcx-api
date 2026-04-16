@@ -37,7 +37,7 @@ class _FakeConnection:
         return _FakeCursor(self._fetchone_results)
 
 
-def test_saves_editable_settings_via_upsert_shaped_write() -> None:
+def test_saves_editable_settings_via_direct_user_row_update() -> None:
     result = save_authenticated_dcx_user_account_editable_settings_capability(
         authenticated_user_id=5,
         preferred_language_id=4,

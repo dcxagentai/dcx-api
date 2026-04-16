@@ -77,7 +77,7 @@ def create_dcx_password_setup_link_after_confirmed_signup(
         authenticated_user_id=password_link_target["user_id"],
         authenticated_user_identity_id=password_link_target["user_auth_identity_id"],
         challenge_purpose=DCX_PASSWORD_SETUP_CHALLENGE_PURPOSE,
-        delivery_target_email=password_link_target["primary_email"],
+        delivery_target_email=password_link_target["delivery_email"],
         language_code=password_link_target["language_code"],
         connect_to_database=connect_to_database,
     )

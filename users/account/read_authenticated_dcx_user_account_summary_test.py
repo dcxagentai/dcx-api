@@ -53,6 +53,20 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
             "email_preference_announcements": "Ankündigungen",
             "email_preference_essential_only": "Nur wichtiges",
         },
+    ), patch.object(
+        account_summary_module,
+        "read_authenticated_dcx_user_pending_whatsapp_phone_link",
+        return_value={
+            "phone_e164": "+34600000001",
+            "challenge_status": "pending",
+            "expires_at_ts_ms": 1775324931389,
+            "sent_at_ts_ms": 1775324332389,
+            "next_send_allowed_at_ts_ms": 1775324362389,
+            "locked_until_ts_ms": None,
+            "resend_count": 1,
+            "send_count": 1,
+            "last_resent_at_ts_ms": None,
+        },
     ):
         result = account_summary_module.read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=1,
@@ -125,6 +139,17 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
             "display_label": "(UTC+1/+2) Madrid",
             "region_label": "Europe",
         },
+        "pending_whatsapp_phone_link": {
+            "phone_e164": "+34600000001",
+            "challenge_status": "pending",
+            "expires_at_ts_ms": 1775324931389,
+            "sent_at_ts_ms": 1775324332389,
+            "next_send_allowed_at_ts_ms": 1775324362389,
+            "locked_until_ts_ms": None,
+            "resend_count": 1,
+            "send_count": 1,
+            "last_resent_at_ts_ms": None,
+        },
         "available_languages": [
             {
                 "id": 1,
@@ -182,6 +207,10 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
             "email_preference_announcements": "Announcements",
             "email_preference_essential_only": "Essential only",
         },
+    ), patch.object(
+        account_summary_module,
+        "read_authenticated_dcx_user_pending_whatsapp_phone_link",
+        return_value=None,
     ):
         result = account_summary_module.read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=6,

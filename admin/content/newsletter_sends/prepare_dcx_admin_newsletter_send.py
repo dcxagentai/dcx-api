@@ -219,12 +219,24 @@ def prepare_dcx_admin_newsletter_send_capability(
                     """
                     SELECT
                         user_row.id,
-                        user_row.primary_email,
-                        user_row.primary_email_confirmed,
+                        primary_email_contact_method.normalized_value,
+                        primary_email_contact_method.is_verified,
                         user_row.preferred_language_id,
                         user_row.email_communication_preference,
                         user_row.account_status
                     FROM stephen_dcx_users AS user_row
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            normalized_value,
+                            is_verified
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = user_row.id
+                          AND contact_type = 'email'
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_email_contact_method
+                      ON TRUE
                     ORDER BY user_row.id ASC
                     """
                 )

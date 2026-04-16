@@ -23,7 +23,7 @@ def test_returns_password_reset_email_draft_for_confirmed_user(monkeypatch) -> N
         "auth.password.request_dcx_password_reset_email_challenge.read_confirmed_dcx_user_identity_for_password_link_by_email",
         lambda **_: {
             "user_id": 1,
-            "primary_email": "user@example.com",
+            "delivery_email": "user@example.com",
             "user_auth_identity_id": 2,
             "language_code": "en",
         },

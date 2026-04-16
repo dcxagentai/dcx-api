@@ -49,12 +49,15 @@ class FakeConnection:
         return False
 
 
-def test_creates_new_user_identity_and_pending_challenge_for_new_email(monkeypatch) -> None:
+def test_creates_new_user_contact_method_identity_and_pending_challenge_for_new_email(monkeypatch) -> None:
     monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             None,
-            (101, False, "pending_email_verification"),
+            (3,),
+            None,
+            (101, False, None, "pending_email_verification"),
+            (151,),
             (201,),
             None,
             (301,),
@@ -95,6 +98,14 @@ def test_creates_new_user_identity_and_pending_challenge_for_new_email(monkeypat
         "challenge_id": 301,
         "recovery_action": "delete_new_challenge",
     }
+    assert any(
+        "INSERT INTO stephen_dcx_users_contact_methods" in sql
+        for sql, _ in fake_connection.cursor_instance.executed_statements
+    )
+    assert any(
+        "contact_method_id" in sql and "INSERT INTO stephen_dcx_user_auth_identities" in sql
+        for sql, _ in fake_connection.cursor_instance.executed_statements
+    )
 
 
 def test_repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_send(monkeypatch) -> None:
@@ -102,7 +113,9 @@ def test_repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_s
     fake_connection = FakeConnection(
         fetchone_results=[
             (1,),
-            (101, False, "pending_email_verification"),
+            (3,),
+            (151, 101, False, None),
+            (101, "pending_email_verification"),
             (201,),
             (
                 301,
@@ -151,3 +164,7 @@ def test_repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_s
     assert payload["challenge_id"] == 301
     assert payload["signup_flow_token"] == expected_signup_flow_token
     assert payload["delivery_failure_recovery_state"]["recovery_action"] == "restore_existing_challenge_state"
+    assert any(
+        "SELECT" in sql and "FROM stephen_dcx_users_contact_methods" in sql
+        for sql, _ in fake_connection.cursor_instance.executed_statements
+    )

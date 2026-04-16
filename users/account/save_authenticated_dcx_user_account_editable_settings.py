@@ -35,7 +35,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         - email_communication_preference is one allowed DCX communication-preference value.
         - The configured database is reachable.
       postconditions:
-        - Saves the editable user-account settings through one upsert-shaped database write.
+        - Saves the editable user-account settings through one direct update on the existing user row.
         - Preserves the stable user identity row instead of creating duplicate users.
         - Returns the saved editable settings payload.
       side_effects:
@@ -191,61 +191,20 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
 
                 cursor.execute(
                     """
-                    WITH existing_user AS (
-                        SELECT
-                            id,
-                            user_uuid,
-                            primary_email,
-                            primary_email_confirmed,
-                            primary_email_confirmed_at_ts_ms,
-                            account_status,
-                            last_seen_at_ts_ms,
-                            created_at_ts_ms
-                        FROM stephen_dcx_users
-                        WHERE id = %s
-                        FOR UPDATE
-                    )
-                    INSERT INTO stephen_dcx_users (
-                        id,
-                        user_uuid,
-                        primary_email,
-                        primary_email_confirmed,
-                        primary_email_confirmed_at_ts_ms,
-                        preferred_language_id,
-                        preferred_timezone_id,
-                        account_status,
-                        email_communication_preference,
-                        last_seen_at_ts_ms,
-                        created_at_ts_ms,
-                        updated_at_ts_ms
-                    )
-                    SELECT
-                        existing_user.id,
-                        existing_user.user_uuid,
-                        existing_user.primary_email,
-                        existing_user.primary_email_confirmed,
-                        existing_user.primary_email_confirmed_at_ts_ms,
-                        %s,
-                        %s,
-                        existing_user.account_status,
-                        %s,
-                        existing_user.last_seen_at_ts_ms,
-                        existing_user.created_at_ts_ms,
-                        (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
-                    FROM existing_user
-                    ON CONFLICT (id)
-                    DO UPDATE SET
-                        preferred_language_id = EXCLUDED.preferred_language_id,
-                        preferred_timezone_id = EXCLUDED.preferred_timezone_id,
-                        email_communication_preference = EXCLUDED.email_communication_preference,
-                        updated_at_ts_ms = EXCLUDED.updated_at_ts_ms
+                    UPDATE stephen_dcx_users
+                    SET
+                        preferred_language_id = %s,
+                        preferred_timezone_id = %s,
+                        email_communication_preference = %s,
+                        updated_at_ts_ms = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
+                    WHERE id = %s
                     RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference
                     """,
                     (
-                        authenticated_user_id,
                         preferred_language_id,
                         preferred_timezone_id,
                         normalized_email_communication_preference,
+                        authenticated_user_id,
                     ),
                 )
                 saved_row = cursor.fetchone()

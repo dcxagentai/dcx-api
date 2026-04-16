@@ -130,6 +130,12 @@ from routes.users.dcx_api_routes_users_me_account_summary import (
 from routes.users.dcx_api_routes_users_me_account_settings import (
     dcx_api_routes_users_me_account_settings_router,
 )
+from routes.users.dcx_api_routes_users_me_account_phone_request_whatsapp_otp import (
+    dcx_api_routes_users_me_account_phone_request_whatsapp_otp_router,
+)
+from routes.users.dcx_api_routes_users_me_account_phone_verify_whatsapp_otp import (
+    dcx_api_routes_users_me_account_phone_verify_whatsapp_otp_router,
+)
 from routes.users.dcx_api_routes_users_signup_email import (
     dcx_api_routes_users_signup_email_router,
 )
@@ -194,6 +200,8 @@ app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
 app.include_router(dcx_api_routes_users_me_account_summary_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
+app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_otp_router)
+app.include_router(dcx_api_routes_users_me_account_phone_verify_whatsapp_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_router)
 app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)

@@ -57,6 +57,7 @@ def create_or_refresh_public_email_signup_artifacts_capability(
         - The configured database is reachable and the user-signup schema has been applied.
       postconditions:
         - Ensures one durable user row exists for the normalized email.
+        - Ensures one durable email contact-method row exists for that user.
         - Ensures one durable email auth identity row exists for that user.
         - Ensures one active pending email-signup challenge row exists for that identity.
         - Returns one stable opaque signup flow token for the active challenge.
@@ -64,6 +65,7 @@ def create_or_refresh_public_email_signup_artifacts_capability(
         - Generates one OTP email draft only when a fresh send is allowed.
       side_effects:
         - writes to stephen_dcx_users
+        - writes to stephen_dcx_users_contact_methods
         - writes to stephen_dcx_user_auth_identities
         - writes to stephen_dcx_user_auth_challenges
       idempotent: false
@@ -84,13 +86,13 @@ def create_or_refresh_public_email_signup_artifacts_capability(
         - Do not use it for OTP verification or resend requests.
       WHAT CAN GO WRONG:
         - DB connectivity or schema drift can break the transaction.
-        - Duplicate concurrent signups can collide if the advisory lock or unique challenge invariant is removed.
+        - Duplicate concurrent signups can collide if the advisory lock or unique contact-method invariant is removed.
       WHAT COMES NEXT:
         - The route decides whether to call the provider send capability based on `send_required`.
         - The browser can redirect immediately only when a fresh signup flow token was returned.
 
     TESTS:
-      - creates_new_user_identity_and_pending_challenge_for_new_email
+      - creates_new_user_contact_method_identity_and_pending_challenge_for_new_email
       - repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_send
       - returns_signup_flow_token_and_minimal_internal_delivery_state
       - cooldown_reuses_existing_email_link_without_rotating_token
@@ -159,37 +161,189 @@ def create_or_refresh_public_email_signup_artifacts_capability(
 
                 cursor.execute(
                     """
-                    INSERT INTO stephen_dcx_users (
-                        user_uuid,
-                        primary_email,
-                        preferred_language_id,
-                        account_status,
-                        last_seen_at_ts_ms,
-                        created_at_ts_ms,
-                        updated_at_ts_ms
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (primary_email) DO UPDATE
-                    SET
-                        preferred_language_id = COALESCE(EXCLUDED.preferred_language_id, stephen_dcx_users.preferred_language_id),
-                        last_seen_at_ts_ms = EXCLUDED.last_seen_at_ts_ms,
-                        updated_at_ts_ms = EXCLUDED.updated_at_ts_ms
-                    RETURNING
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'stephen_dcx_users'
+                      AND column_name IN ('primary_email', 'primary_email_confirmed', 'primary_email_confirmed_at_ts_ms')
+                    """
+                )
+                legacy_primary_email_column_count = cursor.fetchone()[0]
+                users_table_has_legacy_email_columns = legacy_primary_email_column_count == 3
+
+                cursor.execute(
+                    """
+                    SELECT
                         id,
-                        primary_email_confirmed,
-                        account_status
+                        user_id,
+                        is_verified,
+                        verified_at_ts_ms
+                    FROM stephen_dcx_users_contact_methods
+                    WHERE contact_type = %s
+                      AND normalized_value = %s
+                      AND is_active = TRUE
+                    LIMIT 1
+                    FOR UPDATE
                     """,
                     (
-                        generated_user_uuid,
+                        "email",
                         normalized_email,
-                        preferred_language_id,
-                        "pending_email_verification",
-                        now_ts_ms,
-                        now_ts_ms,
-                        now_ts_ms,
                     ),
                 )
-                user_row = cursor.fetchone()
+                existing_contact_method_row = cursor.fetchone()
+
+                if existing_contact_method_row is None:
+                    if users_table_has_legacy_email_columns:
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_users (
+                                user_uuid,
+                                primary_email,
+                                preferred_language_id,
+                                account_status,
+                                last_seen_at_ts_ms,
+                                created_at_ts_ms,
+                                updated_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (primary_email) DO UPDATE
+                            SET
+                                preferred_language_id = COALESCE(EXCLUDED.preferred_language_id, stephen_dcx_users.preferred_language_id),
+                                last_seen_at_ts_ms = EXCLUDED.last_seen_at_ts_ms,
+                                updated_at_ts_ms = EXCLUDED.updated_at_ts_ms
+                            RETURNING
+                                id,
+                                primary_email_confirmed,
+                                primary_email_confirmed_at_ts_ms,
+                                account_status
+                            """,
+                            (
+                                generated_user_uuid,
+                                normalized_email,
+                                preferred_language_id,
+                                "pending_email_verification",
+                                now_ts_ms,
+                                now_ts_ms,
+                                now_ts_ms,
+                            ),
+                        )
+                        user_row = cursor.fetchone()
+                        user_id = user_row[0]
+                        contact_method_is_verified = bool(user_row[1])
+                        contact_method_verified_at_ts_ms = user_row[2]
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_users (
+                                user_uuid,
+                                preferred_language_id,
+                                account_status,
+                                last_seen_at_ts_ms,
+                                created_at_ts_ms,
+                                updated_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            RETURNING id, account_status
+                            """,
+                            (
+                                generated_user_uuid,
+                                preferred_language_id,
+                                "pending_email_verification",
+                                now_ts_ms,
+                                now_ts_ms,
+                                now_ts_ms,
+                            ),
+                        )
+                        user_row = cursor.fetchone()
+                        user_id = user_row[0]
+                        contact_method_is_verified = False
+                        contact_method_verified_at_ts_ms = None
+
+                    cursor.execute(
+                        """
+                        INSERT INTO stephen_dcx_users_contact_methods (
+                            user_id,
+                            contact_type,
+                            contact_value,
+                            normalized_value,
+                            display_label,
+                            is_primary,
+                            is_login_enabled,
+                            is_recovery_enabled,
+                            is_notification_enabled,
+                            is_verified,
+                            verified_at_ts_ms,
+                            verification_method,
+                            is_active,
+                            last_used_at_ts_ms,
+                            created_at_ts_ms,
+                            updated_at_ts_ms
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            user_id,
+                            "email",
+                            normalized_email,
+                            normalized_email,
+                            "primary",
+                            True,
+                            True,
+                            True,
+                            True,
+                            contact_method_is_verified,
+                            contact_method_verified_at_ts_ms,
+                            "email_otp" if contact_method_is_verified else None,
+                            True,
+                            now_ts_ms,
+                            now_ts_ms,
+                            now_ts_ms,
+                        ),
+                    )
+                    contact_method_id = cursor.fetchone()[0]
+                else:
+                    contact_method_id = existing_contact_method_row[0]
+                    existing_user_id = existing_contact_method_row[1]
+                    contact_method_is_verified = bool(existing_contact_method_row[2])
+                    contact_method_verified_at_ts_ms = existing_contact_method_row[3]
+                    cursor.execute(
+                        """
+                        UPDATE stephen_dcx_users_contact_methods
+                        SET
+                            contact_value = %s,
+                            last_used_at_ts_ms = %s,
+                            updated_at_ts_ms = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            normalized_email,
+                            now_ts_ms,
+                            now_ts_ms,
+                            contact_method_id,
+                        ),
+                    )
+                    cursor.execute(
+                        """
+                        UPDATE stephen_dcx_users
+                        SET
+                            preferred_language_id = COALESCE(%s, preferred_language_id),
+                            last_seen_at_ts_ms = %s,
+                            updated_at_ts_ms = %s
+                        WHERE id = %s
+                        RETURNING
+                            id,
+                            account_status
+                        """,
+                        (
+                            preferred_language_id,
+                            now_ts_ms,
+                            now_ts_ms,
+                            existing_user_id,
+                        ),
+                    )
+                    user_row = cursor.fetchone()
+                    user_id = user_row[0]
 
                 cursor.execute(
                     """
@@ -199,32 +353,40 @@ def create_or_refresh_public_email_signup_artifacts_capability(
                         provider_subject,
                         provider_email,
                         provider_email_confirmed,
+                        provider_display_name,
+                        provider_profile_handle,
                         is_primary_identity,
                         is_login_enabled,
                         linked_at_ts_ms,
                         created_at_ts_ms,
-                        updated_at_ts_ms
+                        updated_at_ts_ms,
+                        contact_method_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (provider_type, provider_subject) DO UPDATE
                     SET
                         user_id = EXCLUDED.user_id,
                         provider_email = EXCLUDED.provider_email,
-                        provider_email_confirmed = EXCLUDED.provider_email_confirmed,
+                        provider_email_confirmed = stephen_dcx_user_auth_identities.provider_email_confirmed OR EXCLUDED.provider_email_confirmed,
+                        is_login_enabled = stephen_dcx_user_auth_identities.is_login_enabled OR EXCLUDED.is_login_enabled,
+                        contact_method_id = COALESCE(EXCLUDED.contact_method_id, stephen_dcx_user_auth_identities.contact_method_id),
                         updated_at_ts_ms = EXCLUDED.updated_at_ts_ms
                     RETURNING id
                     """,
                     (
-                        user_row[0],
+                        user_id,
                         "email",
                         normalized_email,
                         normalized_email,
-                        False,
+                        contact_method_is_verified,
+                        None,
+                        None,
                         True,
                         True,
                         now_ts_ms,
                         now_ts_ms,
                         now_ts_ms,
+                        contact_method_id,
                     ),
                 )
                 identity_row = cursor.fetchone()

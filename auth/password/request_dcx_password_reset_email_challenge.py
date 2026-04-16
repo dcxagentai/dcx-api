@@ -93,13 +93,13 @@ def request_dcx_password_reset_email_challenge(
         authenticated_user_id=password_link_target["user_id"],
         authenticated_user_identity_id=password_link_target["user_auth_identity_id"],
         challenge_purpose=DCX_PASSWORD_RESET_CHALLENGE_PURPOSE,
-        delivery_target_email=password_link_target["primary_email"],
+        delivery_target_email=password_link_target["delivery_email"],
         language_code=password_link_target["language_code"],
         connect_to_database=connect_to_database,
     )
     email_delivery_draft = build_password_reset_email_delivery_draft(
         language_code=password_link_target["language_code"],
-        normalized_email=password_link_target["primary_email"],
+        normalized_email=password_link_target["delivery_email"],
         password_set_url=password_link_payload["password_set_url"],
         connect_to_database=connect_to_database,
     )

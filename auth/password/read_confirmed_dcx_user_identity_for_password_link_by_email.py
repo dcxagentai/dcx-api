@@ -1,8 +1,9 @@
 """
 CONTEXT:
 This file reads one confirmed DCX email identity suitable for password setup or reset.
-It exists so signup-completion and forgotten-password flows can share the same user/identity lookup
-rules without duplicating the confirmed-email checks across multiple capabilities.
+It exists so signup-completion and forgotten-password flows can share the same normalized
+contact-method plus auth-identity lookup rules without duplicating the confirmed-email checks
+across multiple capabilities.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ def read_confirmed_dcx_user_identity_for_password_link_by_email(
       preconditions:
         - normalized_email is one lowercased canonical email string.
       postconditions:
-        - Returns the confirmed user/identity payload when the email belongs to a confirmed DCX user with a login-enabled email identity.
+        - Returns the confirmed user/identity payload when the email belongs to a confirmed DCX user with one verified login-enabled email contact method and matching email identity.
         - Returns null when no eligible identity exists.
       side_effects: []
       idempotent: true
@@ -32,7 +33,7 @@ def read_confirmed_dcx_user_identity_for_password_link_by_email(
 
     NARRATIVE:
       WHY this exists:
-        - Password links should only target confirmed users tied to a login-enabled email identity.
+        - Password links should only target confirmed users tied to one verified login-enabled email contact method and matching email identity.
       WHEN TO USE it:
         - Use it before creating password setup or reset challenges for one email address.
       WHEN NOT TO USE it:
@@ -44,7 +45,7 @@ def read_confirmed_dcx_user_identity_for_password_link_by_email(
         - The caller can create or refresh a password-link challenge for the returned identity.
 
     TESTS:
-      - returns_confirmed_user_identity_payload_for_primary_email
+      - returns_confirmed_user_identity_payload_for_verified_login_enabled_email_contact_method
       - returns_none_for_unconfirmed_user
 
     ERRORS:
@@ -69,25 +70,33 @@ def read_confirmed_dcx_user_identity_for_password_link_by_email(
                     """
                     SELECT
                         u.id,
-                        u.primary_email,
+                        cm.normalized_value,
                         i.id,
                         l.language_code
-                    FROM stephen_dcx_users u
+                    FROM stephen_dcx_users_contact_methods cm
+                    JOIN stephen_dcx_users u
+                      ON u.id = cm.user_id
                     JOIN stephen_dcx_user_auth_identities i
                       ON i.user_id = u.id
+                     AND i.contact_method_id = cm.id
                      AND i.provider_type = %s
                      AND LOWER(i.provider_subject) = %s
+                     AND i.provider_email_confirmed = TRUE
                      AND i.is_login_enabled = TRUE
                     LEFT JOIN stephen_dcx_languages l
                       ON l.id = u.preferred_language_id
-                    WHERE LOWER(u.primary_email) = %s
-                      AND u.primary_email_confirmed = TRUE
+                    WHERE cm.contact_type = %s
+                      AND cm.normalized_value = %s
+                      AND cm.is_active = TRUE
+                      AND cm.is_verified = TRUE
+                      AND cm.is_login_enabled = TRUE
                       AND u.account_status = %s
                     LIMIT 1
                     """,
                     (
                         "email",
                         normalized_email,
+                        "email",
                         normalized_email,
                         "confirmed",
                     ),
@@ -101,7 +110,7 @@ def read_confirmed_dcx_user_identity_for_password_link_by_email(
 
     return {
         "user_id": row[0],
-        "primary_email": row[1],
+        "delivery_email": row[1],
         "user_auth_identity_id": row[2],
         "language_code": row[3] or "en",
     }

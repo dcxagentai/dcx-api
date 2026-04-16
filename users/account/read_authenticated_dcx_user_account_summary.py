@@ -2,8 +2,8 @@
 CONTEXT:
 This file reads the minimal authenticated account summary for one DCX user.
 It exists so the first `app.dcxagent.ai/me/account` surface can render real persisted
-user state from `stephen_dcx_users` without coupling the frontend to raw table queries
-or to future auth-provider tables.
+user state from the normalized user plus contact-method model without coupling the frontend
+to raw table queries or to future auth-provider tables.
 """
 
 from __future__ import annotations
@@ -15,6 +15,9 @@ import psycopg2
 from storage.db_config import DB_CONFIG
 from users.account.read_dcx_app_account_page_ux_strings import (
     read_dcx_app_account_page_ux_strings_capability,
+)
+from users.account_phone.read_authenticated_dcx_user_pending_whatsapp_phone_link import (
+    read_authenticated_dcx_user_pending_whatsapp_phone_link,
 )
 
 
@@ -32,6 +35,7 @@ def read_authenticated_dcx_user_account_summary_capability(
         - Includes the preferred language and preferred timezone objects when those relations exist.
         - Includes the currently editable language, timezone, and communication-preference options.
         - Includes the first app-account-page UX-string map for the app frontend.
+        - Includes pending WhatsApp phone-link state when one delivered challenge is active.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -41,6 +45,8 @@ def read_authenticated_dcx_user_account_summary_capability(
       WHY this exists:
         - The user app needs one stable backend capability for the current-account view before
           editing, roles, or broader app surfaces exist.
+        - Email and phone now read from the normalized contact-method layer instead of duplicating
+          source-of-truth contact state on the user row.
       WHEN TO USE it:
         - Use it from authenticated or temporarily-debuggable app routes that need the current user's
           basic account record.
@@ -94,13 +100,13 @@ def read_authenticated_dcx_user_account_summary_capability(
                     SELECT
                         u.id,
                         u.user_uuid,
-                        u.primary_email,
-                        u.primary_email_confirmed,
-                        u.primary_email_confirmed_at_ts_ms,
-                        u.primary_phone_e164,
-                        u.primary_phone_confirmed,
-                        u.primary_phone_confirmed_at_ts_ms,
-                        u.primary_phone_channel,
+                        primary_email_contact_method.normalized_value,
+                        primary_email_contact_method.is_verified,
+                        primary_email_contact_method.verified_at_ts_ms,
+                        primary_phone_contact_method.normalized_value,
+                        primary_phone_contact_method.is_verified,
+                        primary_phone_contact_method.verified_at_ts_ms,
+                        primary_phone_identity.provider_type,
                         u.account_status,
                         u.email_communication_preference,
                         u.last_seen_at_ts_ms,
@@ -116,6 +122,49 @@ def read_authenticated_dcx_user_account_summary_capability(
                         tz.display_label,
                         tz.region_label
                     FROM stephen_dcx_users u
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            normalized_value,
+                            is_verified,
+                            verified_at_ts_ms
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_email_contact_method
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            id,
+                            normalized_value,
+                            is_verified,
+                            verified_at_ts_ms
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_phone_contact_method
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT provider_type
+                        FROM stephen_dcx_user_auth_identities
+                        WHERE contact_method_id = primary_phone_contact_method.id
+                          AND provider_type IN ('whatsapp', 'telegram', 'sms', 'phone')
+                        ORDER BY
+                            CASE provider_type
+                                WHEN 'whatsapp' THEN 1
+                                WHEN 'telegram' THEN 2
+                                WHEN 'sms' THEN 3
+                                ELSE 4
+                            END ASC,
+                            id ASC
+                        LIMIT 1
+                    ) primary_phone_identity
+                      ON TRUE
                     LEFT JOIN stephen_dcx_languages l
                       ON l.id = u.preferred_language_id
                     LEFT JOIN stephen_dcx_timezones tz
@@ -123,7 +172,11 @@ def read_authenticated_dcx_user_account_summary_capability(
                     WHERE u.id = %s
                     LIMIT 1
                     """,
-                    (authenticated_user_id,),
+                    (
+                        "email",
+                        "phone",
+                        authenticated_user_id,
+                    ),
                 )
                 user_row = cursor.fetchone()
 
@@ -207,6 +260,10 @@ def read_authenticated_dcx_user_account_summary_capability(
         preferred_language_code=preferred_language["language_code"] if preferred_language else None,
         connect_to_database=connect,
     )
+    pending_whatsapp_phone_link = read_authenticated_dcx_user_pending_whatsapp_phone_link(
+        authenticated_user_id=authenticated_user_id,
+        connect_to_database=connect,
+    )
 
     return {
         "user_id": user_row[0],
@@ -225,6 +282,7 @@ def read_authenticated_dcx_user_account_summary_capability(
         "updated_at_ts_ms": user_row[13],
         "preferred_language": preferred_language,
         "preferred_timezone": preferred_timezone,
+        "pending_whatsapp_phone_link": pending_whatsapp_phone_link,
         "available_languages": available_languages,
         "available_timezones": available_timezones,
         "ux_strings": ux_strings,

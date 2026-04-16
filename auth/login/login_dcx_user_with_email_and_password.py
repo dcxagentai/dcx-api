@@ -1,8 +1,8 @@
 """
 CONTEXT:
 This file authenticates one DCX user by email and password and issues a new session.
-It exists so both the app and admin frontends can share one login capability before more advanced
-identity providers are added.
+It exists so both the app and admin frontends can share one login capability while the normalized
+contact-method layer owns which verified email addresses may authenticate for each user.
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ def login_dcx_user_with_email_and_password(
       WHEN NOT TO USE it:
         - Do not use it for password setup or reset completion.
       WHAT CAN GO WRONG:
+        - The email may not belong to one verified login-enabled email contact method.
         - The user may not exist.
         - The user may not have set a password yet.
         - The password may be wrong.
@@ -96,18 +97,35 @@ def login_dcx_user_with_email_and_password(
                     SELECT
                         u.id,
                         u.user_uuid,
-                        u.primary_email,
+                        cm.normalized_value,
                         u.user_role,
                         u.account_status,
-                        u.primary_email_confirmed,
+                        cm.is_verified,
                         pc.password_hash
-                    FROM stephen_dcx_users u
+                    FROM stephen_dcx_users_contact_methods cm
+                    JOIN stephen_dcx_users u
+                      ON u.id = cm.user_id
+                    JOIN stephen_dcx_user_auth_identities i
+                      ON i.user_id = u.id
+                     AND i.contact_method_id = cm.id
+                     AND i.provider_type = %s
+                     AND LOWER(i.provider_subject) = %s
+                     AND i.provider_email_confirmed = TRUE
+                     AND i.is_login_enabled = TRUE
                     LEFT JOIN stephen_dcx_user_password_credentials pc
                       ON pc.user_id = u.id
-                    WHERE LOWER(u.primary_email) = %s
+                    WHERE cm.contact_type = %s
+                      AND cm.normalized_value = %s
+                      AND cm.is_active = TRUE
+                      AND cm.is_login_enabled = TRUE
                     LIMIT 1
                     """,
-                    (normalized_email,),
+                    (
+                        "email",
+                        normalized_email,
+                        "email",
+                        normalized_email,
+                    ),
                 )
                 user_row = cursor.fetchone()
     except Exception as exc:  # pragma: no cover - integration path

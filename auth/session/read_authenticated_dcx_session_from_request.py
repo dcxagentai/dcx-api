@@ -89,12 +89,22 @@ def read_authenticated_dcx_session_from_request(
                         s.expires_at_ts_ms,
                         s.last_seen_at_ts_ms,
                         u.user_uuid,
-                        u.primary_email,
+                        primary_email_contact_method.normalized_value,
                         u.user_role,
                         u.account_status
                     FROM stephen_dcx_user_auth_sessions s
                     INNER JOIN stephen_dcx_users u
                       ON u.id = s.user_id
+                    LEFT JOIN LATERAL (
+                        SELECT normalized_value
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_email_contact_method
+                      ON TRUE
                     WHERE s.session_token_hash = %s
                       AND s.session_status = %s
                       AND s.revoked_at_ts_ms IS NULL
@@ -102,6 +112,7 @@ def read_authenticated_dcx_session_from_request(
                     LIMIT 1
                     """,
                     (
+                        "email",
                         session_token_hash,
                         "active",
                         now_ts_ms,
