@@ -75,6 +75,9 @@ def read_dcx_admin_user_list_capability(
                         primary_email_contact_method.normalized_value,
                         primary_email_contact_method.is_verified,
                         primary_email_contact_method.verified_at_ts_ms,
+                        primary_phone_contact_method.normalized_value,
+                        primary_phone_contact_method.is_verified,
+                        primary_phone_contact_method.verified_at_ts_ms,
                         u.account_status,
                         u.email_communication_preference,
                         u.last_seen_at_ts_ms,
@@ -99,6 +102,19 @@ def read_dcx_admin_user_list_capability(
                         LIMIT 1
                     ) primary_email_contact_method
                       ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            normalized_value,
+                            is_verified,
+                            verified_at_ts_ms
+                        FROM stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) primary_phone_contact_method
+                      ON TRUE
                     LEFT JOIN stephen_dcx_languages l
                       ON l.id = u.preferred_language_id
                     ORDER BY
@@ -106,7 +122,7 @@ def read_dcx_admin_user_list_capability(
                         u.id DESC
                     """
                     ,
-                    ("email",),
+                    ("email", "phone"),
                 )
                 user_rows = cursor.fetchall()
     except RuntimeError:
@@ -117,13 +133,13 @@ def read_dcx_admin_user_list_capability(
     users = []
     for user_row in user_rows:
         preferred_language = None
-        if user_row[10] is not None:
+        if user_row[13] is not None:
             preferred_language = {
-                "id": user_row[10],
-                "language_code": user_row[11],
-                "language_name_en": user_row[12],
-                "language_name_native": user_row[13],
-                "is_rtl": user_row[14],
+                "id": user_row[13],
+                "language_code": user_row[14],
+                "language_name_en": user_row[15],
+                "language_name_native": user_row[16],
+                "is_rtl": user_row[17],
             }
 
         users.append(
@@ -133,11 +149,14 @@ def read_dcx_admin_user_list_capability(
                 "primary_email": user_row[2],
                 "primary_email_confirmed": user_row[3],
                 "primary_email_confirmed_at_ts_ms": user_row[4],
-                "account_status": user_row[5],
-                "email_communication_preference": user_row[6],
-                "last_seen_at_ts_ms": user_row[7],
-                "created_at_ts_ms": user_row[8],
-                "updated_at_ts_ms": user_row[9],
+                "primary_phone": user_row[5],
+                "primary_phone_confirmed": user_row[6],
+                "primary_phone_confirmed_at_ts_ms": user_row[7],
+                "account_status": user_row[8],
+                "email_communication_preference": user_row[9],
+                "last_seen_at_ts_ms": user_row[10],
+                "created_at_ts_ms": user_row[11],
+                "updated_at_ts_ms": user_row[12],
                 "preferred_language": preferred_language,
             }
         )

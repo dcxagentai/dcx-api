@@ -43,6 +43,9 @@ def test_returns_user_rows_with_preferred_language_details() -> None:
                     "matbenet77@gmail.com",
                     True,
                     1775324331389,
+                    "+34647818143",
+                    True,
+                    1775325300000,
                     "confirmed",
                     "announcements",
                     1775324331389,
@@ -60,6 +63,9 @@ def test_returns_user_rows_with_preferred_language_details() -> None:
                     "jill.whitney@ncmedia.ch",
                     True,
                     1774346486995,
+                    "+41440000000",
+                    False,
+                    None,
                     "confirmed",
                     "announcements",
                     1774346486995,
@@ -77,6 +83,8 @@ def test_returns_user_rows_with_preferred_language_details() -> None:
 
     assert result["total_user_count"] == 2
     assert result["users"][0]["preferred_language"]["language_code"] == "de"
+    assert result["users"][0]["primary_phone_confirmed"] is True
+    assert result["users"][1]["primary_phone_confirmed"] is False
     assert result["users"][1]["preferred_language"] is None
 
 
