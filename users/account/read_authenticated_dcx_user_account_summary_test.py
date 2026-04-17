@@ -107,6 +107,41 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         (1, "Europe/London", "(UTC+0/+1) London", "Europe"),
                         (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe"),
                     ],
+                    [
+                        (
+                            11,
+                            "matbenet77@gmail.com",
+                            "matbenet77@gmail.com",
+                            "primary",
+                            True,
+                            True,
+                            True,
+                            True,
+                            True,
+                            1775324331389,
+                            "email_otp",
+                            True,
+                            1775324331389,
+                        )
+                    ],
+                    [
+                        (
+                            22,
+                            "+34600000001",
+                            "+34600000001",
+                            "primary",
+                            True,
+                            False,
+                            False,
+                            False,
+                            True,
+                            1775324300000,
+                            "whatsapp_link",
+                            True,
+                            1775324300000,
+                            "whatsapp",
+                        )
+                    ],
                 ],
             ),
         )
@@ -139,6 +174,41 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
             "display_label": "(UTC+1/+2) Madrid",
             "region_label": "Europe",
         },
+        "email_contact_methods": [
+            {
+                "id": 11,
+                "contact_value": "matbenet77@gmail.com",
+                "normalized_value": "matbenet77@gmail.com",
+                "display_label": "primary",
+                "is_primary": True,
+                "is_login_enabled": True,
+                "is_recovery_enabled": True,
+                "is_notification_enabled": True,
+                "is_verified": True,
+                "verified_at_ts_ms": 1775324331389,
+                "verification_method": "email_otp",
+                "is_active": True,
+                "last_used_at_ts_ms": 1775324331389,
+            }
+        ],
+        "phone_contact_methods": [
+            {
+                "id": 22,
+                "contact_value": "+34600000001",
+                "normalized_value": "+34600000001",
+                "display_label": "primary",
+                "is_primary": True,
+                "is_login_enabled": False,
+                "is_recovery_enabled": False,
+                "is_notification_enabled": False,
+                "is_verified": True,
+                "verified_at_ts_ms": 1775324300000,
+                "verification_method": "whatsapp_link",
+                "is_active": True,
+                "last_used_at_ts_ms": 1775324300000,
+                "channel": "whatsapp",
+            }
+        ],
         "pending_whatsapp_phone_link": {
             "phone_e164": "+34600000001",
             "challenge_status": "pending",
@@ -251,6 +321,24 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         (1, "Europe/London", "(UTC+0/+1) London", "Europe"),
                         (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe"),
                     ],
+                    [
+                        (
+                            31,
+                            "jill.whitney@ncmedia.ch",
+                            "jill.whitney@ncmedia.ch",
+                            "primary",
+                            True,
+                            True,
+                            True,
+                            True,
+                            True,
+                            1774346486995,
+                            "email_otp",
+                            True,
+                            1774346486995,
+                        )
+                    ],
+                    [],
                 ],
             ),
         )
@@ -258,6 +346,8 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     assert result["preferred_language"] is None
     assert result["preferred_timezone"] is None
     assert result["primary_phone_e164"] is None
+    assert result["email_contact_methods"][0]["normalized_value"] == "jill.whitney@ncmedia.ch"
+    assert result["phone_contact_methods"] == []
     assert result["ux_strings"]["page_title"] == "Account"
     assert result["user_id"] == 6
     assert len(result["available_languages"]) == 2

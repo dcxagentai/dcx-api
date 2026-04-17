@@ -208,6 +208,89 @@ def read_authenticated_dcx_user_account_summary_capability(
                     """
                 )
                 available_timezone_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        contact_value,
+                        normalized_value,
+                        display_label,
+                        is_primary,
+                        is_login_enabled,
+                        is_recovery_enabled,
+                        is_notification_enabled,
+                        is_verified,
+                        verified_at_ts_ms,
+                        verification_method,
+                        is_active,
+                        last_used_at_ts_ms
+                    FROM stephen_dcx_users_contact_methods
+                    WHERE user_id = %s
+                      AND contact_type = %s
+                      AND is_active = TRUE
+                    ORDER BY
+                        is_primary DESC,
+                        is_verified DESC,
+                        created_at_ts_ms ASC,
+                        id ASC
+                    """,
+                    (
+                        authenticated_user_id,
+                        "email",
+                    ),
+                )
+                email_contact_method_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        cm.id,
+                        cm.contact_value,
+                        cm.normalized_value,
+                        cm.display_label,
+                        cm.is_primary,
+                        cm.is_login_enabled,
+                        cm.is_recovery_enabled,
+                        cm.is_notification_enabled,
+                        cm.is_verified,
+                        cm.verified_at_ts_ms,
+                        cm.verification_method,
+                        cm.is_active,
+                        cm.last_used_at_ts_ms,
+                        linked_identity.provider_type
+                    FROM stephen_dcx_users_contact_methods cm
+                    LEFT JOIN LATERAL (
+                        SELECT provider_type
+                        FROM stephen_dcx_user_auth_identities
+                        WHERE contact_method_id = cm.id
+                          AND provider_type IN ('whatsapp', 'telegram', 'sms', 'phone')
+                        ORDER BY
+                            CASE provider_type
+                                WHEN 'whatsapp' THEN 1
+                                WHEN 'telegram' THEN 2
+                                WHEN 'sms' THEN 3
+                                ELSE 4
+                            END ASC,
+                            id ASC
+                        LIMIT 1
+                    ) linked_identity
+                      ON TRUE
+                    WHERE cm.user_id = %s
+                      AND cm.contact_type = %s
+                      AND cm.is_active = TRUE
+                    ORDER BY
+                        cm.is_primary DESC,
+                        cm.is_verified DESC,
+                        cm.created_at_ts_ms ASC,
+                        cm.id ASC
+                    """,
+                    (
+                        authenticated_user_id,
+                        "phone",
+                    ),
+                )
+                phone_contact_method_rows = cursor.fetchall()
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -256,6 +339,45 @@ def read_authenticated_dcx_user_account_summary_capability(
         for available_timezone_row in available_timezone_rows
     ]
 
+    email_contact_methods = [
+        {
+            "id": contact_method_row[0],
+            "contact_value": contact_method_row[1],
+            "normalized_value": contact_method_row[2],
+            "display_label": contact_method_row[3],
+            "is_primary": contact_method_row[4],
+            "is_login_enabled": contact_method_row[5],
+            "is_recovery_enabled": contact_method_row[6],
+            "is_notification_enabled": contact_method_row[7],
+            "is_verified": contact_method_row[8],
+            "verified_at_ts_ms": contact_method_row[9],
+            "verification_method": contact_method_row[10],
+            "is_active": contact_method_row[11],
+            "last_used_at_ts_ms": contact_method_row[12],
+        }
+        for contact_method_row in email_contact_method_rows
+    ]
+
+    phone_contact_methods = [
+        {
+            "id": contact_method_row[0],
+            "contact_value": contact_method_row[1],
+            "normalized_value": contact_method_row[2],
+            "display_label": contact_method_row[3],
+            "is_primary": contact_method_row[4],
+            "is_login_enabled": contact_method_row[5],
+            "is_recovery_enabled": contact_method_row[6],
+            "is_notification_enabled": contact_method_row[7],
+            "is_verified": contact_method_row[8],
+            "verified_at_ts_ms": contact_method_row[9],
+            "verification_method": contact_method_row[10],
+            "is_active": contact_method_row[11],
+            "last_used_at_ts_ms": contact_method_row[12],
+            "channel": contact_method_row[13],
+        }
+        for contact_method_row in phone_contact_method_rows
+    ]
+
     ux_strings = read_dcx_app_account_page_ux_strings_capability(
         preferred_language_code=preferred_language["language_code"] if preferred_language else None,
         connect_to_database=connect,
@@ -282,6 +404,8 @@ def read_authenticated_dcx_user_account_summary_capability(
         "updated_at_ts_ms": user_row[13],
         "preferred_language": preferred_language,
         "preferred_timezone": preferred_timezone,
+        "email_contact_methods": email_contact_methods,
+        "phone_contact_methods": phone_contact_methods,
         "pending_whatsapp_phone_link": pending_whatsapp_phone_link,
         "available_languages": available_languages,
         "available_timezones": available_timezones,

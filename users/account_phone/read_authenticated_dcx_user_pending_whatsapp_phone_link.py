@@ -1,8 +1,8 @@
 """
 CONTEXT:
 This file reads the current pending WhatsApp phone-link state for one authenticated DCX user.
-It exists so the app account surface can survive refreshes while an OTP challenge is active
-without promoting an unverified phone number into the user's confirmed profile fields.
+It exists so the app account surface can survive refreshes while a verification-link challenge is
+active without promoting an unverified phone number into the user's confirmed profile fields.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Callable
 import psycopg2
 
 from storage.db_config import DB_CONFIG
-from users.account_phone.dcx_whatsapp_phone_link_otp_support import (
+from users.account_phone.dcx_whatsapp_phone_link_challenge_support import (
     DCX_WHATSAPP_PHONE_LINK_CHALLENGE_PURPOSE,
     DCX_WHATSAPP_PHONE_LINK_CHALLENGE_TYPE,
 )
@@ -48,7 +48,7 @@ def read_authenticated_dcx_user_pending_whatsapp_phone_link(
         - Database reads can fail.
         - Stale pending rows with no successful delivery should stay hidden from the UI.
       WHAT COMES NEXT:
-        - The returned pending state can keep the OTP field visible until the user verifies or requests a new code.
+        - The returned pending state can keep the account page in link-sent mode until the user verifies or requests a new link.
 
     TESTS:
       - returns_pending_whatsapp_phone_link_when_delivered_challenge_exists

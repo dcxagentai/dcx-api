@@ -1,5 +1,5 @@
-from users.account_phone.prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery import (
-    prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery,
+from users.account_phone.prepare_authenticated_dcx_user_whatsapp_phone_link_delivery import (
+    prepare_authenticated_dcx_user_whatsapp_phone_link_delivery,
 )
 
 
@@ -38,7 +38,7 @@ class _FakeConnection:
 
 
 def test_prepares_new_pending_whatsapp_phone_link_for_valid_phone(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (44,),
@@ -51,13 +51,12 @@ def test_prepares_new_pending_whatsapp_phone_link_for_valid_phone(monkeypatch) -
         ]
     )
 
-    result = prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery(
+    result = prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
         authenticated_user_id=44,
         candidate_phone_number="+34 600 000 001",
         connect_to_database=lambda **_: fake_connection,
         current_timestamp_ms_provider=lambda: 1776000000000,
-        otp_code_provider=lambda: "123456",
-        otp_salt_provider=lambda: "saltsaltsaltsalt",
+        raw_token_provider=lambda: "whatsapp-phone-link-token-value-1234567890",
     )
 
     assert result == {
@@ -65,12 +64,14 @@ def test_prepares_new_pending_whatsapp_phone_link_for_valid_phone(monkeypatch) -
         "send_required": True,
         "challenge_id": 901,
         "phone_e164": "+34600000001",
-        "otp_code": "123456",
+        "raw_phone_link_token": "whatsapp-phone-link-token-value-1234567890",
+        "verification_link_suffix": "en/t/verify-whatsapp-phone#whatsapp_phone_link_token=whatsapp-phone-link-token-value-1234567890",
+        "verification_link_url": "http://localhost:5173/en/t/verify-whatsapp-phone#whatsapp_phone_link_token=whatsapp-phone-link-token-value-1234567890",
     }
 
 
 def test_already_confirmed_whatsapp_phone_returns_without_send(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (44,),
@@ -78,7 +79,7 @@ def test_already_confirmed_whatsapp_phone_returns_without_send(monkeypatch) -> N
         ]
     )
 
-    result = prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery(
+    result = prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
         authenticated_user_id=44,
         candidate_phone_number="+34600000001",
         connect_to_database=lambda **_: fake_connection,
@@ -93,7 +94,7 @@ def test_already_confirmed_whatsapp_phone_returns_without_send(monkeypatch) -> N
 
 
 def test_raises_when_phone_is_already_linked_to_another_user(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (44,),
@@ -103,7 +104,7 @@ def test_raises_when_phone_is_already_linked_to_another_user(monkeypatch) -> Non
     )
 
     try:
-        prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery(
+        prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
             authenticated_user_id=44,
             candidate_phone_number="+34600000001",
             connect_to_database=lambda **_: fake_connection,
@@ -116,7 +117,7 @@ def test_raises_when_phone_is_already_linked_to_another_user(monkeypatch) -> Non
 
 
 def test_enforces_send_cooldown_for_active_delivered_challenge(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (44,),
@@ -129,7 +130,7 @@ def test_enforces_send_cooldown_for_active_delivered_challenge(monkeypatch) -> N
     )
 
     try:
-        prepare_authenticated_dcx_user_whatsapp_phone_link_otp_delivery(
+        prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
             authenticated_user_id=44,
             candidate_phone_number="+34600000001",
             connect_to_database=lambda **_: fake_connection,

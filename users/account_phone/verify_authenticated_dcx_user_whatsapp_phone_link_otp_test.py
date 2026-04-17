@@ -1,8 +1,5 @@
-from users.account_phone.dcx_whatsapp_phone_link_otp_support import (
-    hash_dcx_whatsapp_phone_link_otp_code,
-)
-from users.account_phone.verify_authenticated_dcx_user_whatsapp_phone_link_otp import (
-    verify_authenticated_dcx_user_whatsapp_phone_link_otp,
+from users.account_phone.verify_dcx_whatsapp_phone_link_from_challenge_token import (
+    verify_dcx_whatsapp_phone_link_from_challenge_token,
 )
 
 
@@ -41,22 +38,18 @@ class _FakeConnection:
 
 
 def test_correct_otp_links_phone_and_consumes_pending_challenge(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
-    otp_hash = hash_dcx_whatsapp_phone_link_otp_code("123456", "saltsaltsaltsalt")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (
                 901,
+                44,
                 "+34600000001",
-                otp_hash,
-                "saltsaltsaltsalt",
                 1776000600000,
                 1776000000000,
-                0,
-                5,
-                None,
                 "pending",
             ),
+            None,
             None,
             None,
             None,
@@ -66,9 +59,8 @@ def test_correct_otp_links_phone_and_consumes_pending_challenge(monkeypatch) -> 
         ]
     )
 
-    result = verify_authenticated_dcx_user_whatsapp_phone_link_otp(
-        authenticated_user_id=44,
-        candidate_otp_code="123456",
+    result = verify_dcx_whatsapp_phone_link_from_challenge_token(
+        raw_phone_link_token="whatsapp-phone-link-token-value-1234567890",
         connect_to_database=lambda **_: fake_connection,
         current_timestamp_ms_provider=lambda: 1776000010000,
     )
@@ -77,56 +69,36 @@ def test_correct_otp_links_phone_and_consumes_pending_challenge(monkeypatch) -> 
         "status": "verified",
         "phone_e164": "+34600000001",
         "whatsapp_identity_id": 401,
+        "user_id": 44,
+        "verified_at_ts_ms": 1776000010000,
     }
 
 
 def test_incorrect_otp_increments_attempt_count(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
-    fake_connection = _FakeConnection(
-        fetchone_results=[
-            (
-                901,
-                "+34600000001",
-                "different_hash",
-                "saltsaltsaltsalt",
-                1776000600000,
-                1776000000000,
-                1,
-                5,
-                None,
-                "pending",
-            ),
-        ]
-    )
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
 
     try:
-        verify_authenticated_dcx_user_whatsapp_phone_link_otp(
-            authenticated_user_id=44,
-            candidate_otp_code="123456",
-            connect_to_database=lambda **_: fake_connection,
+        verify_dcx_whatsapp_phone_link_from_challenge_token(
+            raw_phone_link_token="too-short",
+            connect_to_database=lambda **_: _FakeConnection(fetchone_results=[]),
             current_timestamp_ms_provider=lambda: 1776000010000,
         )
     except RuntimeError as exc:
-        assert str(exc) == "API_AUTHENTICATED_DCX_USER_WHATSAPP_PHONE_LINK_OTP_VERIFICATION_FAILED"
+        assert str(exc) == "API_DCX_WHATSAPP_PHONE_LINK_TOKEN_INVALID"
     else:  # pragma: no cover - defensive
-        raise AssertionError("Expected incorrect OTP to raise a stable runtime error.")
+        raise AssertionError("Expected invalid token to raise a stable runtime error.")
 
 
 def test_duplicate_phone_conflict_after_send_is_rejected(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "test_secret")
-    otp_hash = hash_dcx_whatsapp_phone_link_otp_code("123456", "saltsaltsaltsalt")
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
     fake_connection = _FakeConnection(
         fetchone_results=[
             (
                 901,
+                44,
                 "+34600000001",
-                otp_hash,
-                "saltsaltsaltsalt",
                 1776000600000,
                 1776000000000,
-                0,
-                5,
-                None,
                 "pending",
             ),
             (91,),
@@ -134,13 +106,49 @@ def test_duplicate_phone_conflict_after_send_is_rejected(monkeypatch) -> None:
     )
 
     try:
-        verify_authenticated_dcx_user_whatsapp_phone_link_otp(
-            authenticated_user_id=44,
-            candidate_otp_code="123456",
+        verify_dcx_whatsapp_phone_link_from_challenge_token(
+            raw_phone_link_token="whatsapp-phone-link-token-value-1234567890",
             connect_to_database=lambda **_: fake_connection,
             current_timestamp_ms_provider=lambda: 1776000010000,
         )
     except RuntimeError as exc:
-        assert str(exc) == "API_AUTHENTICATED_DCX_USER_WHATSAPP_PHONE_ALREADY_LINKED_TO_ANOTHER_USER"
+        assert str(exc) == "API_DCX_WHATSAPP_PHONE_ALREADY_LINKED_TO_ANOTHER_USER"
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected phone conflict to raise a stable runtime error.")
+
+
+def test_verified_new_phone_does_not_auto_replace_existing_primary(monkeypatch) -> None:
+    monkeypatch.setenv("DCX_AUTH_CHALLENGE_SECRET", "test_secret")
+    fake_connection = _FakeConnection(
+        fetchone_results=[
+            (
+                901,
+                44,
+                "+34600000002",
+                1776000600000,
+                1776000000000,
+                "pending",
+            ),
+            None,
+            None,
+            (111,),
+            None,
+            (302,),
+            None,
+            (401,),
+        ]
+    )
+
+    result = verify_dcx_whatsapp_phone_link_from_challenge_token(
+        raw_phone_link_token="whatsapp-phone-link-token-value-1234567890",
+        connect_to_database=lambda **_: fake_connection,
+        current_timestamp_ms_provider=lambda: 1776000010000,
+    )
+
+    assert result["status"] == "verified"
+    insert_statement = next(
+        statement
+        for statement in fake_connection.cursor_instance.executed_statements
+        if "INSERT INTO stephen_dcx_users_contact_methods" in statement[0]
+    )
+    assert insert_statement[1][5] is False

@@ -12,7 +12,7 @@ from typing import Any, Callable
 import psycopg2
 
 from storage.db_config import DB_CONFIG
-from users.account_phone.dcx_whatsapp_phone_link_otp_support import (
+from users.account_phone.dcx_whatsapp_phone_link_challenge_support import (
     DCX_WHATSAPP_PHONE_LINK_SEND_COOLDOWN_MS,
 )
 

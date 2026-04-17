@@ -25,6 +25,9 @@ from routes.public.dcx_api_routes_public_build_time_ux_strings_bundle import (
 from routes.public.dcx_api_routes_public_build_time_content_pages_bundle import (
     dcx_api_routes_public_build_time_content_pages_bundle_router,
 )
+from routes.public.dcx_api_routes_public_reference_countries_bundle import (
+    dcx_api_routes_public_reference_countries_bundle_router,
+)
 from routes.auth.dcx_api_routes_auth_login_password import (
     dcx_api_routes_auth_login_password_router,
 )
@@ -130,11 +133,14 @@ from routes.users.dcx_api_routes_users_me_account_summary import (
 from routes.users.dcx_api_routes_users_me_account_settings import (
     dcx_api_routes_users_me_account_settings_router,
 )
-from routes.users.dcx_api_routes_users_me_account_phone_request_whatsapp_otp import (
-    dcx_api_routes_users_me_account_phone_request_whatsapp_otp_router,
+from routes.users.dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link import (
+    dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router,
 )
-from routes.users.dcx_api_routes_users_me_account_phone_verify_whatsapp_otp import (
-    dcx_api_routes_users_me_account_phone_verify_whatsapp_otp_router,
+from routes.users.dcx_api_routes_users_me_account_phone_set_primary import (
+    dcx_api_routes_users_me_account_phone_set_primary_router,
+)
+from routes.users.dcx_api_routes_users_account_phone_verify_whatsapp_link import (
+    dcx_api_routes_users_account_phone_verify_whatsapp_link_router,
 )
 from routes.users.dcx_api_routes_users_signup_email import (
     dcx_api_routes_users_signup_email_router,
@@ -200,14 +206,16 @@ app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
 app.include_router(dcx_api_routes_users_me_account_summary_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
-app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_otp_router)
-app.include_router(dcx_api_routes_users_me_account_phone_verify_whatsapp_otp_router)
+app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router)
+app.include_router(dcx_api_routes_users_me_account_phone_set_primary_router)
+app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)
 app.include_router(dcx_api_routes_users_signup_email_router)
 app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
 app.include_router(dcx_api_routes_users_signup_email_resend_otp_router)
 app.include_router(dcx_api_routes_public_build_time_api_test_router)
 app.include_router(dcx_api_routes_public_build_time_ux_strings_bundle_router)
 app.include_router(dcx_api_routes_public_build_time_content_pages_bundle_router)
+app.include_router(dcx_api_routes_public_reference_countries_bundle_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 
