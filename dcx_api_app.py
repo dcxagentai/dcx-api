@@ -52,11 +52,17 @@ from routes.admin.dcx_api_routes_admin_users_list import (
 from routes.admin.dcx_api_routes_admin_content_ux_strings_catalog import (
     dcx_api_routes_admin_content_ux_strings_catalog_router,
 )
+from routes.admin.dcx_api_routes_admin_content_ux_string_create_translation import (
+    dcx_api_routes_admin_content_ux_string_create_translation_router,
+)
 from routes.admin.dcx_api_routes_admin_content_ux_strings_save_live_row import (
     dcx_api_routes_admin_content_ux_strings_save_live_row_router,
 )
 from routes.admin.dcx_api_routes_admin_content_emails_catalog import (
     dcx_api_routes_admin_content_emails_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_email_create_translation import (
+    dcx_api_routes_admin_content_email_create_translation_router,
 )
 from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
     dcx_api_routes_admin_content_emails_save_live_row_router,
@@ -179,8 +185,10 @@ app.include_router(dcx_api_routes_auth_password_request_reset_router)
 app.include_router(dcx_api_routes_auth_session_router)
 app.include_router(dcx_api_routes_admin_users_list_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
+app.include_router(dcx_api_routes_admin_content_ux_string_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
+app.include_router(dcx_api_routes_admin_content_email_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_categories_catalog_router)
 app.include_router(dcx_api_routes_admin_content_page_category_detail_router)
