@@ -42,15 +42,15 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         authenticated_user_id=5,
         preferred_language_id=4,
         preferred_timezone_id=2,
-        email_communication_preference="announcements",
-        connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "announcements")]),
+        email_communication_preference="newsletters",
+        connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
     )
 
     assert result == {
         "user_id": 5,
         "preferred_language_id": 4,
         "preferred_timezone_id": 2,
-        "email_communication_preference": "announcements",
+        "email_communication_preference": "newsletters",
     }
 
 
@@ -61,7 +61,7 @@ def test_raises_clear_error_for_invalid_email_communication_preference() -> None
             preferred_language_id=4,
             preferred_timezone_id=2,
             email_communication_preference="marketing_everything",
-            connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "announcements")]),
+            connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:
         assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_EMAIL_PREFERENCE_INVALID"
@@ -75,7 +75,7 @@ def test_raises_clear_error_for_missing_user_row() -> None:
             authenticated_user_id=5,
             preferred_language_id=None,
             preferred_timezone_id=None,
-            email_communication_preference="essential_only",
+            email_communication_preference="no_email",
             connect_to_database=lambda **_: _FakeConnection([None]),
         )
     except RuntimeError as exc:
@@ -90,8 +90,8 @@ def test_raises_clear_error_for_invalid_timezone() -> None:
             authenticated_user_id=5,
             preferred_language_id=4,
             preferred_timezone_id=-1,
-            email_communication_preference="announcements",
-            connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "announcements")]),
+            email_communication_preference="newsletters",
+            connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:
         assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID"

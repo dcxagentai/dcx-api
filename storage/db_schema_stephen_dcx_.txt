@@ -9,6 +9,8 @@ TABLE LIST (\dt):
 ------------------------------
 - stephen_dcx_content_page_categories
 - stephen_dcx_content_pages
+- stephen_dcx_countries
+- stephen_dcx_country_calling_codes
 - stephen_dcx_emails
 - stephen_dcx_emails_sends
 - stephen_dcx_emails_sends_link_clicks
@@ -23,6 +25,7 @@ TABLE LIST (\dt):
 - stephen_dcx_user_auth_sessions
 - stephen_dcx_user_password_credentials
 - stephen_dcx_users
+- stephen_dcx_users_contact_methods
 - stephen_dcx_ux_strings
 
 
@@ -84,6 +87,51 @@ FOREIGN KEYS:
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_content_pages_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_countries
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_countries_id_seq'::regclass)
+country_code_alpha2            | text                      | NO       | 
+default_display_name           | text                      | NO       | 
+flag_asset_key                 | text                      | NO       | 
+is_active                      | boolean                   | NO       | true
+sort_order                     | integer                   | NO       | 1000
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_countries_pkey]
+- UNIQUE: country_code_alpha2 [stephen_dcx_countries_country_code_alpha2_key]
+
+
+============================================================
+TABLE: stephen_dcx_country_calling_codes
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_country_calling_codes_id_seq'::regclass)
+country_id                     | bigint                    | NO       | 
+calling_code                   | text                      | NO       | 
+is_primary                     | boolean                   | NO       | false
+is_active                      | boolean                   | NO       | true
+sort_order                     | integer                   | NO       | 1000
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- country_id -> stephen_dcx_countries(id) [stephen_dcx_country_calling_codes_country_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_country_calling_codes_pkey]
+- UNIQUE: country_id [stephen_dcx_country_calling_codes_country_id_calling_code_key]
+- UNIQUE: calling_code [stephen_dcx_country_calling_codes_country_id_calling_code_key]
 
 
 ============================================================
@@ -372,9 +420,11 @@ last_authenticated_at_ts_ms    | bigint                    | YES      |
 linked_at_ts_ms                | bigint                    | YES      | 
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+contact_method_id              | bigint                    | YES      | 
 
 FOREIGN KEYS:
 - user_id -> stephen_dcx_users(id) [stephen_dcx_user_auth_identities_user_id_fkey]
+- contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_user_auth_identities_contact_method_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_user_auth_identities_pkey]
@@ -437,19 +487,12 @@ COLUMN                         | TYPE                      | NULL?    | DEFAULT
 --------------------------------------------------------------------------------
 id                             | bigint                    | NO       | nextval('stephen_dcx_users_id_seq'::regclass)
 user_uuid                      | uuid                      | NO       | 
-primary_email                  | text                      | NO       | 
-primary_email_confirmed        | boolean                   | NO       | false
-primary_email_confirmed_at_ts_ms | bigint                    | YES      | 
 preferred_language_id          | bigint                    | YES      | 
 account_status                 | text                      | NO       | 'pending_email_verification'::text
 email_communication_preference | text                      | NO       | 'announcements'::text
 last_seen_at_ts_ms             | bigint                    | YES      | 
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
-primary_phone_e164             | text                      | YES      | 
-primary_phone_confirmed        | boolean                   | NO       | false
-primary_phone_confirmed_at_ts_ms | bigint                    | YES      | 
-primary_phone_channel          | text                      | YES      | 
 preferred_timezone_id          | bigint                    | YES      | 
 user_role                      | text                      | NO       | 'user'::text
 
@@ -460,7 +503,36 @@ FOREIGN KEYS:
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_users_pkey]
 - UNIQUE: user_uuid [stephen_dcx_users_user_uuid_key]
-- UNIQUE: primary_email [stephen_dcx_users_primary_email_key]
+
+
+============================================================
+TABLE: stephen_dcx_users_contact_methods
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_users_contact_methods_id_seq'::regclass)
+user_id                        | bigint                    | NO       | 
+contact_type                   | text                      | NO       | 
+contact_value                  | text                      | NO       | 
+normalized_value               | text                      | NO       | 
+display_label                  | text                      | NO       | ''::text
+is_primary                     | boolean                   | NO       | false
+is_login_enabled               | boolean                   | NO       | false
+is_recovery_enabled            | boolean                   | NO       | false
+is_notification_enabled        | boolean                   | NO       | false
+is_verified                    | boolean                   | NO       | false
+verified_at_ts_ms              | bigint                    | YES      | 
+verification_method            | text                      | YES      | 
+is_active                      | boolean                   | NO       | true
+last_used_at_ts_ms             | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_users_contact_methods_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_users_contact_methods_pkey]
 
 
 ============================================================

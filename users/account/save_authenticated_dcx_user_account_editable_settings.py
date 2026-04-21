@@ -14,8 +14,9 @@ import psycopg2
 from storage.db_config import DB_CONFIG
 
 ALLOWED_EMAIL_COMMUNICATION_PREFERENCES = {
-    "announcements",
-    "essential_only",
+    "no_email",
+    "newsletters",
+    "all_email",
 }
 
 

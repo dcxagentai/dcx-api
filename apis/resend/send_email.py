@@ -10,6 +10,15 @@ import os
 from typing import Any, Callable
 
 
+def _read_first_non_empty_env_value(*env_var_names: str) -> str:
+    for env_var_name in env_var_names:
+        env_var_value = os.getenv(env_var_name, "").strip()
+        if env_var_value != "":
+            return env_var_value
+
+    return ""
+
+
 def send_email_via_resend(
     email_delivery_draft: dict,
     send_email_with_provider: Callable[[dict], Any] | None = None,
@@ -18,9 +27,10 @@ def send_email_via_resend(
     CONTRACT:
       preconditions:
         - email_delivery_draft contains non-empty recipient_email, subject, and text_body values.
+        - html_body is optional and, when present, contains one pre-rendered safe HTML body.
         - RESEND_API_KEY is configured in the backend environment.
-        - DCX_EMAIL_SIGNUP_RESEND_FROM_NAME is configured in the backend environment.
-        - DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL is configured in the backend environment.
+        - One configured Resend sender name exists via DCX_RESEND_FROM_NAME or the legacy DCX_EMAIL_SIGNUP_RESEND_FROM_NAME.
+        - One configured Resend sender email exists via DCX_RESEND_FROM_EMAIL or the legacy DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL.
       postconditions:
         - Sends one email through Resend using the configured sender settings.
         - Returns one provider delivery summary with provider_message_id when available.
@@ -42,6 +52,7 @@ def send_email_via_resend(
         - Missing Resend config, malformed email draft content, invalid sender config, or provider failures can all reject the send.
       WHAT COMES NEXT:
         - Other providers can later implement the same shape behind parallel adapter folders.
+        - The generic Resend sender env names let transactional and newsletter sends share one configuration surface.
 
     TESTS:
       - resend_adapter_builds_test_mode_params_with_explicit_sender_and_override_recipient
@@ -54,8 +65,8 @@ def send_email_via_resend(
           suggested_action: Configure the required Resend environment values before attempting email delivery.
           common_causes:
             - missing RESEND_API_KEY
-            - missing DCX_EMAIL_SIGNUP_RESEND_FROM_NAME
-            - missing DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL
+            - missing DCX_RESEND_FROM_NAME and missing DCX_EMAIL_SIGNUP_RESEND_FROM_NAME
+            - missing DCX_RESEND_FROM_EMAIL and missing DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL
           recovery_steps:
             - Add the missing Resend configuration values.
             - Restart the backend.
@@ -92,25 +103,31 @@ def send_email_via_resend(
           common_causes:
             - test recipient override left configured in a non-local environment
           recovery_steps:
-            - Remove DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT.
-            - Or set DCX_EMAIL_SIGNUP_ALLOW_TEST_RECIPIENT_OVERRIDE=true in a local-only environment.
+            - Remove DCX_RESEND_TEST_RECIPIENT or DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT.
+            - Or set DCX_RESEND_ALLOW_TEST_RECIPIENT_OVERRIDE=true in a local-only environment.
           retry_safe: true
 
     CODE:
     """
     resend_api_key = os.getenv("RESEND_API_KEY", "").strip()
-    sender_name = os.getenv("DCX_EMAIL_SIGNUP_RESEND_FROM_NAME", "").strip()
-    sender_email = os.getenv("DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL", "").strip()
+    sender_name = _read_first_non_empty_env_value(
+        "DCX_RESEND_FROM_NAME",
+        "DCX_EMAIL_SIGNUP_RESEND_FROM_NAME",
+    )
+    sender_email = _read_first_non_empty_env_value(
+        "DCX_RESEND_FROM_EMAIL",
+        "DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL",
+    )
     missing_config_vars: list[str] = []
 
     if resend_api_key == "":
         missing_config_vars.append("RESEND_API_KEY")
 
     if sender_name == "":
-        missing_config_vars.append("DCX_EMAIL_SIGNUP_RESEND_FROM_NAME")
+        missing_config_vars.append("DCX_RESEND_FROM_NAME")
 
     if sender_email == "":
-        missing_config_vars.append("DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL")
+        missing_config_vars.append("DCX_RESEND_FROM_EMAIL")
 
     if len(missing_config_vars) > 0:
         raise RuntimeError(
@@ -131,12 +148,22 @@ def send_email_via_resend(
             + ",".join(missing_draft_fields)
         )
 
-    test_recipient_override = os.getenv("DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT", "").strip() or None
+    test_recipient_override = (
+        _read_first_non_empty_env_value(
+            "DCX_RESEND_TEST_RECIPIENT",
+            "DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT",
+        )
+        or None
+    )
     runtime_environment = os.getenv("DCX_ENVIRONMENT", "").strip().lower()
+    allow_test_recipient_override = _read_first_non_empty_env_value(
+        "DCX_RESEND_ALLOW_TEST_RECIPIENT_OVERRIDE",
+        "DCX_EMAIL_SIGNUP_ALLOW_TEST_RECIPIENT_OVERRIDE",
+    ).lower()
 
     if test_recipient_override is not None and (
         runtime_environment not in {"local", "development"}
-        or os.getenv("DCX_EMAIL_SIGNUP_ALLOW_TEST_RECIPIENT_OVERRIDE", "").strip().lower() != "true"
+        or allow_test_recipient_override != "true"
     ):
         raise RuntimeError("API_PUBLIC_EMAIL_SIGNUP_TEST_RECIPIENT_OVERRIDE_FORBIDDEN")
 
@@ -146,7 +173,8 @@ def send_email_via_resend(
         "to": [actual_recipient_email],
         "subject": email_delivery_draft["subject"],
         "text": email_delivery_draft["text_body"],
-        "html": "<div>" + html.escape(email_delivery_draft["text_body"]).replace("\n", "<br />") + "</div>",
+        "html": email_delivery_draft.get("html_body")
+        or "<div>" + html.escape(email_delivery_draft["text_body"]).replace("\n", "<br />") + "</div>",
     }
 
     try:

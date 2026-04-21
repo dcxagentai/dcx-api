@@ -31,6 +31,7 @@ class DcxAdminPrepareNewsletterSendRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scheduled_send_at_ts_ms: int | None = None
+    send_audience_scope: str = "all"
 
 
 @dcx_api_routes_admin_content_newsletter_send_prepare_router.post(
@@ -104,6 +105,7 @@ def post_dcx_admin_content_newsletter_send_prepare(
             email_key=email_key,
             language_code=language_code,
             scheduled_send_at_ts_ms=prepare_request.scheduled_send_at_ts_ms,
+            send_audience_scope=prepare_request.send_audience_scope,
         )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)

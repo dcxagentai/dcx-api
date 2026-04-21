@@ -28,6 +28,15 @@ from routes.public.dcx_api_routes_public_build_time_content_pages_bundle import 
 from routes.public.dcx_api_routes_public_reference_countries_bundle import (
     dcx_api_routes_public_reference_countries_bundle_router,
 )
+from routes.public.dcx_api_routes_public_emails_send_link_redirect import (
+    dcx_api_routes_public_emails_send_link_redirect_router,
+)
+from routes.public.dcx_api_routes_public_email_preferences_unsubscribe import (
+    dcx_api_routes_public_email_preferences_unsubscribe_router,
+)
+from routes.public.dcx_api_routes_public_resend_webhooks import (
+    dcx_api_routes_public_resend_webhooks_router,
+)
 from routes.auth.dcx_api_routes_auth_login_password import (
     dcx_api_routes_auth_login_password_router,
 )
@@ -63,6 +72,9 @@ from routes.admin.dcx_api_routes_admin_content_emails_catalog import (
 )
 from routes.admin.dcx_api_routes_admin_content_email_create_translation import (
     dcx_api_routes_admin_content_email_create_translation_router,
+)
+from routes.admin.dcx_api_routes_admin_content_sequence_email_create_draft import (
+    dcx_api_routes_admin_content_sequence_email_create_draft_router,
 )
 from routes.admin.dcx_api_routes_admin_content_emails_save_live_row import (
     dcx_api_routes_admin_content_emails_save_live_row_router,
@@ -123,6 +135,21 @@ from routes.admin.dcx_api_routes_admin_content_newsletter_send_prepare import (
 )
 from routes.admin.dcx_api_routes_admin_content_newsletter_send_cancel import (
     dcx_api_routes_admin_content_newsletter_send_cancel_router,
+)
+from routes.admin.dcx_api_routes_admin_content_email_sequences_catalog import (
+    dcx_api_routes_admin_content_email_sequences_catalog_router,
+)
+from routes.admin.dcx_api_routes_admin_content_email_sequence_create_draft import (
+    dcx_api_routes_admin_content_email_sequence_create_draft_router,
+)
+from routes.admin.dcx_api_routes_admin_content_email_sequence_detail import (
+    dcx_api_routes_admin_content_email_sequence_detail_router,
+)
+from routes.admin.dcx_api_routes_admin_content_email_sequence_save import (
+    dcx_api_routes_admin_content_email_sequence_save_router,
+)
+from routes.admin.dcx_api_routes_admin_schedule_operations_catalog import (
+    dcx_api_routes_admin_schedule_operations_catalog_router,
 )
 from routes.admin.dcx_api_routes_admin_public_site_publish_status import (
     dcx_api_routes_admin_public_site_publish_status_router,
@@ -189,6 +216,7 @@ app.include_router(dcx_api_routes_admin_content_ux_string_create_translation_rou
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_emails_catalog_router)
 app.include_router(dcx_api_routes_admin_content_email_create_translation_router)
+app.include_router(dcx_api_routes_admin_content_sequence_email_create_draft_router)
 app.include_router(dcx_api_routes_admin_content_emails_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_categories_catalog_router)
 app.include_router(dcx_api_routes_admin_content_page_category_detail_router)
@@ -209,6 +237,11 @@ app.include_router(dcx_api_routes_admin_content_newsletter_create_translation_ro
 app.include_router(dcx_api_routes_admin_content_newsletter_sends_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_prepare_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_cancel_router)
+app.include_router(dcx_api_routes_admin_content_email_sequences_catalog_router)
+app.include_router(dcx_api_routes_admin_content_email_sequence_create_draft_router)
+app.include_router(dcx_api_routes_admin_content_email_sequence_detail_router)
+app.include_router(dcx_api_routes_admin_content_email_sequence_save_router)
+app.include_router(dcx_api_routes_admin_schedule_operations_catalog_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
@@ -224,6 +257,9 @@ app.include_router(dcx_api_routes_public_build_time_api_test_router)
 app.include_router(dcx_api_routes_public_build_time_ux_strings_bundle_router)
 app.include_router(dcx_api_routes_public_build_time_content_pages_bundle_router)
 app.include_router(dcx_api_routes_public_reference_countries_bundle_router)
+app.include_router(dcx_api_routes_public_emails_send_link_redirect_router)
+app.include_router(dcx_api_routes_public_email_preferences_unsubscribe_router)
+app.include_router(dcx_api_routes_public_resend_webhooks_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 
 

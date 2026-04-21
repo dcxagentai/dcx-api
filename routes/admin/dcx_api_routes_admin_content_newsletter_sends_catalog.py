@@ -1,8 +1,8 @@
 """
 CONTEXT:
-This file owns the admin HTTP boundary for prepared newsletter sends in the DCX admin workspace.
-It exists so the newsletter editor can show scheduled/cancelled send-preparation rows without using
-query-string selectors.
+This file owns the admin HTTP boundary for newsletter send rows in the DCX admin workspace.
+It exists so the newsletter editor can show scheduled, dispatched, cancelled, and provider-updated
+newsletter send rows without using query-string selectors.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def get_dcx_admin_content_newsletter_sends_catalog(
         - One authenticated DCX admin/dev session cookie is present.
         - The path contains one language code and one newsletter key.
       postconditions:
-        - Returns a canonical success wrapper containing the prepared-send catalog for that newsletter.
+        - Returns a canonical success wrapper containing the newsletter-send catalog for that newsletter.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -46,15 +46,16 @@ def get_dcx_admin_content_newsletter_sends_catalog(
 
     NARRATIVE:
       WHY this exists:
-        - The admin newsletter editor should show send-preparation history beside the content editor.
+        - The admin newsletter editor should show send history and current operational state beside
+          the content editor.
       WHEN TO USE it:
         - Use it from the admin newsletter editor route only.
       WHEN NOT TO USE it:
-        - Do not use it for actual provider dispatch status yet.
+        - Do not use it for recipient-level audit detail.
       WHAT CAN GO WRONG:
         - The database can be unavailable.
       WHAT COMES NEXT:
-        - The editor can offer prepare/cancel actions against these rows.
+        - The editor can offer prepare/cancel actions against these rows and show provider outcomes.
 
     TESTS:
       - covered_indirectly_by_newsletter_sends_catalog_capability_tests
@@ -90,7 +91,7 @@ def get_dcx_admin_content_newsletter_sends_catalog(
                 "ok": False,
                 "error": {
                     "code": str(runtime_error),
-                    "message": "We could not load the prepared newsletter sends.",
+                    "message": "We could not load the newsletter send rows.",
                     "suggested_action": "Retry after the backend and database are healthy.",
                 },
             },

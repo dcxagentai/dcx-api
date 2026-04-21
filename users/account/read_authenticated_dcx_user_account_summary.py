@@ -412,12 +412,49 @@ def read_authenticated_dcx_user_account_summary_capability(
         "ux_strings": ux_strings,
         "available_email_communication_preferences": [
             {
-                "value": "announcements",
-                "label": ux_strings["email_preference_announcements"],
+                "value": "no_email",
+                "label": _read_email_communication_preference_label(
+                    ux_strings=ux_strings,
+                    email_communication_preference="no_email",
+                ),
             },
             {
-                "value": "essential_only",
-                "label": ux_strings["email_preference_essential_only"],
+                "value": "newsletters",
+                "label": _read_email_communication_preference_label(
+                    ux_strings=ux_strings,
+                    email_communication_preference="newsletters",
+                ),
+            },
+            {
+                "value": "all_email",
+                "label": _read_email_communication_preference_label(
+                    ux_strings=ux_strings,
+                    email_communication_preference="all_email",
+                ),
             },
         ],
     }
+
+
+def _read_email_communication_preference_label(
+    ux_strings: dict[str, str],
+    email_communication_preference: str,
+) -> str:
+    if email_communication_preference == "no_email":
+        return (
+            ux_strings.get("email_preference_no_email")
+            or ux_strings.get("email_preference_essential_only")
+            or "No email"
+        )
+
+    if email_communication_preference == "newsletters":
+        return (
+            ux_strings.get("email_preference_newsletters")
+            or ux_strings.get("email_preference_announcements")
+            or "Newsletters"
+        )
+
+    if email_communication_preference == "all_email":
+        return ux_strings.get("email_preference_all_email") or "All email"
+
+    return email_communication_preference

@@ -1,7 +1,7 @@
 """
 CONTEXT:
-This file owns the admin-facing transactional-email translation-create HTTP boundary.
-It exists so internal users can create one missing language row from an existing source transactional email route.
+This file owns the admin-facing managed-email translation-create HTTP boundary.
+It exists so internal users can create one missing language row from an existing source non-newsletter email route.
 """
 
 from __future__ import annotations
@@ -40,20 +40,20 @@ def post_dcx_admin_content_email_create_translation(
       preconditions:
         - One authenticated DCX admin/dev session cookie is present.
         - The browser origin is one allowed DCX frontend origin.
-        - The path identifies one source transactional-email route and one target language.
+        - The path identifies one source managed-email route and one target language.
       postconditions:
         - Creates one first live translation row for the target language and returns the canonical success wrapper.
       side_effects:
-        - inserts one new live transactional-email translation row
+        - inserts one new live managed-email translation row
       idempotent: false
       retry_safe: false
       async: false
 
     NARRATIVE:
       WHY this exists:
-        - The admin transactional-email editor needs one direct action to prove the multilingual transactional-template model.
+        - The admin email editors need one direct action to prove the multilingual managed-email model.
       WHEN TO USE it:
-        - Use it from the translation summary controls on the admin transactional-email editor.
+        - Use it from the translation summary controls on the admin transactional-email or sequence-email editor.
       WHEN NOT TO USE it:
         - Do not use it to overwrite an existing translation.
         - Do not use it for newsletters.
@@ -105,8 +105,8 @@ def post_dcx_admin_content_email_create_translation(
                 "ok": False,
                 "error": {
                     "code": error_code,
-                    "message": "We could not create that DCX transactional email translation.",
-                    "suggested_action": "Refresh the current transactional email route and retry from the translation controls.",
+                    "message": "We could not create that DCX email translation.",
+                    "suggested_action": "Refresh the current email route and retry from the translation controls.",
                 },
             },
         )

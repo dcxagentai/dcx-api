@@ -107,6 +107,35 @@ def test_raises_clear_error_for_blank_subject_or_body() -> None:
         raise AssertionError("Expected blank email content to raise a stable runtime error.")
 
 
+def test_allows_blank_body_for_sequence_email_drafts() -> None:
+    result = save_dcx_admin_live_email_row_version_capability(
+        target_email_id=12,
+        next_email_subject="Welcome to DCX",
+        next_email_body="",
+        connect_to_database=lambda **_: _FakeConnection(
+            [
+                (
+                    12,
+                    "sequence",
+                    "welcome-to-dcx",
+                    4,
+                    "Old welcome",
+                    "",
+                    True,
+                    None,
+                ),
+                (24,),
+            ]
+        ),
+    )
+
+    assert result == {
+        "email_id": 24,
+        "previous_email_id": 12,
+        "was_noop": False,
+    }
+
+
 def test_raises_clear_error_for_missing_live_row() -> None:
     try:
         save_dcx_admin_live_email_row_version_capability(

@@ -1,8 +1,9 @@
 """
 CONTEXT:
-This file reads the prepared-send catalog for one DCX newsletter identity in the admin workspace.
+This file reads the newsletter-send catalog for one DCX newsletter identity in the admin workspace.
 It exists so the admin newsletters editor can show which newsletter sends have already been prepared,
-scheduled, or cancelled before the actual provider-dispatch worker is connected.
+scheduled, dispatched, cancelled, clicked, delivered, bounced, or complained without requiring a
+separate operations surface.
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
         - language_code is one non-empty language code used by the current editor route.
         - The configured database is reachable.
       postconditions:
-        - Returns one ordered list of prepared send rows for the requested newsletter key.
-        - Includes recipient/link summary counts for each prepared send row.
+        - Returns one ordered list of newsletter send rows for the requested newsletter key.
+        - Includes recipient, provider-outcome, and click summary counts for each send row.
         - Includes a count of recipients blocked because newsletter translations are still missing.
       side_effects: []
       idempotent: true
@@ -36,19 +37,20 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
 
     NARRATIVE:
       WHY this exists:
-        - Internal users need to see the operational preparation state of one newsletter without
+        - Internal users need to see the operational state of one newsletter without
           leaving the editor that owns the content.
       WHEN TO USE it:
         - Use it from the admin newsletter editor route only.
       WHEN NOT TO USE it:
-        - Do not use it for actual provider dispatch or click-event reporting yet.
+        - Do not use it for raw per-recipient audit trails; this is an admin summary surface.
       WHAT CAN GO WRONG:
         - The database can be unavailable.
       WHAT COMES NEXT:
-        - The UI can allow `prepare now`, `schedule`, and `cancel` actions against these rows.
+        - The UI can show real send outcomes instead of only prepared-send snapshots.
+        - A later deeper operations surface can drill into individual recipients when needed.
 
     TESTS:
-      - returns_prepared_send_rows_with_summary_counts
+      - returns_newsletter_send_rows_with_delivery_and_click_summary_counts
       - returns_empty_catalog_when_no_prepared_sends_exist
 
     ERRORS:
@@ -85,6 +87,7 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
                         email_send.email_key_snapshot,
                         email_send.send_status,
                         email_send.send_audience_type,
+                        COALESCE(email_send.send_summary_json ->> 'send_audience_scope', 'all') AS send_audience_scope,
                         email_send.scheduled_send_at_ts_ms,
                         email_send.send_started_at_ts_ms,
                         email_send.send_completed_at_ts_ms,
@@ -92,34 +95,63 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
                         email_send.created_at_ts_ms,
                         email_send.updated_at_ts_ms,
                         language.language_code,
-                        COUNT(DISTINCT recipient.id) AS total_recipient_count,
-                        COUNT(DISTINCT CASE WHEN recipient.delivery_decision = 'send' THEN recipient.id END) AS send_candidate_count,
-                        COUNT(DISTINCT CASE WHEN recipient.delivery_status = 'skipped' THEN recipient.id END) AS skipped_recipient_count,
-                        COUNT(DISTINCT CASE WHEN recipient.failure_reason LIKE 'missing_translation:%' THEN recipient.id END) AS blocked_missing_translation_count,
-                        COUNT(DISTINCT link.id) AS tracked_link_count
+                        COALESCE(recipient_counts.total_recipient_count, 0) AS total_recipient_count,
+                        COALESCE(recipient_counts.send_candidate_count, 0) AS send_candidate_count,
+                        COALESCE(recipient_counts.skipped_recipient_count, 0) AS skipped_recipient_count,
+                        COALESCE(recipient_counts.blocked_missing_translation_count, 0) AS blocked_missing_translation_count,
+                        COALESCE(recipient_counts.pending_recipient_count, 0) AS pending_recipient_count,
+                        COALESCE(recipient_counts.sending_recipient_count, 0) AS sending_recipient_count,
+                        COALESCE(recipient_counts.sent_recipient_count, 0) AS sent_recipient_count,
+                        COALESCE(recipient_counts.delivered_recipient_count, 0) AS delivered_recipient_count,
+                        COALESCE(recipient_counts.failed_recipient_count, 0) AS failed_recipient_count,
+                        COALESCE(recipient_counts.bounced_recipient_count, 0) AS bounced_recipient_count,
+                        COALESCE(recipient_counts.complained_recipient_count, 0) AS complained_recipient_count,
+                        COALESCE(recipient_counts.cancelled_recipient_count, 0) AS cancelled_recipient_count,
+                        COALESCE(link_counts.tracked_link_count, 0) AS tracked_link_count,
+                        COALESCE(click_counts.total_click_count, 0) AS total_click_count,
+                        COALESCE(click_counts.unique_clicked_link_count, 0) AS unique_clicked_link_count
                     FROM stephen_dcx_emails_sends AS email_send
                     INNER JOIN stephen_dcx_emails AS email_row
                       ON email_row.id = email_send.source_email_id
                     INNER JOIN stephen_dcx_languages AS language
                       ON language.id = email_row.language_id
-                    LEFT JOIN stephen_dcx_emails_sends_recipients AS recipient
-                      ON recipient.email_send_id = email_send.id
-                    LEFT JOIN stephen_dcx_emails_sends_links AS link
-                      ON link.email_send_id = email_send.id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*) AS total_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_decision = 'send') AS send_candidate_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'skipped') AS skipped_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.failure_reason LIKE 'missing_translation:%%') AS blocked_missing_translation_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'pending') AS pending_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'sending') AS sending_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'sent') AS sent_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'delivered') AS delivered_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'failed') AS failed_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'bounced') AS bounced_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'complained') AS complained_recipient_count,
+                            COUNT(*) FILTER (WHERE recipient.delivery_status = 'cancelled') AS cancelled_recipient_count
+                        FROM stephen_dcx_emails_sends_recipients AS recipient
+                        WHERE recipient.email_send_id = email_send.id
+                    ) AS recipient_counts
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*) AS tracked_link_count
+                        FROM stephen_dcx_emails_sends_links AS link_row
+                        WHERE link_row.email_send_id = email_send.id
+                    ) AS link_counts
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*) AS total_click_count,
+                            COUNT(DISTINCT click_row.email_send_link_id) AS unique_clicked_link_count
+                        FROM stephen_dcx_emails_sends_link_clicks AS click_row
+                        INNER JOIN stephen_dcx_emails_sends_links AS link_row
+                          ON link_row.id = click_row.email_send_link_id
+                        WHERE link_row.email_send_id = email_send.id
+                    ) AS click_counts
+                      ON TRUE
                     WHERE email_send.email_key_snapshot = %s
-                    GROUP BY
-                        email_send.id,
-                        email_send.source_email_id,
-                        email_send.email_key_snapshot,
-                        email_send.send_status,
-                        email_send.send_audience_type,
-                        email_send.scheduled_send_at_ts_ms,
-                        email_send.send_started_at_ts_ms,
-                        email_send.send_completed_at_ts_ms,
-                        email_send.cancelled_at_ts_ms,
-                        email_send.created_at_ts_ms,
-                        email_send.updated_at_ts_ms,
-                        language.language_code
+                      AND email_send.send_kind = 'newsletter'
                     ORDER BY email_send.created_at_ts_ms DESC, email_send.id DESC
                     """,
                     (normalized_email_key,),
@@ -137,18 +169,29 @@ def read_dcx_admin_newsletter_sends_catalog_capability(
                 "email_key": row[2],
                 "send_status": row[3],
                 "send_audience_type": row[4],
-                "scheduled_send_at_ts_ms": row[5],
-                "send_started_at_ts_ms": row[6],
-                "send_completed_at_ts_ms": row[7],
-                "cancelled_at_ts_ms": row[8],
-                "created_at_ts_ms": row[9],
-                "updated_at_ts_ms": row[10],
-                "language_code": row[11],
-                "total_recipient_count": row[12],
-                "send_candidate_count": row[13],
-                "skipped_recipient_count": row[14],
-                "blocked_missing_translation_count": row[15],
-                "tracked_link_count": row[16],
+                "send_audience_scope": row[5],
+                "scheduled_send_at_ts_ms": row[6],
+                "send_started_at_ts_ms": row[7],
+                "send_completed_at_ts_ms": row[8],
+                "cancelled_at_ts_ms": row[9],
+                "created_at_ts_ms": row[10],
+                "updated_at_ts_ms": row[11],
+                "language_code": row[12],
+                "total_recipient_count": row[13],
+                "send_candidate_count": row[14],
+                "skipped_recipient_count": row[15],
+                "blocked_missing_translation_count": row[16],
+                "pending_recipient_count": row[17],
+                "sending_recipient_count": row[18],
+                "sent_recipient_count": row[19],
+                "delivered_recipient_count": row[20],
+                "failed_recipient_count": row[21],
+                "bounced_recipient_count": row[22],
+                "complained_recipient_count": row[23],
+                "cancelled_recipient_count": row[24],
+                "tracked_link_count": row[25],
+                "total_click_count": row[26],
+                "unique_clicked_link_count": row[27],
             }
         )
 

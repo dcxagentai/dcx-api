@@ -1,8 +1,8 @@
 """
 CONTEXT:
-This file creates one first live translation row for an existing DCX transactional email identity.
-It exists so the admin transactional-emails editor can expose the same missing-language creation pattern
-already used on pages, categories, and newsletters.
+This file creates one first live translation row for an existing DCX managed non-newsletter email identity.
+It exists so the admin emails editor can expose the same missing-language creation pattern
+for transactional and sequence emails without splitting that logic by subtype.
 """
 
 from __future__ import annotations
@@ -23,16 +23,16 @@ def create_dcx_admin_email_translation_capability(
     """
     CONTRACT:
       preconditions:
-        - email_key identifies one current live transactional-email identity.
+        - email_key identifies one current live managed non-newsletter email identity.
         - source_language_code identifies one current live source row for that email identity.
         - target_language_code identifies one supported language distinct from the source language.
         - The configured database is reachable.
       postconditions:
-        - Creates one new live translated transactional-email row if it does not already exist.
+        - Creates one new live translated managed-email row if it does not already exist.
         - Copies current source subject/body into the new target-language row as the first translation draft.
         - Links the new row back to the live original row through `translation_of_id`.
       side_effects:
-        - inserts one new live translated transactional-email row
+        - inserts one new live translated managed-email row
       idempotent: false
       retry_safe: false
       async: false
@@ -43,9 +43,9 @@ def create_dcx_admin_email_translation_capability(
 
     NARRATIVE:
       WHY this exists:
-        - The admin transactional-email editor should use the same translation-create pattern as the rest of the CMS.
+        - The admin email editors should use the same translation-create pattern as the rest of the CMS.
       WHEN TO USE it:
-        - Use it from the admin transactional-email editor when one missing language translation is created from the source row.
+        - Use it from the admin sequence-email or transactional-email editor when one missing language translation is created from the source row.
       WHEN NOT TO USE it:
         - Do not use it to overwrite an existing translation.
         - Do not use it for newsletters, which already have their own route and flow.
@@ -57,7 +57,7 @@ def create_dcx_admin_email_translation_capability(
         - The editor opens the new translated row and autosave continues through the existing email save path.
 
     TESTS:
-      - creates_translation_row_from_source_transactional_email
+      - creates_translation_row_from_source_transactional_or_sequence_email
       - raises_clear_error_when_translation_already_exists
 
     ERRORS:
@@ -68,19 +68,19 @@ def create_dcx_admin_email_translation_capability(
             - blank language code
             - same source and target language
           recovery_steps:
-            - Reopen the transactional email from the catalog.
+            - Reopen the email from the catalog.
             - Retry with one different target language.
           retry_safe: true
           what_changed: nothing was created
           rollback_needed: false
           rollback_operation: none
       - API_DCX_ADMIN_EMAIL_TRANSLATION_SOURCE_NOT_FOUND:
-          suggested_action: Refresh the transactional emails list and reopen the source row before retrying.
+          suggested_action: Refresh the emails list and reopen the source row before retrying.
           common_causes:
             - stale source route
             - source live row no longer exists
           recovery_steps:
-            - Reload the current live transactional email row.
+            - Reload the current live email row.
             - Retry from the editor.
           retry_safe: true
           what_changed: nothing was created
@@ -107,7 +107,7 @@ def create_dcx_admin_email_translation_capability(
           retry_safe: true
           what_changed: unknown if the transaction boundary is not trusted
           rollback_needed: inspect_if_partial_commit_suspected
-          rollback_operation: inspect the target transactional-email/language row before retrying
+          rollback_operation: inspect the target managed-email/language row before retrying
 
     CODE:
     """

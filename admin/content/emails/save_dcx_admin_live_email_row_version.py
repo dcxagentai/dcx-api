@@ -28,7 +28,7 @@ def save_dcx_admin_live_email_row_version_capability(
       preconditions:
         - target_email_id identifies one current live row in `stephen_dcx_emails`.
         - next_email_subject is one non-empty candidate edited value.
-        - next_email_body is one candidate edited value and may be empty only for newsletter drafts.
+        - next_email_body is one candidate edited value and may be empty only for newsletter or sequence-email drafts.
         - The configured database is reachable.
       postconditions:
         - Saves a new immutable live email row version when the subject or body changed.
@@ -57,7 +57,7 @@ def save_dcx_admin_live_email_row_version_capability(
       WHAT CAN GO WRONG:
         - The target row can be stale or no longer live.
         - The edited subject can be blank.
-        - The edited body can be blank for non-newsletter templates.
+        - The edited body can be blank only for newsletter or sequence-email templates.
         - Required placeholders can be missing or malformed.
         - Database writes can fail.
       WHAT COMES NEXT:
@@ -159,7 +159,7 @@ def save_dcx_admin_live_email_row_version_capability(
                 if existing_live_row is None:
                     raise RuntimeError("API_DCX_ADMIN_EMAIL_LIVE_ROW_NOT_FOUND")
 
-                if existing_live_row[1] != "newsletter" and next_email_body.strip() == "":
+                if existing_live_row[1] not in {"newsletter", "sequence"} and next_email_body.strip() == "":
                     raise RuntimeError("API_DCX_ADMIN_EMAIL_TEMPLATE_CONTENT_INVALID")
 
                 if (

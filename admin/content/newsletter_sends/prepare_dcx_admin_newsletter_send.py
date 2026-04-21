@@ -25,6 +25,7 @@ def prepare_dcx_admin_newsletter_send_capability(
     email_key: str,
     language_code: str,
     scheduled_send_at_ts_ms: int | None,
+    send_audience_scope: str = "all",
     connect_to_database: Callable[..., Any] | None = None,
     current_timestamp_ms_provider: Callable[[], int] | None = None,
     tracking_token_provider: Callable[[], str] | None = None,
@@ -35,12 +36,14 @@ def prepare_dcx_admin_newsletter_send_capability(
         - authenticated_admin_user_id identifies one current admin/dev user.
         - email_key and language_code identify one current live newsletter row.
         - scheduled_send_at_ts_ms is either null or one unix-milliseconds timestamp.
+        - send_audience_scope is one of `all`, `admins`, or `devs`.
         - The configured database is reachable.
       postconditions:
         - Creates one new row in `stephen_dcx_emails_sends`.
-        - Creates one snapshot row in `stephen_dcx_emails_sends_recipients` for each relevant user.
+        - Creates one snapshot row in `stephen_dcx_emails_sends_recipients` for each relevant user inside the selected audience scope.
         - Creates one row in `stephen_dcx_emails_sends_links` for each unique outbound link in each resolved newsletter variant used by the send.
         - Only marks users as `send` candidates when a live newsletter row exists in their preferred language (or in English when no preference exists).
+        - Skips newsletter candidates whose current preference blocks newsletters or whose email address is actively suppressed for newsletter/all-email sends.
         - Returns one summary of the prepared send.
       side_effects:
         - inserts one prepared newsletter send row
@@ -63,6 +66,7 @@ def prepare_dcx_admin_newsletter_send_capability(
         - Do not use it for actual Resend delivery yet.
       WHAT CAN GO WRONG:
         - The selected newsletter can be missing.
+        - The selected audience scope can be invalid.
         - Users may be blocked because the newsletter has not yet been translated into their preferred language.
         - Database writes can fail.
       WHAT COMES NEXT:
@@ -70,16 +74,19 @@ def prepare_dcx_admin_newsletter_send_capability(
 
     TESTS:
       - creates_send_row_recipient_snapshots_and_link_rows
+      - filters_recipients_to_admin_scope_when_requested
       - skips_users_when_newsletter_translation_is_missing_for_their_preferred_language
+      - skips_users_when_newsletter_suppression_is_active
       - raises_clear_error_when_source_newsletter_missing
 
     ERRORS:
       - API_DCX_ADMIN_NEWSLETTER_SEND_INVALID:
           suggested_action: Retry from one valid newsletter route and choose a valid schedule time.
-          common_causes:
-            - blank email key
-            - blank language code
-            - invalid admin user id
+            common_causes:
+              - blank email key
+              - blank language code
+              - invalid admin user id
+              - invalid send audience scope
           recovery_steps:
             - Reopen the newsletter from the catalog.
             - Retry with the current live row.
@@ -117,7 +124,13 @@ def prepare_dcx_admin_newsletter_send_capability(
     """
     normalized_email_key = email_key.strip()
     normalized_language_code = language_code.strip().lower()
-    if authenticated_admin_user_id <= 0 or normalized_email_key == "" or normalized_language_code == "":
+    normalized_send_audience_scope = send_audience_scope.strip().lower()
+    if (
+        authenticated_admin_user_id <= 0
+        or normalized_email_key == ""
+        or normalized_language_code == ""
+        or normalized_send_audience_scope not in {"all", "admins", "devs"}
+    ):
         raise RuntimeError("API_DCX_ADMIN_NEWSLETTER_SEND_INVALID")
 
     current_timestamp_ms = (
@@ -195,6 +208,7 @@ def prepare_dcx_admin_newsletter_send_capability(
                     INSERT INTO stephen_dcx_emails_sends (
                         source_email_id,
                         email_key_snapshot,
+                        send_kind,
                         send_status,
                         send_audience_type,
                         scheduled_send_at_ts_ms,
@@ -202,7 +216,7 @@ def prepare_dcx_admin_newsletter_send_capability(
                         updated_by_user_id,
                         send_summary_json
                     )
-                    VALUES (%s, %s, 'scheduled', 'announcements', %s, %s, %s, '{}'::jsonb)
+                    VALUES (%s, %s, 'newsletter', 'scheduled', 'newsletters', %s, %s, %s, %s::jsonb)
                     RETURNING id
                     """,
                     (
@@ -211,6 +225,11 @@ def prepare_dcx_admin_newsletter_send_capability(
                         normalized_scheduled_send_at_ts_ms,
                         authenticated_admin_user_id,
                         authenticated_admin_user_id,
+                        json.dumps(
+                            {
+                                "send_audience_scope": normalized_send_audience_scope,
+                            }
+                        ),
                     ),
                 )
                 email_send_id = cursor.fetchone()[0]
@@ -223,7 +242,15 @@ def prepare_dcx_admin_newsletter_send_capability(
                         primary_email_contact_method.is_verified,
                         user_row.preferred_language_id,
                         user_row.email_communication_preference,
-                        user_row.account_status
+                        user_row.account_status,
+                        user_row.user_role,
+                        EXISTS (
+                            SELECT 1
+                            FROM stephen_dcx_emails_suppressions AS suppression_row
+                            WHERE suppression_row.is_active = TRUE
+                              AND suppression_row.normalized_contact_value = primary_email_contact_method.normalized_value
+                              AND suppression_row.suppression_scope IN ('newsletters', 'all_email')
+                        ) AS has_newsletter_suppression
                     FROM stephen_dcx_users AS user_row
                     LEFT JOIN LATERAL (
                         SELECT
@@ -236,9 +263,19 @@ def prepare_dcx_admin_newsletter_send_capability(
                           AND is_active = TRUE
                         LIMIT 1
                     ) primary_email_contact_method
-                      ON TRUE
+                          ON TRUE
+                    WHERE (
+                        %s = 'all'
+                        OR (%s = 'admins' AND user_row.user_role = 'admin')
+                        OR (%s = 'devs' AND user_row.user_role = 'dev')
+                    )
                     ORDER BY user_row.id ASC
-                    """
+                    """,
+                    (
+                        normalized_send_audience_scope,
+                        normalized_send_audience_scope,
+                        normalized_send_audience_scope,
+                    ),
                 )
                 user_rows = cursor.fetchall()
 
@@ -328,6 +365,7 @@ def prepare_dcx_admin_newsletter_send_capability(
                         tracked_link_count += 1
 
                 send_summary = {
+                    "send_audience_scope": normalized_send_audience_scope,
                     "prepared_recipient_count": prepared_recipient_count,
                     "send_candidate_count": send_candidate_count,
                     "skipped_recipient_count": skipped_recipient_count,
@@ -357,6 +395,7 @@ def prepare_dcx_admin_newsletter_send_capability(
         "email_key": normalized_email_key,
         "send_status": "scheduled",
         "scheduled_send_at_ts_ms": normalized_scheduled_send_at_ts_ms,
+        "send_audience_scope": normalized_send_audience_scope,
         "summary": send_summary,
     }
 
@@ -392,6 +431,7 @@ def _read_delivery_decision_for_user_row(
     preferred_language_id = user_row[3]
     email_communication_preference = (user_row[4] or "").strip().lower()
     account_status = (user_row[5] or "").strip().lower()
+    has_newsletter_suppression = bool(user_row[7])
 
     if recipient_email == "":
         return "skip_missing_email", None
@@ -399,7 +439,9 @@ def _read_delivery_decision_for_user_row(
         return "skip_unconfirmed_email", None
     if account_status != "confirmed":
         return "skip_other", None
-    if email_communication_preference != "announcements":
+    if has_newsletter_suppression is True:
+        return "skip_suppressed", "suppressed:newsletters"
+    if email_communication_preference not in {"newsletters", "all_email"}:
         return "skip_preference", None
     if preferred_language_id is None:
         if english_variant is None:

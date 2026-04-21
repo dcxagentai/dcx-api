@@ -28,6 +28,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
       postconditions:
         - Returns the current live newsletter row for the requested key/language pair.
         - Includes translation summary metadata and recipient-language readiness metadata for admin send decisions.
+        - Readiness excludes users whose current preference blocks newsletters or whose email address is actively suppressed for newsletter/all-email sends.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -51,7 +52,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
 
     TESTS:
       - returns_requested_live_newsletter_detail
-      - reports_translation_gaps_for_announcement_recipients
+      - reports_translation_gaps_for_newsletter_eligible_recipients
       - raises_clear_error_when_live_newsletter_detail_missing
 
     ERRORS:
@@ -164,7 +165,14 @@ def read_dcx_admin_live_newsletter_detail_capability(
                         primary_email_contact_method.normalized_value,
                         primary_email_contact_method.is_verified,
                         user_row.email_communication_preference,
-                        user_row.account_status
+                        user_row.account_status,
+                        EXISTS (
+                            SELECT 1
+                            FROM stephen_dcx_emails_suppressions AS suppression_row
+                            WHERE suppression_row.is_active = TRUE
+                              AND suppression_row.normalized_contact_value = primary_email_contact_method.normalized_value
+                              AND suppression_row.suppression_scope IN ('newsletters', 'all_email')
+                        ) AS has_newsletter_suppression
                     FROM stephen_dcx_users AS user_row
                     LEFT JOIN LATERAL (
                         SELECT
@@ -250,11 +258,13 @@ def read_dcx_admin_live_newsletter_detail_capability(
         primary_email_confirmed = bool(user_row[2])
         email_communication_preference = (user_row[3] or "").strip().lower()
         account_status = (user_row[4] or "").strip().lower()
+        has_newsletter_suppression = bool(user_row[5])
         if (
             recipient_email == ""
             or primary_email_confirmed is not True
-            or email_communication_preference != "announcements"
+            or email_communication_preference not in {"newsletters", "all_email"}
             or account_status != "confirmed"
+            or has_newsletter_suppression is True
         ):
             continue
 

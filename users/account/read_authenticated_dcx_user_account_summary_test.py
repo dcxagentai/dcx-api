@@ -50,8 +50,9 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
         "read_dcx_app_account_page_ux_strings_capability",
         return_value={
             "page_title": "Konto",
-            "email_preference_announcements": "Ankündigungen",
-            "email_preference_essential_only": "Nur wichtiges",
+            "email_preference_no_email": "Keine E-Mails",
+            "email_preference_newsletters": "Newsletter",
+            "email_preference_all_email": "Alle E-Mails",
         },
     ), patch.object(
         account_summary_module,
@@ -83,7 +84,7 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         1775324300000,
                         "whatsapp",
                         "confirmed",
-                        "announcements",
+                        "newsletters",
                         1775324331389,
                         1773936459277,
                         1775324331563,
@@ -157,7 +158,7 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
         "primary_phone_confirmed_at_ts_ms": 1775324300000,
         "primary_phone_channel": "whatsapp",
         "account_status": "confirmed",
-        "email_communication_preference": "announcements",
+        "email_communication_preference": "newsletters",
         "last_seen_at_ts_ms": 1775324331389,
         "created_at_ts_ms": 1773936459277,
         "updated_at_ts_ms": 1775324331563,
@@ -252,17 +253,22 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
         ],
         "ux_strings": {
             "page_title": "Konto",
-            "email_preference_announcements": "Ankündigungen",
-            "email_preference_essential_only": "Nur wichtiges",
+            "email_preference_no_email": "Keine E-Mails",
+            "email_preference_newsletters": "Newsletter",
+            "email_preference_all_email": "Alle E-Mails",
         },
         "available_email_communication_preferences": [
             {
-                "value": "announcements",
-                "label": "Ankündigungen",
+                "value": "no_email",
+                "label": "Keine E-Mails",
             },
             {
-                "value": "essential_only",
-                "label": "Nur wichtiges",
+                "value": "newsletters",
+                "label": "Newsletter",
+            },
+            {
+                "value": "all_email",
+                "label": "Alle E-Mails",
             },
         ],
     }
@@ -274,8 +280,9 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
         "read_dcx_app_account_page_ux_strings_capability",
         return_value={
             "page_title": "Account",
-            "email_preference_announcements": "Announcements",
-            "email_preference_essential_only": "Essential only",
+            "email_preference_no_email": "No email",
+            "email_preference_newsletters": "Newsletters",
+            "email_preference_all_email": "All email",
         },
     ), patch.object(
         account_summary_module,
@@ -297,7 +304,7 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         None,
                         None,
                         "confirmed",
-                        "announcements",
+                        "newsletters",
                         1774346486995,
                         1774346415341,
                         1774346487162,

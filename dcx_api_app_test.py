@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from dcx_api_app import app
 import routes.admin.dcx_api_routes_admin_content_emails_catalog as admin_emails_catalog_routes
+import routes.admin.dcx_api_routes_admin_content_newsletter_sends_catalog as admin_newsletter_sends_catalog_routes
 import routes.admin.dcx_api_routes_admin_content_emails_save_live_row as admin_emails_save_routes
 import routes.admin.dcx_api_routes_admin_content_ux_strings_catalog as admin_ux_strings_catalog_routes
 import routes.admin.dcx_api_routes_admin_content_ux_strings_save_live_row as admin_ux_strings_save_routes
@@ -89,7 +90,7 @@ def test_admin_users_list_route_returns_users_payload_for_authenticated_admin_se
                     "primary_email_confirmed": True,
                     "primary_email_confirmed_at_ts_ms": 1775324331389,
                     "account_status": "confirmed",
-                    "email_communication_preference": "announcements",
+                    "email_communication_preference": "newsletters",
                     "last_seen_at_ts_ms": 1775324331389,
                     "created_at_ts_ms": 1773936459277,
                     "updated_at_ts_ms": 1775324331563,
@@ -212,6 +213,60 @@ def test_admin_emails_catalog_route_returns_payload_for_authenticated_admin_sess
     assert payload["ok"] is True
     assert payload["data"]["total_live_row_count"] == 1
     assert payload["context"]["view"] == "emails_catalog"
+
+
+def test_admin_newsletter_sends_catalog_route_returns_payload_for_authenticated_admin_session() -> None:
+    with patch.object(
+        admin_newsletter_sends_catalog_routes,
+        "read_authenticated_dcx_admin_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        admin_newsletter_sends_catalog_routes,
+        "read_dcx_admin_newsletter_sends_catalog_capability",
+        return_value={
+            "newsletter_sends": [
+                {
+                    "email_send_id": 701,
+                    "source_email_id": 101,
+                    "email_key": "weekly-alpha",
+                    "send_status": "sent",
+                    "send_audience_type": "newsletters",
+                    "scheduled_send_at_ts_ms": 1777000000000,
+                    "send_started_at_ts_ms": 1777000001000,
+                    "send_completed_at_ts_ms": 1777000005000,
+                    "cancelled_at_ts_ms": None,
+                    "created_at_ts_ms": 1776999990000,
+                    "updated_at_ts_ms": 1777000005000,
+                    "language_code": "en",
+                    "total_recipient_count": 12,
+                    "send_candidate_count": 10,
+                    "skipped_recipient_count": 2,
+                    "blocked_missing_translation_count": 1,
+                    "pending_recipient_count": 0,
+                    "sending_recipient_count": 0,
+                    "sent_recipient_count": 10,
+                    "delivered_recipient_count": 8,
+                    "failed_recipient_count": 1,
+                    "bounced_recipient_count": 1,
+                    "complained_recipient_count": 0,
+                    "cancelled_recipient_count": 0,
+                    "tracked_link_count": 4,
+                    "total_click_count": 7,
+                    "unique_clicked_link_count": 3,
+                }
+            ],
+            "total_send_count": 1,
+        },
+    ):
+        response = client.get("/admin/content/newsletters/en/weekly-alpha/sends")
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["total_send_count"] == 1
+    assert payload["data"]["newsletter_sends"][0]["delivered_recipient_count"] == 8
+    assert payload["data"]["newsletter_sends"][0]["total_click_count"] == 7
+    assert payload["context"]["view"] == "newsletter_sends_catalog"
 
 
 def test_admin_ux_strings_save_live_row_route_returns_save_result_for_authenticated_admin_session() -> None:
@@ -361,7 +416,7 @@ def test_users_me_account_summary_route_returns_account_payload_for_authenticate
             "primary_phone_confirmed_at_ts_ms": 1775324300000,
             "primary_phone_channel": "whatsapp",
             "account_status": "confirmed",
-            "email_communication_preference": "announcements",
+            "email_communication_preference": "newsletters",
             "last_seen_at_ts_ms": 1775324331389,
             "created_at_ts_ms": 1773936459277,
             "updated_at_ts_ms": 1775324331563,
@@ -410,12 +465,16 @@ def test_users_me_account_summary_route_returns_account_payload_for_authenticate
             ],
             "available_email_communication_preferences": [
                 {
-                    "value": "announcements",
-                    "label": "Announcements",
+                    "value": "no_email",
+                    "label": "No email",
                 },
                 {
-                    "value": "essential_only",
-                    "label": "Essential only",
+                    "value": "newsletters",
+                    "label": "Newsletters",
+                },
+                {
+                    "value": "all_email",
+                    "label": "All email",
                 },
             ],
         },
@@ -456,7 +515,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
             "user_id": 1,
             "preferred_language_id": 2,
             "preferred_timezone_id": 2,
-            "email_communication_preference": "essential_only",
+            "email_communication_preference": "all_email",
         },
     ), patch.object(
         me_account_settings_routes,
@@ -472,7 +531,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
             "primary_phone_confirmed_at_ts_ms": 1775324300000,
             "primary_phone_channel": "whatsapp",
             "account_status": "confirmed",
-            "email_communication_preference": "essential_only",
+            "email_communication_preference": "all_email",
             "last_seen_at_ts_ms": 1775324331389,
             "created_at_ts_ms": 1773936459277,
             "updated_at_ts_ms": 1775325000000,
@@ -521,12 +580,16 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
             ],
             "available_email_communication_preferences": [
                 {
-                    "value": "announcements",
-                    "label": "Announcements",
+                    "value": "no_email",
+                    "label": "No email",
                 },
                 {
-                    "value": "essential_only",
-                    "label": "Essential only",
+                    "value": "newsletters",
+                    "label": "Newsletters",
+                },
+                {
+                    "value": "all_email",
+                    "label": "All email",
                 },
             ],
         },
@@ -536,7 +599,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
             json={
                 "preferred_language_id": 2,
                 "preferred_timezone_id": 2,
-                "email_communication_preference": "essential_only",
+                "email_communication_preference": "all_email",
             },
             headers=LOCAL_APP_ORIGIN_HEADERS,
         )
@@ -545,7 +608,7 @@ def test_users_me_account_settings_route_saves_and_returns_refreshed_account_pay
     assert response.status_code == 200
     assert payload["ok"] is True
     assert payload["data"]["preferred_language"]["language_code"] == "es"
-    assert payload["data"]["email_communication_preference"] == "essential_only"
+    assert payload["data"]["email_communication_preference"] == "all_email"
     assert payload["context"]["operation"] == "account_settings_saved"
 
 
@@ -555,7 +618,7 @@ def test_users_me_account_settings_route_returns_auth_required_without_authentic
         json={
             "preferred_language_id": 1,
             "preferred_timezone_id": 2,
-            "email_communication_preference": "announcements",
+            "email_communication_preference": "newsletters",
         },
         headers=LOCAL_APP_ORIGIN_HEADERS,
     )
