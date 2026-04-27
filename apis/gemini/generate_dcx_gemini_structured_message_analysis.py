@@ -12,6 +12,9 @@ import os
 import re
 from typing import Any, Callable
 
+from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
+    read_dcx_gemini_message_analysis_model_name,
+)
 
 PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_26_v3"
 DCX_MESSAGE_TEXT_SUMMARY_WORD_COUNT_THRESHOLD = 100
@@ -71,7 +74,7 @@ def generate_dcx_gemini_structured_message_analysis(
             - malformed model output
             - transient provider failure
           recovery_steps:
-            - Verify GEMINI_API_KEY and DCX_GEMINI_MESSAGE_ANALYSIS_MODEL.
+            - Verify GEMINI_API_KEY and GEMINI_MESSAGE_ANALYSIS_MODEL.
             - Retry after provider health is restored.
           retry_safe: true
 
@@ -81,11 +84,7 @@ def generate_dcx_gemini_structured_message_analysis(
     normalized_file_inputs = [_normalize_file_input(file_input) for file_input in file_inputs]
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model_name = (
-        os.getenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", "").strip()
-        or os.getenv("MODEL_DCX_TEST", "").strip()
-        or "gemini-2.5-flash"
-    )
+    model_name = read_dcx_gemini_message_analysis_model_name()
 
     if api_key == "" and send_gemini_request is None:
         return _build_fallback_message_analysis(

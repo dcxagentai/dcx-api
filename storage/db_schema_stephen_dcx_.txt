@@ -174,6 +174,10 @@ received_at_ts_ms              | bigint                    | YES      |
 sent_at_ts_ms                  | bigint                    | YES      | 
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+analysis_status                | text                      | NO       | 'not_required'::text
+analysis_model_name            | text                      | NO       | ''::text
+analysis_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+analysis_completed_at_ts_ms    | bigint                    | YES      | 
 
 FOREIGN KEYS:
 - user_id -> stephen_dcx_users(id) [stephen_dcx_contact_messages_user_id_fkey]
@@ -541,9 +545,20 @@ is_private                     | boolean                   | NO       | true
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 file_uuid                      | uuid                      | YES      | 
+analysis_status                | text                      | NO       | 'not_required'::text
+analysis_description_text      | text                      | NO       | ''::text
+analysis_transcription_text    | text                      | NO       | ''::text
+analysis_synthesis_text        | text                      | NO       | ''::text
+context_within_message         | text                      | NO       | ''::text
+analysis_model_name            | text                      | NO       | ''::text
+analysis_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+analysis_completed_at_ts_ms    | bigint                    | YES      | 
+detected_language_id           | bigint                    | YES      | 
+analysis_summary_text          | text                      | NO       | ''::text
 
 FOREIGN KEYS:
 - owner_user_id -> stephen_dcx_users(id) [stephen_dcx_file_objects_owner_user_id_fkey]
+- detected_language_id -> stephen_dcx_languages(id) [stephen_dcx_file_objects_detected_language_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_file_objects_pkey]

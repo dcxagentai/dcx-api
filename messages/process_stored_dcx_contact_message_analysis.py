@@ -16,6 +16,9 @@ from apis.gemini.generate_dcx_gemini_structured_message_analysis import (
     PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS,
     generate_dcx_gemini_structured_message_analysis,
 )
+from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
+    read_dcx_gemini_message_analysis_model_name,
+)
 from files.build_dcx_r2_s3_client import build_dcx_r2_s3_client
 from files.read_dcx_r2_bucket_name_for_alias import read_dcx_r2_bucket_name_for_alias
 from storage.db_config import DB_CONFIG
@@ -91,7 +94,7 @@ def process_stored_dcx_contact_message_analysis(
             - malformed model output
           recovery_steps:
             - Confirm database and R2 connectivity.
-            - Confirm GEMINI_API_KEY and model configuration.
+            - Confirm GEMINI_API_KEY and GEMINI_MESSAGE_ANALYSIS_MODEL.
             - Retry once dependencies are healthy.
           retry_safe: true
           what_changed: the message and files may exist while analysis state is incomplete
@@ -140,6 +143,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_result = _build_failed_analysis_result(
             error_code=str(runtime_error),
             error_detail=_read_exception_detail(runtime_error),
+            model_name=read_dcx_gemini_message_analysis_model_name(),
         )
         analysis_run_status = "failed"
         analysis_error_code = str(runtime_error)
@@ -147,6 +151,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_result = _build_failed_analysis_result(
             error_code="API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED",
             error_detail=_read_exception_detail(exc),
+            model_name=read_dcx_gemini_message_analysis_model_name(),
         )
         analysis_run_status = "failed"
         analysis_error_code = "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"
@@ -605,10 +610,14 @@ def _read_language_id_for_code(cursor: Any, language_code: Any) -> int | None:
     return language_row[0] if language_row is not None else None
 
 
-def _build_failed_analysis_result(error_code: str = "", error_detail: str = "") -> dict:
+def _build_failed_analysis_result(
+    error_code: str = "",
+    error_detail: str = "",
+    model_name: str = "",
+) -> dict:
     return {
         "provider_name": "google_gemini",
-        "model_name": "",
+        "model_name": model_name,
         "prompt_version": PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS,
         "analysis_mode": "failed",
         "message_language_code": None,

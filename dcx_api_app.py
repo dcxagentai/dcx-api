@@ -181,6 +181,9 @@ from routes.users.dcx_api_routes_users_me_messages_create import (
 from routes.users.dcx_api_routes_users_me_messages_detail import (
     dcx_api_routes_users_me_messages_detail_router,
 )
+from routes.users.dcx_api_routes_users_me_messages_retry_analysis import (
+    dcx_api_routes_users_me_messages_retry_analysis_router,
+)
 from routes.users.dcx_api_routes_users_me_messages_inbox import (
     dcx_api_routes_users_me_messages_inbox_router,
 )
@@ -270,6 +273,7 @@ app.include_router(dcx_api_routes_users_me_account_phone_set_primary_router)
 app.include_router(dcx_api_routes_users_me_messages_inbox_router)
 app.include_router(dcx_api_routes_users_me_messages_detail_router)
 app.include_router(dcx_api_routes_users_me_messages_create_router)
+app.include_router(dcx_api_routes_users_me_messages_retry_analysis_router)
 app.include_router(dcx_api_routes_users_me_file_object_router)
 app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
 app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)

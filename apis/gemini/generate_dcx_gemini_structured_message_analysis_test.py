@@ -5,6 +5,7 @@ from apis.gemini.generate_dcx_gemini_structured_message_analysis import (
 
 def test_returns_fallback_message_analysis_when_gemini_api_key_is_missing(monkeypatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_MESSAGE_ANALYSIS_MODEL", raising=False)
     monkeypatch.delenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", raising=False)
     monkeypatch.delenv("MODEL_DCX_TEST", raising=False)
 
@@ -41,7 +42,7 @@ def test_returns_fallback_message_analysis_when_gemini_api_key_is_missing(monkey
 
 def test_returns_structured_message_analysis_from_injected_gemini_payload(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.setenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
 
     def _send_fake_gemini_request(request_context: dict) -> dict:
         assert "text_synthesis_requested" not in request_context["prompt_text"]
@@ -108,7 +109,7 @@ def test_returns_structured_message_analysis_from_injected_gemini_payload(monkey
 
 def test_includes_main_text_synthesis_instruction_only_when_python_word_count_threshold_is_met(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.setenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
     prompt_texts = []
 
     def _send_fake_gemini_request(request_context: dict) -> dict:
@@ -146,7 +147,7 @@ def test_includes_main_text_synthesis_instruction_only_when_python_word_count_th
 
 def test_blanks_image_attachment_synthesis_from_injected_gemini_payload(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.setenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
 
     result = generate_dcx_gemini_structured_message_analysis(
         message_input={

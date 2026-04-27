@@ -23,6 +23,7 @@ import routes.users.dcx_api_routes_users_me_message_attachment_file as me_messag
 import routes.users.dcx_api_routes_users_me_messages_create as me_messages_create_routes
 import routes.users.dcx_api_routes_users_me_messages_detail as me_messages_detail_routes
 import routes.users.dcx_api_routes_users_me_messages_inbox as me_messages_inbox_routes
+import routes.users.dcx_api_routes_users_me_messages_retry_analysis as me_messages_retry_analysis_routes
 import routes.users.dcx_api_routes_users_signup_email as signup_email_routes
 import routes.users.dcx_api_routes_users_signup_email_resend_otp as resend_otp_routes
 import routes.users.dcx_api_routes_users_signup_email_verify_otp as verify_otp_routes
@@ -805,6 +806,104 @@ def test_users_me_message_detail_route_returns_message_for_authenticated_session
     assert payload["ok"] is True
     assert payload["data"]["message_id"] == 901
     assert payload["context"]["view"] == "message_detail"
+
+
+def test_users_me_message_retry_analysis_route_returns_updated_message_detail() -> None:
+    with patch.object(
+        me_messages_retry_analysis_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_retry_analysis_routes,
+        "read_authenticated_dcx_user_contact_message_detail",
+        side_effect=[
+            {
+                "message_id": 901,
+                "channel_type": "app",
+                "provider_type": "dcx_app",
+                "message_direction": "inbound",
+                "message_format": "text",
+                "message_subject": "",
+                "raw_text_content": "Hola, vendo trigo.",
+                "derived_text_content": "",
+                "analysis_summary_text": "Message analysis failed.",
+                "processing_status": "failed",
+                "derivation_status": "failed",
+                "analysis_status": "failed",
+                "analysis_model_name": "gemini-3.1-flash-lite-preview",
+                "analysis_metadata_json": {"provider_name": "google_gemini"},
+                "analysis_completed_at_ts_ms": None,
+                "detected_language_code": "es",
+                "received_at_ts_ms": 1777000000000,
+                "created_at_ts_ms": 1777000000000,
+                "updated_at_ts_ms": 1777000001000,
+                "attachments": [],
+            },
+            {
+                "message_id": 901,
+                "channel_type": "app",
+                "provider_type": "dcx_app",
+                "message_direction": "inbound",
+                "message_format": "text",
+                "message_subject": "",
+                "raw_text_content": "Hola, vendo trigo.",
+                "derived_text_content": "Short synthesis",
+                "analysis_summary_text": "The user is offering wheat in Spanish.",
+                "processing_status": "ready",
+                "derivation_status": "completed",
+                "analysis_status": "completed",
+                "analysis_model_name": "gemini-3.1-flash-lite-preview",
+                "analysis_metadata_json": {"provider_name": "google_gemini"},
+                "analysis_completed_at_ts_ms": 1777000002000,
+                "detected_language_code": "es",
+                "received_at_ts_ms": 1777000000000,
+                "created_at_ts_ms": 1777000000000,
+                "updated_at_ts_ms": 1777000002000,
+                "attachments": [],
+            },
+        ],
+    ), patch.object(
+        me_messages_retry_analysis_routes,
+        "process_stored_dcx_contact_message_analysis",
+        return_value={
+            "message_id": 901,
+            "job_id": 3002,
+            "processing_status": "ready",
+            "derivation_status": "completed",
+            "analysis_status": "completed",
+            "was_noop": False,
+        },
+    ):
+        response = client.post(
+            "/users/me/messages/901/retry-analysis",
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["message_id"] == 901
+    assert payload["context"]["operation"] == "message_analysis_retried_ready"
+
+
+def test_users_me_message_retry_analysis_route_returns_not_found_when_message_is_missing() -> None:
+    with patch.object(
+        me_messages_retry_analysis_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_retry_analysis_routes,
+        "read_authenticated_dcx_user_contact_message_detail",
+        return_value=None,
+    ):
+        response = client.post(
+            "/users/me/messages/901/retry-analysis",
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+        payload = response.json()
+
+    assert response.status_code == 404
+    assert payload["error"]["code"] == "API_USERS_ME_MESSAGE_NOT_FOUND"
 
 
 def test_users_me_message_attachment_file_route_returns_stream_for_authenticated_session() -> None:
