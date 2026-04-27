@@ -34,6 +34,9 @@ from routes.public.dcx_api_routes_public_emails_send_link_redirect import (
 from routes.public.dcx_api_routes_public_email_preferences_unsubscribe import (
     dcx_api_routes_public_email_preferences_unsubscribe_router,
 )
+from routes.public.dcx_api_routes_public_meta_whatsapp_webhooks import (
+    dcx_api_routes_public_meta_whatsapp_webhooks_router,
+)
 from routes.public.dcx_api_routes_public_resend_webhooks import (
     dcx_api_routes_public_resend_webhooks_router,
 )
@@ -172,6 +175,21 @@ from routes.users.dcx_api_routes_users_me_account_phone_request_whatsapp_verific
 from routes.users.dcx_api_routes_users_me_account_phone_set_primary import (
     dcx_api_routes_users_me_account_phone_set_primary_router,
 )
+from routes.users.dcx_api_routes_users_me_messages_create import (
+    dcx_api_routes_users_me_messages_create_router,
+)
+from routes.users.dcx_api_routes_users_me_messages_detail import (
+    dcx_api_routes_users_me_messages_detail_router,
+)
+from routes.users.dcx_api_routes_users_me_messages_inbox import (
+    dcx_api_routes_users_me_messages_inbox_router,
+)
+from routes.users.dcx_api_routes_users_me_message_attachment_file import (
+    dcx_api_routes_users_me_message_attachment_file_router,
+)
+from routes.users.dcx_api_routes_users_me_file_object import (
+    dcx_api_routes_users_me_file_object_router,
+)
 from routes.users.dcx_api_routes_users_account_phone_verify_whatsapp_link import (
     dcx_api_routes_users_account_phone_verify_whatsapp_link_router,
 )
@@ -249,6 +267,11 @@ app.include_router(dcx_api_routes_users_me_account_summary_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
 app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router)
 app.include_router(dcx_api_routes_users_me_account_phone_set_primary_router)
+app.include_router(dcx_api_routes_users_me_messages_inbox_router)
+app.include_router(dcx_api_routes_users_me_messages_detail_router)
+app.include_router(dcx_api_routes_users_me_messages_create_router)
+app.include_router(dcx_api_routes_users_me_file_object_router)
+app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
 app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)
 app.include_router(dcx_api_routes_users_signup_email_router)
 app.include_router(dcx_api_routes_users_signup_email_verify_otp_router)
@@ -259,6 +282,7 @@ app.include_router(dcx_api_routes_public_build_time_content_pages_bundle_router)
 app.include_router(dcx_api_routes_public_reference_countries_bundle_router)
 app.include_router(dcx_api_routes_public_emails_send_link_redirect_router)
 app.include_router(dcx_api_routes_public_email_preferences_unsubscribe_router)
+app.include_router(dcx_api_routes_public_meta_whatsapp_webhooks_router)
 app.include_router(dcx_api_routes_public_resend_webhooks_router)
 app.include_router(dcx_api_routes_files_r2_hello_world_router)
 

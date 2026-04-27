@@ -9,7 +9,7 @@ from apis.resend.verify_dcx_resend_webhook_request import (
 
 
 def test_verifies_valid_resend_webhook_request(monkeypatch) -> None:
-    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", "whsec_testsecret")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", "whsec_dGVzdHNlY3JldA")
     raw_payload = json.dumps({"type": "email.delivered", "data": {"email_id": "msg_123"}})
     signed_content = f"msg_123.1778000000.{raw_payload}"
     signature = base64.b64encode(
@@ -34,7 +34,7 @@ def test_verifies_valid_resend_webhook_request(monkeypatch) -> None:
 
 
 def test_rejects_resend_webhook_request_with_invalid_signature(monkeypatch) -> None:
-    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", "whsec_testsecret")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", "whsec_dGVzdHNlY3JldA")
 
     try:
         verify_dcx_resend_webhook_request(

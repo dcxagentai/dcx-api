@@ -108,7 +108,7 @@ def verify_dcx_resend_webhook_request(
         raise RuntimeError("API_DCX_RESEND_WEBHOOK_EXPIRED")
 
     signed_content = f"{webhook_id}.{webhook_timestamp}.{raw_request_body}"
-    signing_secret = webhook_secret.removeprefix("whsec_").encode("utf-8")
+    signing_secret = _read_dcx_resend_webhook_signing_secret_bytes(webhook_secret)
     expected_signature = base64.b64encode(
         hmac.new(
             key=signing_secret,
@@ -130,4 +130,16 @@ def verify_dcx_resend_webhook_request(
     try:
         return json.loads(raw_request_body)
     except json.JSONDecodeError as exc:
+        raise RuntimeError("API_DCX_RESEND_WEBHOOK_INVALID") from exc
+
+
+def _read_dcx_resend_webhook_signing_secret_bytes(webhook_secret: str) -> bytes:
+    normalized_secret_suffix = webhook_secret.removeprefix("whsec_").strip()
+    if normalized_secret_suffix == "":
+        raise RuntimeError("API_DCX_RESEND_WEBHOOK_INVALID")
+
+    padded_secret_suffix = normalized_secret_suffix + "=" * (-len(normalized_secret_suffix) % 4)
+    try:
+        return base64.urlsafe_b64decode(padded_secret_suffix.encode("utf-8"))
+    except Exception as exc:
         raise RuntimeError("API_DCX_RESEND_WEBHOOK_INVALID") from exc

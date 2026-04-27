@@ -18,6 +18,11 @@ import routes.admin.dcx_api_routes_admin_users_list as admin_users_list_routes
 import routes.auth.dcx_api_routes_auth_app_ux_strings_bundle as auth_app_ux_bundle_routes
 import routes.users.dcx_api_routes_users_me_account_settings as me_account_settings_routes
 import routes.users.dcx_api_routes_users_me_account_summary as me_account_summary_routes
+import routes.users.dcx_api_routes_users_me_file_object as me_file_object_routes
+import routes.users.dcx_api_routes_users_me_message_attachment_file as me_message_attachment_file_routes
+import routes.users.dcx_api_routes_users_me_messages_create as me_messages_create_routes
+import routes.users.dcx_api_routes_users_me_messages_detail as me_messages_detail_routes
+import routes.users.dcx_api_routes_users_me_messages_inbox as me_messages_inbox_routes
 import routes.users.dcx_api_routes_users_signup_email as signup_email_routes
 import routes.users.dcx_api_routes_users_signup_email_resend_otp as resend_otp_routes
 import routes.users.dcx_api_routes_users_signup_email_verify_otp as verify_otp_routes
@@ -633,6 +638,243 @@ def test_users_me_account_settings_route_returns_auth_required_without_authentic
             "suggested_action": "Sign in through the DCX app login flow, then retry.",
         },
     }
+
+
+def test_users_me_messages_inbox_route_returns_messages_payload_for_authenticated_session() -> None:
+    with patch.object(
+        me_messages_inbox_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_inbox_routes,
+        "read_authenticated_dcx_user_messages_inbox",
+        return_value={
+            "messages": [
+                {
+                    "message_id": 901,
+                    "channel_type": "app",
+                    "provider_type": "dcx_app",
+                    "message_direction": "inbound",
+                    "message_format": "text",
+                    "message_subject": "",
+                    "raw_text_content": "Hola, vendo trigo.",
+                    "derived_text_content": "Hola, vendo trigo.",
+                    "analysis_summary_text": "The user is offering wheat in Spanish.",
+                    "processing_status": "ready",
+                    "derivation_status": "completed",
+                    "detected_language_code": "es",
+                    "received_at_ts_ms": 1777000000000,
+                    "created_at_ts_ms": 1777000000000,
+                }
+            ],
+            "selected_filter": "text",
+            "total_message_count": 1,
+        },
+    ):
+        response = client.get("/users/me/messages?message_format_filter=text", headers=LOCAL_APP_ORIGIN_HEADERS)
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["total_message_count"] == 1
+    assert payload["data"]["messages"][0]["message_id"] == 901
+    assert payload["context"]["view"] == "messages_inbox"
+
+
+def test_users_me_messages_create_route_returns_message_detail_for_authenticated_session() -> None:
+    captured_creation_kwargs: dict = {}
+
+    def _capture_create_authenticated_dcx_app_contact_message(**kwargs):
+        captured_creation_kwargs.update(kwargs)
+        return {
+            "message_id": 901,
+            "job_id": 3001,
+            "processing_status": "ready",
+            "derivation_status": "completed",
+        }
+
+    with patch.object(
+        me_messages_create_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_create_routes,
+        "create_authenticated_dcx_app_contact_message",
+        side_effect=_capture_create_authenticated_dcx_app_contact_message,
+    ), patch.object(
+        me_messages_create_routes,
+        "read_authenticated_dcx_user_contact_message_detail",
+        return_value={
+            "message_id": 901,
+            "channel_type": "app",
+            "provider_type": "dcx_app",
+            "message_direction": "inbound",
+            "message_format": "text",
+            "message_subject": "",
+            "raw_text_content": "Hola, vendo trigo.",
+            "derived_text_content": "Hola, vendo trigo.",
+            "analysis_summary_text": "The user is offering wheat in Spanish.",
+            "processing_status": "ready",
+            "derivation_status": "completed",
+            "detected_language_code": "es",
+            "received_at_ts_ms": 1777000000000,
+            "created_at_ts_ms": 1777000000000,
+            "updated_at_ts_ms": 1777000001000,
+            "attachments": [],
+        },
+    ):
+        response = client.post(
+            "/users/me/messages",
+            data={"message_text": "Hola, vendo trigo."},
+            files=[("message_files", ("offer.pdf", b"pdf-bytes", "application/pdf"))],
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["message_id"] == 901
+    assert payload["context"]["operation"] == "message_created_ready"
+    assert captured_creation_kwargs["authenticated_user_id"] == 1
+    assert captured_creation_kwargs["message_text"] == "Hola, vendo trigo."
+    assert len(captured_creation_kwargs["attachment_inputs"]) == 1
+    assert captured_creation_kwargs["attachment_inputs"][0]["original_filename"] == "offer.pdf"
+    assert captured_creation_kwargs["attachment_inputs"][0]["content_type"] == "application/pdf"
+    assert captured_creation_kwargs["attachment_inputs"][0]["file_bytes"] == b"pdf-bytes"
+
+
+def test_users_me_message_detail_route_returns_message_for_authenticated_session() -> None:
+    with patch.object(
+        me_messages_detail_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_detail_routes,
+        "read_authenticated_dcx_user_contact_message_detail",
+        return_value={
+            "message_id": 901,
+            "channel_type": "app",
+            "provider_type": "dcx_app",
+            "message_direction": "inbound",
+            "message_format": "text",
+            "message_subject": "",
+            "raw_text_content": "Hola, vendo trigo.",
+            "derived_text_content": "Hola, vendo trigo.",
+            "analysis_summary_text": "The user is offering wheat in Spanish.",
+            "processing_status": "ready",
+            "derivation_status": "completed",
+            "detected_language_code": "es",
+            "received_at_ts_ms": 1777000000000,
+            "created_at_ts_ms": 1777000000000,
+            "updated_at_ts_ms": 1777000001000,
+            "attachments": [],
+        },
+    ):
+        response = client.get("/users/me/messages/901", headers=LOCAL_APP_ORIGIN_HEADERS)
+        payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["data"]["message_id"] == 901
+    assert payload["context"]["view"] == "message_detail"
+
+
+def test_users_me_message_attachment_file_route_returns_stream_for_authenticated_session() -> None:
+    with patch.object(
+        me_message_attachment_file_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_message_attachment_file_routes,
+        "read_authenticated_dcx_user_contact_message_attachment_stream",
+        return_value={
+            "content_bytes": b"image-bytes",
+            "content_type": "image/png",
+            "original_filename": "offer.png",
+            "file_kind": "image",
+        },
+    ):
+        response = client.get(
+            "/users/me/messages/901/attachments/77/file",
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+
+    assert response.status_code == 200
+    assert response.content == b"image-bytes"
+    assert response.headers["content-type"] == "image/png"
+    assert "cross-origin-resource-policy" not in response.headers
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_users_me_message_attachment_file_route_allows_media_element_request_without_origin() -> None:
+    with patch.object(
+        me_message_attachment_file_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_message_attachment_file_routes,
+        "read_authenticated_dcx_user_contact_message_attachment_stream",
+        return_value={
+            "content_bytes": b"image-bytes",
+            "content_type": "image/jpeg",
+            "original_filename": "whatsapp-image.jpg",
+            "file_kind": "image",
+        },
+    ):
+        response = client.get("/users/me/messages/901/attachments/77/file")
+
+    assert response.status_code == 200
+    assert response.content == b"image-bytes"
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_users_me_file_object_route_returns_stream_for_authenticated_session() -> None:
+    with patch.object(
+        me_file_object_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_file_object_routes,
+        "read_authenticated_dcx_user_file_object_stream_by_file_uuid",
+        return_value={
+            "content_bytes": b"image-bytes",
+            "content_type": "image/png",
+            "original_filename": "offer.png",
+            "file_kind": "image",
+        },
+    ):
+        response = client.get(
+            "/users/me/files/00000000-0000-0000-0000-000000000801",
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+
+    assert response.status_code == 200
+    assert response.content == b"image-bytes"
+    assert response.headers["content-type"] == "image/png"
+    assert "cross-origin-resource-policy" not in response.headers
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_users_me_file_object_route_allows_media_element_request_without_origin() -> None:
+    with patch.object(
+        me_file_object_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_file_object_routes,
+        "read_authenticated_dcx_user_file_object_stream_by_file_uuid",
+        return_value={
+            "content_bytes": b"audio-bytes",
+            "content_type": "audio/ogg",
+            "original_filename": "voice-note.ogg",
+            "file_kind": "audio",
+        },
+    ):
+        response = client.get("/users/me/files/00000000-0000-0000-0000-000000000802")
+
+    assert response.status_code == 200
+    assert response.content == b"audio-bytes"
+    assert response.headers["content-type"] == "audio/ogg"
 
 
 def test_users_email_signup_route_returns_minimal_flow_token_payload() -> None:

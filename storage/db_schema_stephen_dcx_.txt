@@ -7,6 +7,11 @@ Database: stephen_dcx
 
 TABLE LIST (\dt):
 ------------------------------
+- stephen_dcx_contact_message_analysis_runs
+- stephen_dcx_contact_message_attachments
+- stephen_dcx_contact_message_processing_jobs
+- stephen_dcx_contact_message_provider_events
+- stephen_dcx_contact_messages
 - stephen_dcx_content_page_categories
 - stephen_dcx_content_pages
 - stephen_dcx_countries
@@ -16,6 +21,10 @@ TABLE LIST (\dt):
 - stephen_dcx_emails_sends_link_clicks
 - stephen_dcx_emails_sends_links
 - stephen_dcx_emails_sends_recipients
+- stephen_dcx_emails_sequence_steps
+- stephen_dcx_emails_sequences
+- stephen_dcx_emails_suppressions
+- stephen_dcx_file_objects
 - stephen_dcx_languages
 - stephen_dcx_public_content_publish_state
 - stephen_dcx_public_route_rate_limits
@@ -27,6 +36,154 @@ TABLE LIST (\dt):
 - stephen_dcx_users
 - stephen_dcx_users_contact_methods
 - stephen_dcx_ux_strings
+
+
+============================================================
+TABLE: stephen_dcx_contact_message_analysis_runs
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_contact_message_analysis_runs_id_seq'::regclass)
+message_id                     | bigint                    | NO       | 
+analysis_stage                 | text                      | NO       | 
+model_name                     | text                      | NO       | ''::text
+input_summary_json             | jsonb                     | NO       | '{}'::jsonb
+output_text                    | text                      | NO       | ''::text
+output_json                    | jsonb                     | NO       | '{}'::jsonb
+run_status                     | text                      | NO       | 'started'::text
+error_code                     | text                      | YES      | 
+started_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+completed_at_ts_ms             | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_message_analysis_runs_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_message_analysis_runs_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_contact_message_attachments
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_contact_message_attachments_id_seq'::regclass)
+message_id                     | bigint                    | NO       | 
+file_object_id                 | bigint                    | NO       | 
+attachment_role                | text                      | NO       | 'primary_media'::text
+provider_media_id              | text                      | YES      | 
+sort_order                     | integer                   | NO       | 1
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_message_attachments_message_id_fkey]
+- file_object_id -> stephen_dcx_file_objects(id) [stephen_dcx_contact_message_attachments_file_object_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_message_attachments_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_contact_message_processing_jobs
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_contact_message_processing_jobs_id_seq'::regclass)
+message_id                     | bigint                    | NO       | 
+job_type                       | text                      | NO       | 
+job_status                     | text                      | NO       | 'queued'::text
+attempt_count                  | integer                   | NO       | 0
+available_at_ts_ms             | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+locked_at_ts_ms                | bigint                    | YES      | 
+locked_by_worker               | text                      | YES      | 
+last_error_code                | text                      | YES      | 
+last_error_detail              | text                      | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_message_processing_jobs_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_message_processing_jobs_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_contact_message_provider_events
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_contact_message_provider_events_id_seq'::regclass)
+user_id                        | bigint                    | YES      | 
+contact_method_id              | bigint                    | YES      | 
+provider_type                  | text                      | NO       | 
+channel_type                   | text                      | NO       | 
+provider_event_type            | text                      | NO       | ''::text
+provider_event_id              | text                      | YES      | 
+provider_message_id            | text                      | YES      | 
+provider_sender_handle         | text                      | YES      | 
+provider_recipient_handle      | text                      | YES      | 
+event_direction                | text                      | NO       | 'inbound'::text
+payload_hash                   | text                      | YES      | 
+raw_event_payload_json         | jsonb                     | NO       | '{}'::jsonb
+signature_verified             | boolean                   | NO       | false
+processing_status              | text                      | NO       | 'received'::text
+event_received_at_ts_ms        | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+event_processed_at_ts_ms       | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_message_provider_events_user_id_fkey]
+- contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_contact_message_provider_eve_contact_method_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_message_provider_events_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_contact_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_contact_messages_id_seq'::regclass)
+user_id                        | bigint                    | YES      | 
+contact_method_id              | bigint                    | YES      | 
+provider_event_id              | bigint                    | YES      | 
+channel_type                   | text                      | NO       | 
+provider_type                  | text                      | NO       | 
+message_direction              | text                      | NO       | 
+message_format                 | text                      | NO       | 
+external_message_id            | text                      | YES      | 
+source_handle_normalized       | text                      | YES      | 
+target_handle_normalized       | text                      | YES      | 
+message_subject                | text                      | NO       | ''::text
+raw_text_content               | text                      | NO       | ''::text
+derived_text_content           | text                      | NO       | ''::text
+analysis_summary_text          | text                      | NO       | ''::text
+message_metadata_json          | jsonb                     | NO       | '{}'::jsonb
+detected_language_id           | bigint                    | YES      | 
+processing_status              | text                      | NO       | 'received'::text
+derivation_status              | text                      | NO       | 'not_required'::text
+visible_to_user                | boolean                   | NO       | true
+in_reply_to_message_id         | bigint                    | YES      | 
+received_at_ts_ms              | bigint                    | YES      | 
+sent_at_ts_ms                  | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_messages_user_id_fkey]
+- contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_contact_messages_contact_method_id_fkey]
+- provider_event_id -> stephen_dcx_contact_message_provider_events(id) [stephen_dcx_contact_messages_provider_event_id_fkey]
+- detected_language_id -> stephen_dcx_languages(id) [stephen_dcx_contact_messages_detected_language_id_fkey]
+- in_reply_to_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_messages_in_reply_to_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_messages_pkey]
 
 
 ============================================================
@@ -170,7 +327,7 @@ id                             | bigint                    | NO       | nextval(
 source_email_id                | bigint                    | NO       | 
 email_key_snapshot             | text                      | NO       | 
 send_status                    | text                      | NO       | 'scheduled'::text
-send_audience_type             | text                      | NO       | 'announcements'::text
+send_audience_type             | text                      | NO       | 'newsletters'::text
 scheduled_send_at_ts_ms        | bigint                    | NO       | 
 send_started_at_ts_ms          | bigint                    | YES      | 
 send_completed_at_ts_ms        | bigint                    | YES      | 
@@ -180,11 +337,16 @@ updated_by_user_id             | bigint                    | YES      |
 send_summary_json              | jsonb                     | NO       | '{}'::jsonb
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+send_kind                      | text                      | NO       | 'newsletter'::text
+source_sequence_id             | bigint                    | YES      | 
+source_sequence_step_id        | bigint                    | YES      | 
 
 FOREIGN KEYS:
 - source_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sends_source_email_id_fkey]
 - created_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_created_by_user_id_fkey]
 - updated_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_updated_by_user_id_fkey]
+- source_sequence_id -> stephen_dcx_emails_sequences(id) [stephen_dcx_emails_sends_source_sequence_id_fkey]
+- source_sequence_step_id -> stephen_dcx_emails_sequence_steps(id) [stephen_dcx_emails_sends_source_sequence_step_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_sends_pkey]
@@ -258,6 +420,11 @@ failed_at_ts_ms                | bigint                    | YES      |
 failure_reason                 | text                      | YES      | 
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+delivered_at_ts_ms             | bigint                    | YES      | 
+bounced_at_ts_ms               | bigint                    | YES      | 
+complained_at_ts_ms            | bigint                    | YES      | 
+last_provider_event_at_ts_ms   | bigint                    | YES      | 
+last_provider_event_type       | text                      | YES      | 
 
 FOREIGN KEYS:
 - email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_emails_sends_recipients_email_send_id_fkey]
@@ -268,6 +435,119 @@ FOREIGN KEYS:
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_sends_recipients_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_emails_sequence_steps
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_emails_sequence_steps_id_seq'::regclass)
+sequence_id                    | bigint                    | NO       | 
+step_key                       | text                      | NO       | 
+step_name                      | text                      | NO       | ''::text
+step_order                     | integer                   | NO       | 
+source_email_id                | bigint                    | NO       | 
+delay_minutes_from_trigger     | integer                   | NO       | 0
+is_active                      | boolean                   | NO       | true
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- sequence_id -> stephen_dcx_emails_sequences(id) [stephen_dcx_emails_sequence_steps_sequence_id_fkey]
+- source_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sequence_steps_source_email_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_emails_sequence_steps_pkey]
+- UNIQUE: sequence_id [stephen_dcx_emails_sequence_steps_sequence_id_step_key_key]
+- UNIQUE: step_key [stephen_dcx_emails_sequence_steps_sequence_id_step_key_key]
+- UNIQUE: sequence_id [stephen_dcx_emails_sequence_steps_sequence_id_step_order_key]
+- UNIQUE: step_order [stephen_dcx_emails_sequence_steps_sequence_id_step_order_key]
+
+
+============================================================
+TABLE: stephen_dcx_emails_sequences
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_emails_sequences_id_seq'::regclass)
+sequence_key                   | text                      | NO       | 
+sequence_name                  | text                      | NO       | 
+sequence_type                  | text                      | NO       | 
+audience_type                  | text                      | NO       | 'all_email'::text
+trigger_type                   | text                      | NO       | 
+scheduled_launch_at_ts_ms      | bigint                    | YES      | 
+is_live                        | boolean                   | NO       | false
+created_by_user_id             | bigint                    | YES      | 
+updated_by_user_id             | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- created_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sequences_created_by_user_id_fkey]
+- updated_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sequences_updated_by_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_emails_sequences_pkey]
+- UNIQUE: sequence_key [stephen_dcx_emails_sequences_sequence_key_key]
+
+
+============================================================
+TABLE: stephen_dcx_emails_suppressions
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_emails_suppressions_id_seq'::regclass)
+user_id                        | bigint                    | YES      | 
+contact_method_id              | bigint                    | YES      | 
+normalized_contact_value       | text                      | NO       | 
+suppression_source             | text                      | NO       | 
+suppression_scope              | text                      | NO       | 'all_email'::text
+suppression_reason             | text                      | NO       | ''::text
+provider_name                  | text                      | NO       | 'resend'::text
+provider_reference_id          | text                      | YES      | 
+suppressed_at_ts_ms            | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+lifted_at_ts_ms                | bigint                    | YES      | 
+is_active                      | boolean                   | NO       | true
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_emails_suppressions_user_id_fkey]
+- contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_emails_suppressions_contact_method_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_emails_suppressions_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_file_objects
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_file_objects_id_seq'::regclass)
+owner_user_id                  | bigint                    | YES      | 
+storage_provider               | text                      | NO       | 'cloudflare_r2'::text
+bucket_alias                   | text                      | NO       | 
+object_key                     | text                      | NO       | 
+content_type                   | text                      | NO       | 'application/octet-stream'::text
+file_size_bytes                | bigint                    | YES      | 
+original_filename              | text                      | NO       | ''::text
+file_kind                      | text                      | NO       | 
+source_channel_type            | text                      | NO       | 
+source_provider_type           | text                      | NO       | 
+file_metadata_json             | jsonb                     | NO       | '{}'::jsonb
+is_private                     | boolean                   | NO       | true
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+file_uuid                      | uuid                      | YES      | 
+
+FOREIGN KEYS:
+- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_file_objects_owner_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_file_objects_pkey]
+- UNIQUE: file_uuid [stephen_dcx_file_objects_file_uuid_key]
 
 
 ============================================================
@@ -489,7 +769,7 @@ id                             | bigint                    | NO       | nextval(
 user_uuid                      | uuid                      | NO       | 
 preferred_language_id          | bigint                    | YES      | 
 account_status                 | text                      | NO       | 'pending_email_verification'::text
-email_communication_preference | text                      | NO       | 'announcements'::text
+email_communication_preference | text                      | NO       | 'newsletters'::text
 last_seen_at_ts_ms             | bigint                    | YES      | 
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint

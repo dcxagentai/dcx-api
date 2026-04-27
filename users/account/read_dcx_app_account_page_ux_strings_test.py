@@ -52,6 +52,8 @@ def test_overlays_selected_language_rows_on_top_of_original_rows() -> None:
             [
                 ("page_title", "Account", True, "en"),
                 ("page_title", "Cuenta", False, "es"),
+                ("messages_search_placeholder", "Search messages...", True, "en"),
+                ("messages_search_placeholder", "Buscar mensajes...", False, "es"),
                 ("field_primary_email", "Primary email", True, "en"),
                 ("field_primary_phone", "Primary phone", True, "en"),
             ]
@@ -59,5 +61,6 @@ def test_overlays_selected_language_rows_on_top_of_original_rows() -> None:
     )
 
     assert result["page_title"] == "Cuenta"
+    assert result["messages_search_placeholder"] == "Buscar mensajes..."
     assert result["field_primary_email"] == "Primary email"
     assert result["field_primary_phone"] == "Primary phone"

@@ -16,6 +16,9 @@ from apis.resend.verify_dcx_resend_webhook_request import (
 from emails.apply_dcx_resend_email_event_to_send_records import (
     apply_dcx_resend_email_event_to_send_records_capability,
 )
+from messages.process_dcx_resend_inbound_email_received_webhook_payload import (
+    process_dcx_resend_inbound_email_received_webhook_payload,
+)
 
 dcx_api_routes_public_resend_webhooks_router = APIRouter(
     prefix="/public/webhooks",
@@ -83,9 +86,14 @@ async def post_dcx_public_resend_webhook_event(request: Request) -> JSONResponse
             raw_request_body=raw_body,
             request_headers=request.headers,
         )
-        applied_payload = apply_dcx_resend_email_event_to_send_records_capability(
-            webhook_payload=verified_payload,
-        )
+        if (verified_payload.get("type") or "").strip() == "email.received":
+            applied_payload = process_dcx_resend_inbound_email_received_webhook_payload(
+                webhook_payload=verified_payload,
+            )
+        else:
+            applied_payload = apply_dcx_resend_email_event_to_send_records_capability(
+                webhook_payload=verified_payload,
+            )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
         status_code = (
@@ -94,6 +102,7 @@ async def post_dcx_public_resend_webhook_event(request: Request) -> JSONResponse
                 "API_DCX_RESEND_WEBHOOK_INVALID",
                 "API_DCX_RESEND_WEBHOOK_EXPIRED",
                 "API_DCX_RESEND_EMAIL_EVENT_INVALID",
+                "API_DCX_RESEND_INBOUND_EMAIL_EVENT_INVALID",
             }
             else 503
         )
