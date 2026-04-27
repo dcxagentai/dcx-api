@@ -43,7 +43,7 @@ def test_hashes_same_otp_and_salt_deterministically(monkeypatch) -> None:
 
 def test_falls_back_to_email_signup_secret_when_whatsapp_secret_missing(monkeypatch) -> None:
     monkeypatch.delenv("DCX_WHATSAPP_PHONE_OTP_SECRET", raising=False)
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "email_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "email_secret")
 
     result = hash_dcx_whatsapp_phone_link_otp_code("123456", "saltsalt")
 

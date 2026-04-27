@@ -171,24 +171,24 @@ def hash_dcx_whatsapp_phone_link_otp_code(otp_code: str, otp_salt: str) -> str:
 
     TESTS:
       - hashes_same_otp_and_salt_deterministically
-      - falls_back_to_email_signup_secret_when_whatsapp_secret_missing
+      - falls_back_to_signup_secret_when_whatsapp_secret_missing
 
     ERRORS:
       - API_DCX_WHATSAPP_PHONE_OTP_SECRET_MISSING:
           suggested_action: Configure one OTP secret in the backend environment before linking phones.
           common_causes:
             - missing DCX_WHATSAPP_PHONE_OTP_SECRET
-            - missing fallback DCX_EMAIL_SIGNUP_OTP_SECRET
+            - missing fallback DCX_SIGNUP_OTP_SECRET
           recovery_steps:
             - Add DCX_WHATSAPP_PHONE_OTP_SECRET to the backend environment.
-            - Or keep using DCX_EMAIL_SIGNUP_OTP_SECRET as the temporary shared secret.
+            - Or keep using DCX_SIGNUP_OTP_SECRET as the temporary shared secret.
           retry_safe: true
 
     CODE:
     """
     otp_secret = (
         os.getenv("DCX_WHATSAPP_PHONE_OTP_SECRET", "").strip()
-        or os.getenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "").strip()
+        or os.getenv("DCX_SIGNUP_OTP_SECRET", "").strip()
     )
     if otp_secret == "":
         raise RuntimeError("API_DCX_WHATSAPP_PHONE_OTP_SECRET_MISSING")

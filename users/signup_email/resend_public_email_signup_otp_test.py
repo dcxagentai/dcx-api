@@ -48,7 +48,7 @@ class FakeConnection:
 
 
 def test_resend_refreshes_existing_challenge_and_rotates_flow_token(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             (
@@ -132,7 +132,7 @@ def test_resend_refreshes_existing_challenge_and_rotates_flow_token(monkeypatch)
 
 
 def test_resend_rejects_cooldown_window(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             (

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Callable
 
-from apis.resend.send_email import send_email_via_resend
+from apis.resend.send_email import (
+    DCX_RESEND_SENDER_PROFILE_TRANSACTIONAL,
+    send_email_via_resend,
+)
 
 
 def send_public_email_signup_otp(
@@ -80,7 +83,10 @@ def send_public_email_signup_otp(
 
     CODE:
     """
-    delivery_summary = (send_email or send_email_via_resend)(email_delivery_draft)
+    delivery_summary = (send_email or send_email_via_resend)(
+        email_delivery_draft,
+        sender_profile=DCX_RESEND_SENDER_PROFILE_TRANSACTIONAL,
+    )
     return {
         **delivery_summary,
         "challenge_id": challenge_id,

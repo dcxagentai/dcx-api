@@ -344,7 +344,7 @@ def _read_dcx_whatsapp_phone_link_secret_key() -> bytes:
     if configured_secret != "":
         return configured_secret.encode("utf-8")
 
-    fallback_secret = os.getenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "").strip()
+    fallback_secret = os.getenv("DCX_SIGNUP_OTP_SECRET", "").strip()
     if fallback_secret != "":
         return fallback_secret.encode("utf-8")
 

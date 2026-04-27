@@ -493,7 +493,7 @@ def _normalize_route_path(route_path: str) -> str:
 
 def _read_public_email_signup_secret_key() -> bytes:
     """Minimal contract: return one non-empty secret key for HMAC operations or raise a stable error."""
-    configured_secret = os.getenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "").strip()
+    configured_secret = os.getenv("DCX_SIGNUP_OTP_SECRET", "").strip()
 
     if configured_secret == "":
         raise RuntimeError("API_PUBLIC_EMAIL_SIGNUP_SECRET_MISSING")

@@ -49,7 +49,7 @@ class FakeConnection:
 
 
 def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     otp_hash = hash_public_email_signup_otp_code(
         otp_code="123456",
         otp_salt="saltsaltsaltsalt",
@@ -98,7 +98,7 @@ def test_correct_otp_confirms_user_identity_and_consumes_challenge(monkeypatch) 
 
 
 def test_incorrect_otp_increments_attempt_count(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             (
@@ -139,7 +139,7 @@ def test_incorrect_otp_increments_attempt_count(monkeypatch) -> None:
 
 
 def test_expired_or_invalid_flow_requires_restart(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(fetchone_results=[None])
     signup_flow_token = build_public_email_signup_flow_token(
         challenge_id=301,

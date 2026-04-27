@@ -15,7 +15,7 @@ def test_signup_otp_send_returns_internal_delivery_summary_when_provider_accepts
             "text_body": "Hello\n\nYour code is 123456",
         },
         challenge_id=301,
-        send_email=lambda *_: {
+        send_email=lambda *_, **__: {
             "provider": "resend",
             "status": "accepted",
             "provider_message_id": "email_456",

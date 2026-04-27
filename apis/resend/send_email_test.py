@@ -6,7 +6,10 @@ It keeps the provider boundary executable without requiring live provider calls 
 
 import pytest
 
-from apis.resend.send_email import send_email_via_resend
+from apis.resend.send_email import (
+    DCX_RESEND_SENDER_PROFILE_MESSAGES,
+    send_email_via_resend,
+)
 
 
 def test_resend_adapter_builds_test_mode_params_with_explicit_sender_and_override_recipient(monkeypatch) -> None:
@@ -17,11 +20,11 @@ def test_resend_adapter_builds_test_mode_params_with_explicit_sender_and_overrid
         return {"id": "email_123"}
 
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.setenv("DCX_RESEND_TEST_RECIPIENT", "delivered@resend.dev")
-    monkeypatch.setenv("DCX_RESEND_ALLOW_TEST_RECIPIENT_OVERRIDE", "true")
+    monkeypatch.setenv("RESEND_TEST_RECIPIENT", "delivered@resend.dev")
+    monkeypatch.setenv("RESEND_ALLOW_TEST_RECIPIENT_OVERRIDE", "true")
     monkeypatch.setenv("DCX_ENVIRONMENT", "local")
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
 
     payload = send_email_via_resend(
         email_delivery_draft={
@@ -37,12 +40,17 @@ def test_resend_adapter_builds_test_mode_params_with_explicit_sender_and_overrid
     assert payload["provider_message_id"] == "email_123"
 
 
-def test_resend_adapter_falls_back_to_legacy_sender_env_names_when_generic_aliases_are_missing(monkeypatch) -> None:
+def test_resend_adapter_uses_message_sender_email_for_message_profile(monkeypatch) -> None:
+    captured_arguments = {}
+
+    def fake_send_email_with_provider(resend_send_params):
+        captured_arguments["resend_send_params"] = resend_send_params
+        return {"id": "email_message"}
+
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL", "team@dcxagent.ai")
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_RESEND_FROM_NAME", "DCX")
-    monkeypatch.delenv("DCX_RESEND_TEST_RECIPIENT", raising=False)
-    monkeypatch.delenv("DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT", raising=False)
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_MESSAGES", "chat@dcxagent.ai")
+    monkeypatch.delenv("RESEND_TEST_RECIPIENT", raising=False)
 
     payload = send_email_via_resend(
         email_delivery_draft={
@@ -50,22 +58,19 @@ def test_resend_adapter_falls_back_to_legacy_sender_env_names_when_generic_alias
             "subject": "Subject",
             "text_body": "Hello\n\nBody",
         },
-        send_email_with_provider=lambda *_args: {"id": "email_legacy"},
+        sender_profile=DCX_RESEND_SENDER_PROFILE_MESSAGES,
+        send_email_with_provider=fake_send_email_with_provider,
     )
 
-    assert payload == {
-        "provider": "resend",
-        "status": "accepted",
-        "provider_message_id": "email_legacy",
-    }
+    assert captured_arguments["resend_send_params"]["from"] == "DCX <chat@dcxagent.ai>"
+    assert payload["provider_message_id"] == "email_message"
 
 
 def test_resend_adapter_returns_provider_message_id_when_provider_accepts_send(monkeypatch) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.delenv("DCX_RESEND_TEST_RECIPIENT", raising=False)
-    monkeypatch.delenv("DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT", raising=False)
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.delenv("RESEND_TEST_RECIPIENT", raising=False)
 
     payload = send_email_via_resend(
         email_delivery_draft={
@@ -91,10 +96,9 @@ def test_resend_adapter_prefers_explicit_html_body_when_present(monkeypatch) -> 
         return {"id": "email_789"}
 
     monkeypatch.setenv("RESEND_API_KEY", "test-api-key")
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
-    monkeypatch.delenv("DCX_RESEND_TEST_RECIPIENT", raising=False)
-    monkeypatch.delenv("DCX_EMAIL_SIGNUP_RESEND_TEST_RECIPIENT", raising=False)
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
+    monkeypatch.delenv("RESEND_TEST_RECIPIENT", raising=False)
 
     payload = send_email_via_resend(
         {
@@ -112,8 +116,8 @@ def test_resend_adapter_prefers_explicit_html_body_when_present(monkeypatch) -> 
 
 def test_resend_adapter_raises_clear_error_when_api_key_missing(monkeypatch) -> None:
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
 
     with pytest.raises(
         RuntimeError,
@@ -131,13 +135,12 @@ def test_resend_adapter_raises_clear_error_when_api_key_missing(monkeypatch) -> 
 
 def test_resend_adapter_raises_clear_error_when_sender_name_missing(monkeypatch) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.delenv("DCX_RESEND_FROM_NAME", raising=False)
-    monkeypatch.delenv("DCX_EMAIL_SIGNUP_RESEND_FROM_NAME", raising=False)
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
+    monkeypatch.delenv("RESEND_FROM_NAME", raising=False)
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
 
     with pytest.raises(
         RuntimeError,
-        match="API_PUBLIC_EMAIL_SIGNUP_RESEND_CONFIGURATION_MISSING:DCX_RESEND_FROM_NAME",
+        match="API_PUBLIC_EMAIL_SIGNUP_RESEND_CONFIGURATION_MISSING:RESEND_FROM_NAME",
     ):
         send_email_via_resend(
             email_delivery_draft={
@@ -151,13 +154,12 @@ def test_resend_adapter_raises_clear_error_when_sender_name_missing(monkeypatch)
 
 def test_resend_adapter_raises_clear_error_when_sender_email_missing(monkeypatch) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.delenv("DCX_RESEND_FROM_EMAIL", raising=False)
-    monkeypatch.delenv("DCX_EMAIL_SIGNUP_RESEND_FROM_EMAIL", raising=False)
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.delenv("RESEND_FROM_EMAIL_TRANSACTIONAL", raising=False)
 
     with pytest.raises(
         RuntimeError,
-        match="API_PUBLIC_EMAIL_SIGNUP_RESEND_CONFIGURATION_MISSING:DCX_RESEND_FROM_EMAIL",
+        match="API_PUBLIC_EMAIL_SIGNUP_RESEND_CONFIGURATION_MISSING:RESEND_FROM_EMAIL_TRANSACTIONAL",
     ):
         send_email_via_resend(
             email_delivery_draft={
@@ -171,8 +173,8 @@ def test_resend_adapter_raises_clear_error_when_sender_email_missing(monkeypatch
 
 def test_resend_adapter_raises_clear_error_when_required_draft_fields_are_missing(monkeypatch) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
-    monkeypatch.setenv("DCX_RESEND_FROM_NAME", "DCX")
-    monkeypatch.setenv("DCX_RESEND_FROM_EMAIL", "team@dcxagent.ai")
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
 
     with pytest.raises(
         RuntimeError,

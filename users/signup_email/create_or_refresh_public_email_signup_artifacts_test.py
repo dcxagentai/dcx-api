@@ -50,7 +50,7 @@ class FakeConnection:
 
 
 def test_creates_new_user_contact_method_identity_and_pending_challenge_for_new_email(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             None,
@@ -109,7 +109,7 @@ def test_creates_new_user_contact_method_identity_and_pending_challenge_for_new_
 
 
 def test_repeated_signup_within_cooldown_reuses_active_challenge_without_fresh_send(monkeypatch) -> None:
-    monkeypatch.setenv("DCX_EMAIL_SIGNUP_OTP_SECRET", "test_secret")
+    monkeypatch.setenv("DCX_SIGNUP_OTP_SECRET", "test_secret")
     fake_connection = FakeConnection(
         fetchone_results=[
             (1,),
