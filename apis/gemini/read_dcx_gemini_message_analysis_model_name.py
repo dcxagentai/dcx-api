@@ -1,8 +1,8 @@
 """
 CONTEXT:
 This file reads the configured Gemini model name for the DCX message-analysis pass.
-It exists so runtime code can move toward clearer provider-first environment variable naming
-without breaking existing environments that still use the older DCX-prefixed key.
+It exists so runtime code has one strict, provider-first source of truth for Gemini model
+selection and fails loudly when that production-critical configuration is missing.
 """
 
 from __future__ import annotations
@@ -14,11 +14,9 @@ def read_dcx_gemini_message_analysis_model_name() -> str:
     """
     CONTRACT:
       preconditions:
-        - Process environment variables may or may not include Gemini model configuration.
+        - Process environment variables must include GEMINI_MESSAGE_ANALYSIS_MODEL.
       postconditions:
-        - Returns one non-empty Gemini model name string.
-        - Prefers the provider-first GEMINI_MESSAGE_ANALYSIS_MODEL key.
-        - Falls back to the older DCX_GEMINI_MESSAGE_ANALYSIS_MODEL key for compatibility.
+        - Returns one non-empty Gemini model name string from GEMINI_MESSAGE_ANALYSIS_MODEL.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -26,34 +24,36 @@ def read_dcx_gemini_message_analysis_model_name() -> str:
 
     NARRATIVE:
       WHY this exists:
-        - The DCX stack is starting to normalize provider configuration names, and Gemini model
-          selection is the first live path we want to clean up without breaking current deploys.
+        - The DCX stack is normalizing provider configuration names, and Gemini message analysis
+          should fail fast when its model configuration is incomplete.
       WHEN TO USE it:
         - Use it anywhere the DCX Gemini message-analysis pass needs to resolve its runtime model.
       WHEN NOT TO USE it:
         - Do not use it for OpenAI derivation, admin-configured future model catalogs, or non-message Gemini tasks.
       WHAT CAN GO WRONG:
-        - Neither environment variable may be set, in which case the local default must carry the flow.
+        - GEMINI_MESSAGE_ANALYSIS_MODEL may be missing, in which case message analysis should fail
+          loudly so the operator can fix live configuration quickly.
       WHAT COMES NEXT:
         - A later admin-facing configuration surface can replace env-driven selection for production tuning.
 
     TESTS:
-      - prefers_provider_first_gemini_message_analysis_model_env
-      - falls_back_to_legacy_dcx_prefixed_model_env
-      - falls_back_to_local_default_when_no_env_is_present
+      - returns_provider_first_gemini_message_analysis_model_env
+      - raises_when_gemini_message_analysis_model_env_is_missing
 
     ERRORS:
-      - none:
-          suggested_action: Not applicable.
-          common_causes: []
-          recovery_steps: []
+      - API_DCX_GEMINI_MESSAGE_ANALYSIS_MODEL_NOT_CONFIGURED:
+          suggested_action: Set GEMINI_MESSAGE_ANALYSIS_MODEL in the backend environment and retry.
+          common_causes:
+            - missing provider model env on local
+            - missing provider model env on live
+          recovery_steps:
+            - Add GEMINI_MESSAGE_ANALYSIS_MODEL to the running environment.
+            - Restart or redeploy the backend so the new env is loaded.
           retry_safe: true
 
     CODE:
     """
-    return (
-        os.getenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "").strip()
-        or os.getenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", "").strip()
-        or os.getenv("MODEL_DCX_TEST", "").strip()
-        or "gemini-2.5-flash"
-    )
+    model_name = os.getenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "").strip()
+    if model_name == "":
+        raise RuntimeError("API_DCX_GEMINI_MESSAGE_ANALYSIS_MODEL_NOT_CONFIGURED")
+    return model_name

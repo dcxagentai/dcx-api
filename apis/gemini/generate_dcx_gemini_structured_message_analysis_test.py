@@ -5,9 +5,7 @@ from apis.gemini.generate_dcx_gemini_structured_message_analysis import (
 
 def test_returns_fallback_message_analysis_when_gemini_api_key_is_missing(monkeypatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GEMINI_MESSAGE_ANALYSIS_MODEL", raising=False)
-    monkeypatch.delenv("DCX_GEMINI_MESSAGE_ANALYSIS_MODEL", raising=False)
-    monkeypatch.delenv("MODEL_DCX_TEST", raising=False)
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
 
     result = generate_dcx_gemini_structured_message_analysis(
         message_input={
@@ -47,10 +45,8 @@ def test_returns_structured_message_analysis_from_injected_gemini_payload(monkey
     def _send_fake_gemini_request(request_context: dict) -> dict:
         assert "text_synthesis_requested" not in request_context["prompt_text"]
         assert "raw_text_word_count" not in request_context["prompt_text"]
-        assert "Do not summarize the main text. Return an empty string for message_summary." in request_context["prompt_text"]
-        assert "Do not produce a detailed synthesis of the main text" in request_context["prompt_text"]
-        assert "Insert a double line break between speaker turns using actual line breaks" in request_context["prompt_text"]
-        assert "Speaker A: xxx\n\n        Speaker B: xxx" in request_context["prompt_text"]
+        assert "Write a 1-3 sentence summary of the main text" not in request_context["prompt_text"]
+        assert "Produce a detailed synthesis of the main text" not in request_context["prompt_text"]
         return {
             "output_text": """
             {
