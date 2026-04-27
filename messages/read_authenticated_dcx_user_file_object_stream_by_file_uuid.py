@@ -86,15 +86,20 @@ def read_authenticated_dcx_user_file_object_stream_by_file_uuid(
                 cursor.execute(
                     """
                     SELECT
-                        bucket_alias,
-                        object_key,
-                        content_type,
-                        original_filename,
-                        file_kind
-                    FROM stephen_dcx_file_objects
-                    WHERE owner_user_id = %s
-                      AND file_uuid = %s
-                      AND is_private = TRUE
+                        file_object.bucket_alias,
+                        file_object.object_key,
+                        file_object.content_type,
+                        file_object.original_filename,
+                        file_object.file_kind,
+                        message.analysis_metadata_json
+                    FROM stephen_dcx_file_objects file_object
+                    LEFT JOIN stephen_dcx_contact_message_attachments attachment
+                      ON attachment.file_object_id = file_object.id
+                    LEFT JOIN stephen_dcx_contact_messages message
+                      ON message.id = attachment.message_id
+                    WHERE file_object.owner_user_id = %s
+                      AND file_object.file_uuid = %s
+                      AND file_object.is_private = TRUE
                     LIMIT 1
                     """,
                     (
@@ -107,6 +112,9 @@ def read_authenticated_dcx_user_file_object_stream_by_file_uuid(
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_FILE_OBJECT_READ_FAILED") from exc
 
     if file_object_row is None:
+        return None
+
+    if _read_dcx_message_is_prohibited_from_analysis_metadata_json(file_object_row[5]):
         return None
 
     try:
@@ -125,3 +133,9 @@ def read_authenticated_dcx_user_file_object_stream_by_file_uuid(
         "original_filename": file_object_row[3] or "attachment",
         "file_kind": file_object_row[4] or "other",
     }
+
+
+def _read_dcx_message_is_prohibited_from_analysis_metadata_json(analysis_metadata_json: Any) -> bool:
+    if not isinstance(analysis_metadata_json, dict):
+        return False
+    return str(analysis_metadata_json.get("moderation_status") or "").strip().lower() == "prohibited"

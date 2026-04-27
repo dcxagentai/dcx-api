@@ -144,15 +144,18 @@ def read_authenticated_dcx_user_contact_message_detail(
     if message_row is None:
         return None
 
+    moderation_status = _read_dcx_message_moderation_status_from_analysis_metadata_json(message_row[13])
+    message_is_prohibited = moderation_status == "prohibited"
+
     return {
         "message_id": message_row[0],
         "channel_type": message_row[1],
         "provider_type": message_row[2],
         "message_direction": message_row[3],
         "message_format": message_row[4],
-        "message_subject": message_row[5],
-        "raw_text_content": message_row[6],
-        "derived_text_content": message_row[7],
+        "message_subject": "" if message_is_prohibited else message_row[5],
+        "raw_text_content": "" if message_is_prohibited else message_row[6],
+        "derived_text_content": "" if message_is_prohibited else message_row[7],
         "analysis_summary_text": message_row[8],
         "processing_status": message_row[9],
         "derivation_status": message_row[10],
@@ -164,7 +167,7 @@ def read_authenticated_dcx_user_contact_message_detail(
         "received_at_ts_ms": message_row[16],
         "created_at_ts_ms": message_row[17],
         "updated_at_ts_ms": message_row[18],
-        "attachments": [
+        "attachments": ([] if message_is_prohibited else [
             {
                 "attachment_id": attachment_row[0],
                 "file_object_id": attachment_row[1],
@@ -189,5 +192,15 @@ def read_authenticated_dcx_user_contact_message_detail(
                 "attachment_url_path": f"/users/me/messages/{message_id}/attachments/{attachment_row[0]}/file",
             }
             for attachment_row in attachment_rows
-        ],
+        ]),
     }
+
+
+def _read_dcx_message_moderation_status_from_analysis_metadata_json(analysis_metadata_json: Any) -> str:
+    if not isinstance(analysis_metadata_json, dict):
+        return "not_reviewed"
+
+    normalized_status = str(analysis_metadata_json.get("moderation_status") or "").strip().lower()
+    if normalized_status in {"allowed", "prohibited"}:
+        return normalized_status
+    return "not_reviewed"

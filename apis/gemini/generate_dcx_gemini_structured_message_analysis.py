@@ -19,6 +19,18 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_26_v3"
 DCX_MESSAGE_TEXT_SUMMARY_WORD_COUNT_THRESHOLD = 100
 DCX_MESSAGE_TEXT_SYNTHESIS_WORD_COUNT_THRESHOLD = 500
+DCX_PROHIBITED_MESSAGE_REASON_CODES = (
+    "prohibited_children",
+    "prohibited_sexually_explicit",
+    "prohibited_exploitation_or_trafficking",
+    "prohibited_drugs",
+    "prohibited_weapons_explosives_conventional",
+    "prohibited_weapons_nuclear_chemical",
+    "prohibited_extremism_terrorism",
+    "prohibited_organised_crime",
+    "prohibited_fraud",
+    "prohibited_sanctions",
+)
 
 
 def generate_dcx_gemini_structured_message_analysis(
@@ -219,7 +231,27 @@ Return JSON only. Do not wrap JSON in markdown.
 
 - Describe each attachment's role within or contribution to the overall context of the message;
 - Use empty strings for fields that do not apply.
+- Return one moderation decision for the whole message:
+    - moderation_status = "allowed" when no prohibited content is found;
+    - moderation_status = "prohibited" when any part of the message or any attachment matches one or more prohibited categories.
+- If moderation_status = "prohibited":
+    - include every matching prohibited category code in matched_prohibited_categories;
+    - include a short moderation_reason_summary explaining what triggered the block;
+    - do not soften or omit categories just because the message is commercial or framed as a trade.
 </analysis_rules>
+
+<prohibited_categories>
+- prohibited_children
+- prohibited_sexually_explicit
+- prohibited_exploitation_or_trafficking
+- prohibited_drugs
+- prohibited_weapons_explosives_conventional
+- prohibited_weapons_nuclear_chemical
+- prohibited_extremism_terrorism
+- prohibited_organised_crime
+- prohibited_fraud
+- prohibited_sanctions
+</prohibited_categories>
 
 <message>
   <message_id>{message_input['message_id']}</message_id>
@@ -243,6 +275,12 @@ def _build_dcx_message_analysis_response_schema() -> dict:
             "message_language_code": {"type": "STRING", "nullable": True},
             "message_summary": {"type": "string"},
             "message_text_synthesis": {"type": "string"},
+            "moderation_status": {"type": "string"},
+            "moderation_reason_summary": {"type": "string"},
+            "matched_prohibited_categories": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
             "attachments": {
                 "type": "array",
                 "items": {
@@ -278,6 +316,9 @@ def _build_dcx_message_analysis_response_schema() -> dict:
             "message_language_code",
             "message_summary",
             "message_text_synthesis",
+            "moderation_status",
+            "moderation_reason_summary",
+            "matched_prohibited_categories",
             "attachments",
         ],
     }
@@ -350,6 +391,17 @@ def _normalize_gemini_message_analysis_output(
     if raw_text_word_count < DCX_MESSAGE_TEXT_SYNTHESIS_WORD_COUNT_THRESHOLD:
         message_text_synthesis = ""
 
+    moderation_status = _normalize_moderation_status(parsed_output.get("moderation_status"))
+    moderation_reason_codes = _normalize_prohibited_category_codes(
+        parsed_output.get("matched_prohibited_categories")
+    )
+    moderation_reason_summary = str(parsed_output.get("moderation_reason_summary") or "").strip()
+    if moderation_status != "prohibited":
+        moderation_reason_codes = []
+        moderation_reason_summary = ""
+    elif moderation_reason_summary == "":
+        moderation_reason_summary = "The message matched one or more prohibited content categories."
+
     return {
         "provider_name": provider_name,
         "model_name": model_name,
@@ -359,6 +411,9 @@ def _normalize_gemini_message_analysis_output(
         "message_summary": message_summary,
         "message_text_synthesis": message_text_synthesis,
         "message_analysis_status": "completed",
+        "moderation_status": moderation_status,
+        "moderation_reason_summary": moderation_reason_summary,
+        "matched_prohibited_categories": moderation_reason_codes,
         "attachments": normalized_attachments,
         "raw_output_json": parsed_output,
     }
@@ -382,6 +437,9 @@ def _build_fallback_message_analysis(
         "message_summary": _fallback_message_summary(message_input) if should_summarize_message_text else "",
         "message_text_synthesis": "",
         "message_analysis_status": "completed",
+        "moderation_status": "not_reviewed",
+        "moderation_reason_summary": "",
+        "matched_prohibited_categories": [],
         "attachments": [
             {
                 "attachment_id": file_input["attachment_id"],
@@ -453,6 +511,30 @@ def _normalize_language_code(value: Any) -> str | None:
     if normalized_value == "":
         return None
     return normalized_value[:12]
+
+
+def _normalize_moderation_status(value: Any) -> str:
+    normalized_value = str(value or "").strip().lower()
+    if normalized_value == "prohibited":
+        return "prohibited"
+    if normalized_value == "allowed":
+        return "allowed"
+    return "allowed"
+
+
+def _normalize_prohibited_category_codes(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    normalized_codes: list[str] = []
+    for item in value:
+        normalized_item = str(item or "").strip().lower()
+        if (
+            normalized_item in DCX_PROHIBITED_MESSAGE_REASON_CODES
+            and normalized_item not in normalized_codes
+        ):
+            normalized_codes.append(normalized_item)
+    return normalized_codes
 
 
 def _normalize_audio_transcription_paragraphs(value: str) -> str:

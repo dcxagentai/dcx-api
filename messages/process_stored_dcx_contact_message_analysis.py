@@ -127,6 +127,7 @@ def process_stored_dcx_contact_message_analysis(
             "processing_status": message_input["processing_status"],
             "analysis_status": message_input["analysis_status"],
             "derivation_status": message_input.get("derivation_status", "completed"),
+            "moderation_status": message_input.get("moderation_status", "not_reviewed"),
             "was_noop": True,
         }
 
@@ -143,7 +144,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_result = _build_failed_analysis_result(
             error_code=str(runtime_error),
             error_detail=_read_exception_detail(runtime_error),
-            model_name=read_dcx_gemini_message_analysis_model_name(),
+            model_name=_read_best_effort_gemini_message_analysis_model_name(),
         )
         analysis_run_status = "failed"
         analysis_error_code = str(runtime_error)
@@ -151,7 +152,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_result = _build_failed_analysis_result(
             error_code="API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED",
             error_detail=_read_exception_detail(exc),
-            model_name=read_dcx_gemini_message_analysis_model_name(),
+            model_name=_read_best_effort_gemini_message_analysis_model_name(),
         )
         analysis_run_status = "failed"
         analysis_error_code = "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"
@@ -178,6 +179,7 @@ def process_stored_dcx_contact_message_analysis(
         "processing_status": "ready" if analysis_run_status == "completed" else "failed",
         "analysis_status": analysis_result.get("message_analysis_status", "failed"),
         "derivation_status": "completed" if analysis_run_status == "completed" else "failed",
+        "moderation_status": analysis_result.get("moderation_status", "not_reviewed"),
         "was_noop": False,
     }
 
@@ -196,7 +198,8 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
                     raw_text_content,
                     processing_status,
                     derivation_status,
-                    analysis_status
+                    analysis_status,
+                    analysis_metadata_json
                 FROM stephen_dcx_contact_messages
                 WHERE id = %s
                 LIMIT 1
@@ -227,6 +230,7 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
                         "processing_status": message_row[6],
                         "derivation_status": message_row[7],
                         "analysis_status": message_row[8],
+                        "moderation_status": _read_moderation_status_from_message_metadata(message_row[9]),
                     },
                     [],
                     latest_job_row[0] if latest_job_row is not None else None,
@@ -392,8 +396,27 @@ def _persist_message_analysis_result(
     now_ts_ms: int,
 ) -> None:
     message_analysis_status = analysis_result.get("message_analysis_status", "failed")
+    message_moderation_status = analysis_result.get("moderation_status", "not_reviewed")
+    message_is_prohibited = message_moderation_status == "prohibited"
     processing_status = "ready" if analysis_run_status == "completed" else "failed"
     derivation_status = "completed" if analysis_run_status == "completed" else "failed"
+    moderated_message_summary = (
+        "Message blocked for prohibited content."
+        if message_is_prohibited
+        else analysis_result.get("message_summary", "")
+    )
+    moderated_message_text_synthesis = (
+        ""
+        if message_is_prohibited
+        else analysis_result.get("message_text_synthesis", "")
+    )
+    moderated_message_subject = "" if message_is_prohibited else message_input.get("message_subject", "")
+    moderated_raw_text_content = "" if message_is_prohibited else message_input.get("raw_text_content", "")
+    moderation_metadata_json = {
+        "moderation_status": message_moderation_status,
+        "moderation_reason_codes": analysis_result.get("matched_prohibited_categories", []),
+        "moderation_reason_summary": analysis_result.get("moderation_reason_summary", ""),
+    }
 
     with connect(**DB_CONFIG) as connection:
         with connection.cursor() as cursor:
@@ -406,6 +429,8 @@ def _persist_message_analysis_result(
                 """
                 UPDATE stephen_dcx_contact_messages
                 SET
+                    message_subject = %s,
+                    raw_text_content = %s,
                     analysis_summary_text = %s,
                     derived_text_content = %s,
                     detected_language_id = %s,
@@ -418,8 +443,10 @@ def _persist_message_analysis_result(
                 WHERE id = %s
                 """,
                 (
-                    analysis_result.get("message_summary", ""),
-                    analysis_result.get("message_text_synthesis", ""),
+                    moderated_message_subject,
+                    moderated_raw_text_content,
+                    moderated_message_summary,
+                    moderated_message_text_synthesis,
                     detected_language_id,
                     processing_status,
                     derivation_status,
@@ -430,6 +457,7 @@ def _persist_message_analysis_result(
                             "provider_name": analysis_result.get("provider_name", ""),
                             "analysis_mode": analysis_result.get("analysis_mode", ""),
                             "prompt_version": analysis_result.get("prompt_version", ""),
+                            **moderation_metadata_json,
                         }
                     ),
                     now_ts_ms if analysis_run_status == "completed" else None,
@@ -459,12 +487,36 @@ def _persist_message_analysis_result(
                     WHERE id = %s
                     """,
                     (
-                        attachment_analysis.get("analysis_status", "completed"),
-                        attachment_analysis.get("summary", ""),
-                        attachment_analysis.get("description", ""),
-                        attachment_analysis.get("transcription", ""),
-                        attachment_analysis.get("synthesis", ""),
-                        attachment_analysis.get("context_within_message", ""),
+                        (
+                            "skipped"
+                            if message_is_prohibited
+                            else attachment_analysis.get("analysis_status", "completed")
+                        ),
+                        (
+                            ""
+                            if message_is_prohibited
+                            else attachment_analysis.get("summary", "")
+                        ),
+                        (
+                            ""
+                            if message_is_prohibited
+                            else attachment_analysis.get("description", "")
+                        ),
+                        (
+                            ""
+                            if message_is_prohibited
+                            else attachment_analysis.get("transcription", "")
+                        ),
+                        (
+                            ""
+                            if message_is_prohibited
+                            else attachment_analysis.get("synthesis", "")
+                        ),
+                        (
+                            ""
+                            if message_is_prohibited
+                            else attachment_analysis.get("context_within_message", "")
+                        ),
                         analysis_result.get("model_name", ""),
                         psycopg2.extras.Json(
                             {
@@ -472,9 +524,13 @@ def _persist_message_analysis_result(
                                 "analysis_mode": analysis_result.get("analysis_mode", ""),
                                 "prompt_version": analysis_result.get("prompt_version", ""),
                                 "attachment_id": attachment_analysis.get("attachment_id"),
+                                **moderation_metadata_json,
                             }
                         ),
-                        now_ts_ms if attachment_analysis.get("analysis_status") in {"completed", "partial", "skipped"} else None,
+                        now_ts_ms if (
+                            message_is_prohibited
+                            or attachment_analysis.get("analysis_status") in {"completed", "partial", "skipped"}
+                        ) else None,
                         file_language_id,
                         attachment_analysis["file_object_id"],
                     ),
@@ -502,7 +558,11 @@ def _persist_message_analysis_result(
                     WHERE id = ANY(%s)
                     """,
                     (
-                        "failed" if analysis_run_status == "failed" else "skipped",
+                        (
+                            "failed"
+                            if analysis_run_status == "failed"
+                            else "skipped"
+                        ),
                         analysis_result.get("model_name", ""),
                         psycopg2.extras.Json(
                             {
@@ -510,6 +570,7 @@ def _persist_message_analysis_result(
                                 "analysis_mode": analysis_result.get("analysis_mode", ""),
                                 "prompt_version": analysis_result.get("prompt_version", ""),
                                 "error_code": analysis_error_code,
+                                **moderation_metadata_json,
                             }
                         ),
                         now_ts_ms if analysis_run_status == "completed" else None,
@@ -624,12 +685,31 @@ def _build_failed_analysis_result(
         "message_summary": "Message analysis failed.",
         "message_text_synthesis": "",
         "message_analysis_status": "failed",
+        "moderation_status": "not_reviewed",
+        "moderation_reason_summary": "",
+        "matched_prohibited_categories": [],
         "attachments": [],
         "raw_output_json": {
             "error_code": error_code,
             "error_detail": error_detail,
         },
     }
+
+
+def _read_best_effort_gemini_message_analysis_model_name() -> str:
+    try:
+        return read_dcx_gemini_message_analysis_model_name()
+    except RuntimeError:
+        return ""
+
+
+def _read_moderation_status_from_message_metadata(message_metadata: Any) -> str:
+    if not isinstance(message_metadata, dict):
+        return "not_reviewed"
+    normalized_status = str(message_metadata.get("moderation_status") or "").strip().lower()
+    if normalized_status in {"allowed", "prohibited"}:
+        return normalized_status
+    return "not_reviewed"
 
 
 def _read_exception_detail(exc: Exception) -> str:

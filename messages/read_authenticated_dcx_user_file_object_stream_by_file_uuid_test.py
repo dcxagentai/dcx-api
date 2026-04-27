@@ -59,7 +59,7 @@ def test_returns_file_stream_when_file_uuid_belongs_to_user(monkeypatch) -> None
         authenticated_user_id=7,
         file_uuid="00000000-0000-0000-0000-000000000801",
         connect_to_database=lambda **_kwargs: _FakeConnection(
-            _FakeCursor([("app", "opaque-r2-key", "image/png", "test.png", "image")])
+            _FakeCursor([("app", "opaque-r2-key", "image/png", "test.png", "image", None)])
         ),
         build_r2_client=lambda: _FakeR2Client(b"image-bytes"),
     )
@@ -88,6 +88,19 @@ def test_returns_none_when_file_uuid_is_missing() -> None:
         authenticated_user_id=7,
         file_uuid="00000000-0000-0000-0000-000000000801",
         connect_to_database=lambda **_kwargs: _FakeConnection(_FakeCursor([None])),
+        build_r2_client=lambda: _FakeR2Client(b"unused"),
+    )
+
+    assert result is None
+
+
+def test_returns_none_when_parent_message_metadata_marks_file_as_prohibited() -> None:
+    result = read_authenticated_dcx_user_file_object_stream_by_file_uuid(
+        authenticated_user_id=7,
+        file_uuid="00000000-0000-0000-0000-000000000801",
+        connect_to_database=lambda **_kwargs: _FakeConnection(
+            _FakeCursor([("app", "opaque-r2-key", "image/png", "test.png", "image", {"moderation_status": "prohibited"})])
+        ),
         build_r2_client=lambda: _FakeR2Client(b"unused"),
     )
 

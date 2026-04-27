@@ -109,6 +109,7 @@ def read_authenticated_dcx_user_messages_inbox(
                             message.processing_status,
                             message.derivation_status,
                             message.analysis_status,
+                            message.analysis_metadata_json,
                             language.language_code,
                             message.received_at_ts_ms,
                             message.created_at_ts_ms,
@@ -166,6 +167,7 @@ def read_authenticated_dcx_user_messages_inbox(
                             message.processing_status,
                             message.derivation_status,
                             message.analysis_status,
+                            message.analysis_metadata_json,
                             language.language_code,
                             message.received_at_ts_ms,
                             message.created_at_ts_ms,
@@ -232,30 +234,35 @@ def read_authenticated_dcx_user_messages_inbox(
             "provider_type": row[2],
             "message_direction": row[3],
             "message_format": row[4],
-            "message_subject": row[5],
-            "raw_text_content": row[6],
-            "derived_text_content": row[7],
+            "message_subject": "" if _read_dcx_message_is_prohibited_from_analysis_metadata_json(row[12]) else row[5],
+            "raw_text_content": "" if _read_dcx_message_is_prohibited_from_analysis_metadata_json(row[12]) else row[6],
+            "derived_text_content": "" if _read_dcx_message_is_prohibited_from_analysis_metadata_json(row[12]) else row[7],
             "analysis_summary_text": row[8],
             "processing_status": row[9],
             "derivation_status": row[10],
             "analysis_status": row[11],
-            "detected_language_code": row[12],
-            "received_at_ts_ms": row[13],
-            "created_at_ts_ms": row[14],
+            "analysis_metadata_json": row[12] if isinstance(row[12], dict) else {},
+            "detected_language_code": row[13],
+            "received_at_ts_ms": row[14],
+            "created_at_ts_ms": row[15],
             "contact_method": (
                 {
-                    "id": row[15],
-                    "contact_type": row[16],
-                    "contact_value": row[17],
-                    "normalized_value": row[18],
-                    "display_label": row[19],
+                    "id": row[16],
+                    "contact_type": row[17],
+                    "contact_value": row[18],
+                    "normalized_value": row[19],
+                    "display_label": row[20],
                 }
-                if row[15] is not None
+                if row[16] is not None
                 else None
             ),
-            "source_handle_normalized": row[20],
-            "target_handle_normalized": row[21],
-            "attachment_summaries": row[22] if isinstance(row[22], list) else [],
+            "source_handle_normalized": row[21],
+            "target_handle_normalized": row[22],
+            "attachment_summaries": (
+                []
+                if _read_dcx_message_is_prohibited_from_analysis_metadata_json(row[12])
+                else (row[23] if isinstance(row[23], list) else [])
+            ),
         }
         for row in message_rows
     ]
@@ -265,3 +272,9 @@ def read_authenticated_dcx_user_messages_inbox(
         "selected_filter": normalized_filter,
         "total_message_count": len(messages),
     }
+
+
+def _read_dcx_message_is_prohibited_from_analysis_metadata_json(analysis_metadata_json: Any) -> bool:
+    if not isinstance(analysis_metadata_json, dict):
+        return False
+    return str(analysis_metadata_json.get("moderation_status") or "").strip().lower() == "prohibited"

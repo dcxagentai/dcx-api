@@ -218,3 +218,73 @@ def test_returns_none_when_message_is_missing() -> None:
     )
 
     assert result is None
+
+
+def test_redacts_prohibited_message_detail_and_hides_attachments() -> None:
+    result = read_authenticated_dcx_user_contact_message_detail(
+        authenticated_user_id=77,
+        message_id=903,
+        connect_to_database=lambda **_kwargs: _FakeConnection(
+            _FakeCursor(
+                [
+                    (
+                        903,
+                        "app",
+                        "dcx_app",
+                        "inbound",
+                        "mixed",
+                        "Blocked subject",
+                        "Blocked body",
+                        "Blocked synthesis",
+                        "Message blocked for prohibited content.",
+                        "ready",
+                        "completed",
+                        "completed",
+                        "gemini-test",
+                        {
+                            "moderation_status": "prohibited",
+                            "moderation_reason_codes": ["prohibited_fraud"],
+                            "moderation_reason_summary": "The message was blocked for prohibited fraud content.",
+                        },
+                        1777000004000,
+                        "en",
+                        1777000000000,
+                        1777000000000,
+                        1777000005000,
+                    )
+                ],
+                [
+                    [
+                        (
+                            72,
+                            82,
+                            "primary_media",
+                            "provider-media-123",
+                            1,
+                            "00000000-0000-0000-0000-000000000802",
+                            "image",
+                            "image/jpeg",
+                            54321,
+                            "blocked.jpg",
+                            "completed",
+                            "Should not leak.",
+                            "Should not leak.",
+                            "",
+                            "",
+                            "",
+                            "gemini-test",
+                            {},
+                            1777000004000,
+                            "en",
+                        )
+                    ]
+                ],
+            )
+        ),
+    )
+
+    assert result is not None
+    assert result["message_subject"] == ""
+    assert result["raw_text_content"] == ""
+    assert result["derived_text_content"] == ""
+    assert result["attachments"] == []

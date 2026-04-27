@@ -64,6 +64,7 @@ def test_returns_filtered_visible_messages_for_authenticated_user() -> None:
                             "ready",
                             "completed",
                             "completed",
+                            {},
                             "es",
                             1777000000000,
                             1777000000000,
@@ -93,6 +94,7 @@ def test_returns_filtered_visible_messages_for_authenticated_user() -> None:
     assert result["total_message_count"] == 1
     assert result["messages"][0]["message_id"] == 901
     assert result["messages"][0]["detected_language_code"] == "es"
+    assert result["messages"][0]["analysis_metadata_json"] == {}
     assert result["messages"][0]["contact_method"] == {
         "id": 55,
         "contact_type": "email",
@@ -120,3 +122,61 @@ def test_raises_when_message_format_filter_is_invalid() -> None:
         assert str(runtime_error) == "API_AUTHENTICATED_DCX_USER_MESSAGES_FILTER_INVALID"
     else:
         raise AssertionError("Expected invalid message filter to raise")
+
+
+def test_redacts_prohibited_message_content_and_attachment_summaries() -> None:
+    result = read_authenticated_dcx_user_messages_inbox(
+        authenticated_user_id=77,
+        message_format_filter="all",
+        connect_to_database=lambda **_kwargs: _FakeConnection(
+            _FakeCursor(
+                fetchone_values=[(77,)],
+                fetchall_values=[
+                    [
+                        (
+                            902,
+                            "whatsapp",
+                            "meta_whatsapp",
+                            "inbound",
+                            "mixed",
+                            "Sensitive subject",
+                            "Sensitive body",
+                            "Sensitive synthesis",
+                            "Message blocked for prohibited content.",
+                            "ready",
+                            "completed",
+                            "completed",
+                            {
+                                "moderation_status": "prohibited",
+                                "moderation_reason_codes": ["prohibited_sanctions", "prohibited_fraud"],
+                                "moderation_reason_summary": "The message was blocked for prohibited sanctions-evasion and fraud content.",
+                            },
+                            "en",
+                            1777000001000,
+                            1777000001000,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            "+123456789",
+                            "chat@mail.dcxagent.ai",
+                            [
+                                {
+                                    "attachment_id": 88,
+                                    "file_kind": "image",
+                                    "original_filename": "blocked.jpg",
+                                    "analysis_summary_text": "Should not leak.",
+                                }
+                            ],
+                        )
+                    ]
+                ],
+            )
+        ),
+    )
+
+    assert result["messages"][0]["message_subject"] == ""
+    assert result["messages"][0]["raw_text_content"] == ""
+    assert result["messages"][0]["derived_text_content"] == ""
+    assert result["messages"][0]["attachment_summaries"] == []

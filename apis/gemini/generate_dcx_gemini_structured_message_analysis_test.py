@@ -53,6 +53,9 @@ def test_returns_structured_message_analysis_from_injected_gemini_payload(monkey
               "message_language_code": "en",
               "message_summary": "",
               "message_text_synthesis": "",
+              "moderation_status": "allowed",
+              "moderation_reason_summary": "",
+              "matched_prohibited_categories": [],
               "attachments": [
                 {
                   "attachment_id": 71,
@@ -116,6 +119,9 @@ def test_includes_main_text_synthesis_instruction_only_when_python_word_count_th
               "message_language_code": "en",
               "message_summary": "The sender shares a long market note.",
               "message_text_synthesis": "A materially complete synthesis.",
+              "moderation_status": "allowed",
+              "moderation_reason_summary": "",
+              "matched_prohibited_categories": [],
               "attachments": []
             }
             """,
@@ -171,6 +177,9 @@ def test_blanks_image_attachment_synthesis_from_injected_gemini_payload(monkeypa
               "message_language_code": "en",
               "message_summary": "The sender asks DCX to review an image.",
               "message_text_synthesis": "",
+              "moderation_status": "allowed",
+              "moderation_reason_summary": "",
+              "matched_prohibited_categories": [],
               "attachments": [
                 {
                   "attachment_id": 72,
@@ -194,3 +203,44 @@ def test_blanks_image_attachment_synthesis_from_injected_gemini_payload(monkeypa
     assert result["attachments"][0]["summary"] == "The image shows a sericulture workspace."
     assert result["attachments"][0]["description"] == "A person works with trays of silkworm feed."
     assert result["attachments"][0]["synthesis"] == ""
+
+
+def test_returns_prohibited_categories_when_gemini_flags_message_content(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
+
+    result = generate_dcx_gemini_structured_message_analysis(
+        message_input={
+            "message_id": 904,
+            "channel_type": "app",
+            "provider_type": "dcx_app",
+            "message_format": "text",
+            "message_subject": "",
+            "raw_text_content": "Synthetic prohibited test message.",
+        },
+        file_inputs=[],
+        send_gemini_request=lambda _request_context: {
+            "output_text": """
+            {
+              "message_language_code": "en",
+              "message_summary": "",
+              "message_text_synthesis": "",
+              "moderation_status": "prohibited",
+              "moderation_reason_summary": "The message requests prohibited trafficking and sanctions evasion support.",
+              "matched_prohibited_categories": [
+                "prohibited_exploitation_or_trafficking",
+                "prohibited_sanctions",
+                "prohibited_sanctions"
+              ],
+              "attachments": []
+            }
+            """,
+        },
+    )
+
+    assert result["moderation_status"] == "prohibited"
+    assert result["moderation_reason_summary"] == "The message requests prohibited trafficking and sanctions evasion support."
+    assert result["matched_prohibited_categories"] == [
+        "prohibited_exploitation_or_trafficking",
+        "prohibited_sanctions",
+    ]

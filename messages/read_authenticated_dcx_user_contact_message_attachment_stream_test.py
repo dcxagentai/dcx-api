@@ -60,7 +60,7 @@ def test_returns_attachment_stream_when_attachment_belongs_to_user(monkeypatch) 
         message_id=33,
         attachment_id=99,
         connect_to_database=lambda **_kwargs: _FakeConnection(
-            _FakeCursor([("app", "messages/33/test.png", "image/png", "test.png", "image")])
+            _FakeCursor([("app", "messages/33/test.png", "image/png", "test.png", "image", {})])
         ),
         build_r2_client=lambda: _FakeR2Client(b"image-bytes"),
     )
@@ -79,6 +79,31 @@ def test_returns_none_when_attachment_is_missing() -> None:
         message_id=33,
         attachment_id=99,
         connect_to_database=lambda **_kwargs: _FakeConnection(_FakeCursor([None])),
+        build_r2_client=lambda: _FakeR2Client(b"unused"),
+    )
+
+    assert result is None
+
+
+def test_returns_none_when_parent_message_is_prohibited() -> None:
+    result = read_authenticated_dcx_user_contact_message_attachment_stream(
+        authenticated_user_id=7,
+        message_id=33,
+        attachment_id=99,
+        connect_to_database=lambda **_kwargs: _FakeConnection(
+            _FakeCursor(
+                [
+                    (
+                        "app",
+                        "messages/33/test.png",
+                        "image/png",
+                        "test.png",
+                        "image",
+                        {"moderation_status": "prohibited"},
+                    )
+                ]
+            )
+        ),
         build_r2_client=lambda: _FakeR2Client(b"unused"),
     )
 

@@ -84,7 +84,8 @@ def read_authenticated_dcx_user_contact_message_attachment_stream(
                         file_object.object_key,
                         file_object.content_type,
                         file_object.original_filename,
-                        file_object.file_kind
+                        file_object.file_kind,
+                        message.analysis_metadata_json
                     FROM stephen_dcx_contact_message_attachments attachment
                     INNER JOIN stephen_dcx_contact_messages message
                       ON message.id = attachment.message_id
@@ -109,6 +110,9 @@ def read_authenticated_dcx_user_contact_message_attachment_stream(
     if attachment_row is None:
         return None
 
+    if _read_dcx_message_is_prohibited_from_analysis_metadata_json(attachment_row[5]):
+        return None
+
     try:
         r2_object_response = (build_r2_client or build_dcx_r2_s3_client)().get_object(
             Bucket=read_dcx_r2_bucket_name_for_alias(attachment_row[0]),
@@ -125,3 +129,9 @@ def read_authenticated_dcx_user_contact_message_attachment_stream(
         "original_filename": attachment_row[3] or "attachment",
         "file_kind": attachment_row[4] or "other",
     }
+
+
+def _read_dcx_message_is_prohibited_from_analysis_metadata_json(analysis_metadata_json: Any) -> bool:
+    if not isinstance(analysis_metadata_json, dict):
+        return False
+    return str(analysis_metadata_json.get("moderation_status") or "").strip().lower() == "prohibited"

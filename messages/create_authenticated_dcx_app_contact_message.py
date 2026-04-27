@@ -433,6 +433,9 @@ def _wrap_legacy_dcx_message_derivation_callable_for_analysis(derive_message_wit
             "message_summary": derivation_result.get("analysis_summary_text", ""),
             "message_text_synthesis": derivation_result.get("derived_text_content", ""),
             "message_analysis_status": "completed",
+            "moderation_status": "allowed",
+            "moderation_reason_summary": "",
+            "matched_prohibited_categories": [],
             "attachments": [],
             "raw_output_json": derivation_result,
         }
