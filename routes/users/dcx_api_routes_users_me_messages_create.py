@@ -7,6 +7,8 @@ while still returning the canonical message-detail payload.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -24,6 +26,7 @@ from messages.read_authenticated_dcx_user_contact_message_detail import (
 )
 
 dcx_api_routes_users_me_messages_create_router = APIRouter(prefix="/users", tags=["users"])
+logger = logging.getLogger(__name__)
 
 
 @dcx_api_routes_users_me_messages_create_router.post("/me/messages", response_model=None)
@@ -192,6 +195,25 @@ async def post_authenticated_dcx_user_message(
                     },
                 },
             )
+        if error_code == "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED":
+            logger.exception(
+                "Authenticated app message analysis failed after create boundary accepted the send."
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "API_USERS_ME_MESSAGE_ANALYSIS_PROCESS_FAILED",
+                        "message": "We stored that message but could not finish processing it right now.",
+                        "suggested_action": "Refresh Messages in a moment. If it still shows as failed, retry once the backend analysis service is healthy.",
+                    },
+                },
+            )
+        logger.exception(
+            "Authenticated app message create boundary failed with runtime code %s.",
+            error_code,
+        )
         return JSONResponse(
             status_code=500,
             content={

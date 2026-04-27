@@ -743,6 +743,34 @@ def test_users_me_messages_create_route_returns_message_detail_for_authenticated
     assert captured_creation_kwargs["attachment_inputs"][0]["file_bytes"] == b"pdf-bytes"
 
 
+def test_users_me_messages_create_route_surfaces_analysis_processing_failure() -> None:
+    with patch.object(
+        me_messages_create_routes,
+        "read_authenticated_dcx_user_id_or_error_response",
+        return_value=(1, "session_cookie", None),
+    ), patch.object(
+        me_messages_create_routes,
+        "create_authenticated_dcx_app_contact_message",
+        side_effect=RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"),
+    ):
+        response = client.post(
+            "/users/me/messages",
+            data={"message_text": "Hola, vendo trigo."},
+            headers=LOCAL_APP_ORIGIN_HEADERS,
+        )
+        payload = response.json()
+
+    assert response.status_code == 503
+    assert payload == {
+        "ok": False,
+        "error": {
+            "code": "API_USERS_ME_MESSAGE_ANALYSIS_PROCESS_FAILED",
+            "message": "We stored that message but could not finish processing it right now.",
+            "suggested_action": "Refresh Messages in a moment. If it still shows as failed, retry once the backend analysis service is healthy.",
+        },
+    }
+
+
 def test_users_me_message_detail_route_returns_message_for_authenticated_session() -> None:
     with patch.object(
         me_messages_detail_routes,

@@ -402,6 +402,8 @@ def create_authenticated_dcx_app_contact_message(
             ),
         )
         created_job_id = derivation_result["job_id"]
+    except RuntimeError:
+        raise
     except Exception as exc:
         raise RuntimeError("API_AUTHENTICATED_DCX_CONTACT_MESSAGE_CREATE_FAILED") from exc
 

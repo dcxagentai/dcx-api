@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from messages.create_authenticated_dcx_app_contact_message import (
     create_authenticated_dcx_app_contact_message,
 )
@@ -203,3 +205,24 @@ def test_raises_when_message_text_is_blank() -> None:
         assert str(runtime_error) == "API_AUTHENTICATED_DCX_CONTACT_MESSAGE_TEXT_REQUIRED"
     else:
         raise AssertionError("Expected blank message text to raise")
+
+
+def test_preserves_runtime_error_from_message_analysis_processing() -> None:
+    first_connection = _FakeConnection(_FakeCursor([(77,), (7001,)]))
+    second_connection = _FakeConnection(_FakeCursor([]))
+
+    with patch(
+        "messages.create_authenticated_dcx_app_contact_message.process_stored_dcx_contact_message_analysis",
+        side_effect=RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"),
+    ):
+        try:
+            create_authenticated_dcx_app_contact_message(
+                authenticated_user_id=77,
+                message_text="Hola, vendo trigo.",
+                connect_to_database=_ConnectFactory([first_connection, second_connection]),
+                current_timestamp_ms_provider=lambda: 1777000000000,
+            )
+        except RuntimeError as runtime_error:
+            assert str(runtime_error) == "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"
+        else:
+            raise AssertionError("Expected analysis processing failure to raise")
