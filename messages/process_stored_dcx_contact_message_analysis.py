@@ -7,6 +7,7 @@ message-level and file-level analysis fields using one shared lifecycle.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
 import psycopg2
@@ -16,12 +17,32 @@ from apis.gemini.generate_dcx_gemini_structured_message_analysis import (
     PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS,
     generate_dcx_gemini_structured_message_analysis,
 )
+from apis.gemini.generate_dcx_gemini_structured_market_topic_seed import (
+    generate_dcx_gemini_structured_market_topic_seed,
+)
+from apis.gemini.generate_dcx_gemini_structured_trade_projection import (
+    generate_dcx_gemini_structured_trade_projection,
+)
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.meta_whatsapp.send_dcx_whatsapp_trade_candidate_confirmation_message import (
+    send_dcx_whatsapp_trade_candidate_confirmation_message,
+)
+from emails.transactional.send_dcx_email_trade_candidate_confirmation_message import (
+    send_dcx_email_trade_candidate_confirmation_message,
+)
 from files.build_dcx_r2_s3_client import build_dcx_r2_s3_client
 from files.read_dcx_r2_bucket_name_for_alias import read_dcx_r2_bucket_name_for_alias
+from messages.build_dcx_app_trade_candidate_review_url import (
+    build_dcx_app_trade_candidate_review_url,
+)
+from messages.create_dcx_trade_identity_with_first_version import (
+    create_dcx_trade_identity_with_first_version,
+)
 from storage.db_config import DB_CONFIG
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def process_stored_dcx_contact_message_analysis(
@@ -128,6 +149,7 @@ def process_stored_dcx_contact_message_analysis(
             "analysis_status": message_input["analysis_status"],
             "derivation_status": message_input.get("derivation_status", "completed"),
             "moderation_status": message_input.get("moderation_status", "not_reviewed"),
+            "workflow_classification_status": message_input.get("workflow_classification_status", "completed"),
             "was_noop": True,
         }
 
@@ -158,7 +180,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_error_code = "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"
 
     try:
-        _persist_message_analysis_result(
+        pending_trade_confirmation_notifications = _persist_message_analysis_result(
             message_id=message_id,
             active_job_id=active_job_id,
             message_input=message_input,
@@ -173,6 +195,12 @@ def process_stored_dcx_contact_message_analysis(
     except Exception as exc:
         raise RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED") from exc
 
+    _deliver_trade_candidate_confirmation_notifications(
+        pending_notifications=pending_trade_confirmation_notifications,
+        connect=connect,
+        now_ts_ms=now_ts_ms,
+    )
+
     return {
         "message_id": message_id,
         "job_id": active_job_id,
@@ -180,6 +208,7 @@ def process_stored_dcx_contact_message_analysis(
         "analysis_status": analysis_result.get("message_analysis_status", "failed"),
         "derivation_status": "completed" if analysis_run_status == "completed" else "failed",
         "moderation_status": analysis_result.get("moderation_status", "not_reviewed"),
+        "workflow_classification_status": analysis_result.get("workflow_classification_status", "failed"),
         "was_noop": False,
     }
 
@@ -196,10 +225,20 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
                     message_format,
                     message_subject,
                     raw_text_content,
+                    user_id,
+                    contact_method_id,
                     processing_status,
                     derivation_status,
                     analysis_status,
-                    analysis_metadata_json
+                    analysis_metadata_json,
+                    workflow_classification_status,
+                    primary_workflow_kind,
+                    contains_trade_items,
+                    contains_market_topic_items,
+                    contains_other_items,
+                    workflow_reason_summary,
+                    workflow_metadata_json,
+                    source_handle_normalized
                 FROM stephen_dcx_contact_messages
                 WHERE id = %s
                 LIMIT 1
@@ -211,7 +250,11 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
             if message_row is None:
                 raise RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_MESSAGE_NOT_FOUND")
 
-            if message_row[8] in {"completed", "partial"} and message_row[6] == "ready":
+            if (
+                message_row[10] in {"completed", "partial"}
+                and message_row[8] == "ready"
+                and str(message_row[12] or "").strip().lower() == "completed"
+            ):
                 cursor.execute(
                     """
                     SELECT id
@@ -227,10 +270,11 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
                 return (
                     {
                         "was_noop": True,
-                        "processing_status": message_row[6],
-                        "derivation_status": message_row[7],
-                        "analysis_status": message_row[8],
-                        "moderation_status": _read_moderation_status_from_message_metadata(message_row[9]),
+                        "processing_status": message_row[8],
+                        "derivation_status": message_row[9],
+                        "analysis_status": message_row[10],
+                        "moderation_status": _read_moderation_status_from_message_metadata(message_row[11]),
+                        "workflow_classification_status": str(message_row[12] or "completed").strip() or "completed",
                     },
                     [],
                     latest_job_row[0] if latest_job_row is not None else None,
@@ -335,6 +379,9 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
             "message_format": message_row[3],
             "message_subject": message_row[4],
             "raw_text_content": message_row[5],
+            "user_id": message_row[6],
+            "contact_method_id": message_row[7],
+            "source_handle_normalized": message_row[19],
         },
         [
             {
@@ -350,8 +397,8 @@ def _claim_message_analysis_work(message_id: int, connect: Callable[..., Any], n
             }
             for row in attachment_rows
         ],
-        active_job_id,
-    )
+                active_job_id,
+            )
 
 
 def _read_message_analysis_file_inputs_from_r2(
@@ -394,7 +441,7 @@ def _persist_message_analysis_result(
     analysis_error_code: str | None,
     connect: Callable[..., Any],
     now_ts_ms: int,
-) -> None:
+) -> list[dict]:
     message_analysis_status = analysis_result.get("message_analysis_status", "failed")
     message_moderation_status = analysis_result.get("moderation_status", "not_reviewed")
     message_is_prohibited = message_moderation_status == "prohibited"
@@ -417,6 +464,10 @@ def _persist_message_analysis_result(
         "moderation_reason_codes": analysis_result.get("matched_prohibited_categories", []),
         "moderation_reason_summary": analysis_result.get("moderation_reason_summary", ""),
     }
+    workflow_projection_state = _build_message_workflow_projection_state(
+        analysis_result=analysis_result,
+        analysis_run_status=analysis_run_status,
+    )
 
     with connect(**DB_CONFIG) as connection:
         with connection.cursor() as cursor:
@@ -439,6 +490,13 @@ def _persist_message_analysis_result(
                     analysis_status = %s,
                     analysis_model_name = %s,
                     analysis_metadata_json = analysis_metadata_json || %s::jsonb,
+                    workflow_classification_status = %s,
+                    primary_workflow_kind = %s,
+                    contains_trade_items = %s,
+                    contains_market_topic_items = %s,
+                    contains_other_items = %s,
+                    workflow_reason_summary = %s,
+                    workflow_metadata_json = workflow_metadata_json || %s::jsonb,
                     analysis_completed_at_ts_ms = %s
                 WHERE id = %s
                 """,
@@ -460,9 +518,26 @@ def _persist_message_analysis_result(
                             **moderation_metadata_json,
                         }
                     ),
+                    workflow_projection_state["workflow_classification_status"],
+                    workflow_projection_state["primary_workflow_kind"],
+                    workflow_projection_state["contains_trade_items"],
+                    workflow_projection_state["contains_market_topic_items"],
+                    workflow_projection_state["contains_other_items"],
+                    workflow_projection_state["workflow_reason_summary"],
+                    psycopg2.extras.Json(workflow_projection_state["workflow_metadata_json"]),
                     now_ts_ms if analysis_run_status == "completed" else None,
                     message_id,
                 ),
+            )
+
+            pending_trade_confirmation_notifications = _rebuild_message_workflow_projections(
+                cursor=cursor,
+                message_id=message_id,
+                message_input=message_input,
+                attachment_inputs=attachment_inputs,
+                analysis_result=analysis_result,
+                analysis_run_status=analysis_run_status,
+                now_ts_ms=now_ts_ms,
             )
 
             for attachment_analysis in analysis_result.get("attachments", []):
@@ -653,6 +728,8 @@ def _persist_message_analysis_result(
                 ),
             )
 
+    return pending_trade_confirmation_notifications
+
 
 def _read_language_id_for_code(cursor: Any, language_code: Any) -> int | None:
     if not isinstance(language_code, str) or language_code.strip() == "":
@@ -688,6 +765,10 @@ def _build_failed_analysis_result(
         "moderation_status": "not_reviewed",
         "moderation_reason_summary": "",
         "matched_prohibited_categories": [],
+        "primary_workflow_kind": "",
+        "workflow_reason_summary": "",
+        "workflow_classification_status": "failed",
+        "workflow_items": [],
         "attachments": [],
         "raw_output_json": {
             "error_code": error_code,
@@ -710,6 +791,483 @@ def _read_moderation_status_from_message_metadata(message_metadata: Any) -> str:
     if normalized_status in {"allowed", "prohibited"}:
         return normalized_status
     return "not_reviewed"
+
+
+def _build_attachment_projection_inputs(
+    attachment_inputs: list[dict],
+    analysis_result: dict,
+) -> list[dict]:
+    analysis_by_attachment_id = {
+        attachment_analysis.get("attachment_id"): attachment_analysis
+        for attachment_analysis in analysis_result.get("attachments", [])
+        if attachment_analysis.get("attachment_id") is not None
+    }
+    return [
+        {
+            **attachment_input,
+            "analysis_summary_text": str(
+                analysis_by_attachment_id.get(attachment_input["attachment_id"], {}).get("summary") or ""
+            ).strip(),
+            "analysis_description_text": str(
+                analysis_by_attachment_id.get(attachment_input["attachment_id"], {}).get("description") or ""
+            ).strip(),
+            "analysis_transcription_text": str(
+                analysis_by_attachment_id.get(attachment_input["attachment_id"], {}).get("transcription") or ""
+            ).strip(),
+            "analysis_synthesis_text": str(
+                analysis_by_attachment_id.get(attachment_input["attachment_id"], {}).get("synthesis") or ""
+            ).strip(),
+            "context_within_message": str(
+                analysis_by_attachment_id.get(attachment_input["attachment_id"], {}).get("context_within_message") or ""
+            ).strip(),
+        }
+        for attachment_input in attachment_inputs
+    ]
+
+
+def _build_message_workflow_projection_state(
+    analysis_result: dict,
+    analysis_run_status: str,
+) -> dict:
+    if analysis_run_status != "completed":
+        return {
+            "workflow_classification_status": "failed",
+            "primary_workflow_kind": None,
+            "contains_trade_items": False,
+            "contains_market_topic_items": False,
+            "contains_other_items": False,
+            "workflow_reason_summary": "",
+            "workflow_metadata_json": {
+                "workflow_items": [],
+                "projection_errors": [],
+            },
+        }
+
+    if analysis_result.get("moderation_status") == "prohibited":
+        return {
+            "workflow_classification_status": "completed",
+            "primary_workflow_kind": None,
+            "contains_trade_items": False,
+            "contains_market_topic_items": False,
+            "contains_other_items": False,
+            "workflow_reason_summary": "",
+            "workflow_metadata_json": {
+                "workflow_items": [],
+                "projection_errors": [],
+            },
+        }
+
+    workflow_items = analysis_result.get("workflow_items", [])
+    primary_workflow_kind = str(analysis_result.get("primary_workflow_kind") or "").strip() or None
+    return {
+        "workflow_classification_status": str(analysis_result.get("workflow_classification_status") or "completed").strip() or "completed",
+        "primary_workflow_kind": primary_workflow_kind,
+        "contains_trade_items": any(item.get("item_kind") == "trade" for item in workflow_items),
+        "contains_market_topic_items": any(item.get("item_kind") == "market_topic" for item in workflow_items),
+        "contains_other_items": any(item.get("item_kind") == "other" for item in workflow_items),
+        "workflow_reason_summary": str(analysis_result.get("workflow_reason_summary") or "").strip(),
+        "workflow_metadata_json": {
+            "workflow_items": workflow_items,
+            "projection_errors": [],
+        },
+    }
+
+
+def _rebuild_message_workflow_projections(
+    cursor: Any,
+    message_id: int,
+    message_input: dict,
+    attachment_inputs: list[dict],
+    analysis_result: dict,
+    analysis_run_status: str,
+    now_ts_ms: int,
+) -> list[dict]:
+    enriched_attachment_inputs = _build_attachment_projection_inputs(
+        attachment_inputs=attachment_inputs,
+        analysis_result=analysis_result,
+    )
+    cursor.execute(
+        """
+        DELETE FROM stephen_dcx_market_topic_turns
+        WHERE market_topic_id IN (
+            SELECT id
+            FROM stephen_dcx_market_topics
+            WHERE source_message_id = %s
+        )
+        """,
+        (message_id,),
+    )
+    cursor.execute(
+        "DELETE FROM stephen_dcx_trades WHERE source_message_id_initial = %s",
+        (message_id,),
+    )
+    cursor.execute(
+        "DELETE FROM stephen_dcx_market_topics WHERE source_message_id = %s",
+        (message_id,),
+    )
+    cursor.execute(
+        "DELETE FROM stephen_dcx_message_workflow_items WHERE message_id = %s",
+        (message_id,),
+    )
+
+    if analysis_run_status != "completed" or analysis_result.get("moderation_status") == "prohibited":
+        return []
+
+    workflow_items = analysis_result.get("workflow_items", [])
+    if not isinstance(workflow_items, list) or not workflow_items:
+        return []
+
+    projection_errors: list[dict] = []
+    pending_trade_confirmation_notifications: list[dict] = []
+
+    for workflow_item_index, workflow_item in enumerate(workflow_items, start=1):
+        referenced_attachment_ids = workflow_item.get("referenced_attachment_ids", [])
+        cursor.execute(
+            """
+            INSERT INTO stephen_dcx_message_workflow_items (
+                message_id,
+                item_index,
+                item_kind,
+                item_status,
+                item_title,
+                item_summary_text,
+                source_excerpt_text,
+                referenced_attachment_ids_json,
+                confidence_label,
+                workflow_item_metadata_json,
+                created_at_ts_ms,
+                updated_at_ts_ms
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s, %s)
+            RETURNING id
+            """,
+            (
+                message_id,
+                workflow_item_index,
+                workflow_item.get("item_kind", "other"),
+                "identified",
+                workflow_item.get("item_title", ""),
+                workflow_item.get("item_summary", ""),
+                workflow_item.get("source_excerpt_text", ""),
+                psycopg2.extras.Json(referenced_attachment_ids),
+                workflow_item.get("confidence_label", "medium"),
+                psycopg2.extras.Json({"source_prompt": "message_analysis"}),
+                now_ts_ms,
+                now_ts_ms,
+            ),
+        )
+        workflow_item_id = cursor.fetchone()[0]
+        referenced_attachment_inputs = [
+            attachment_input
+            for attachment_input in enriched_attachment_inputs
+            if attachment_input["attachment_id"] in referenced_attachment_ids
+        ]
+
+        item_kind = workflow_item.get("item_kind")
+        if item_kind == "trade":
+            try:
+                trade_projection = generate_dcx_gemini_structured_trade_projection(
+                    message_input={
+                        **message_input,
+                        "analysis_summary_text": analysis_result.get("message_summary", ""),
+                        "derived_text_content": analysis_result.get("message_text_synthesis", ""),
+                    },
+                    workflow_item=workflow_item,
+                    attachment_inputs=referenced_attachment_inputs,
+                )
+                source_language_id = _read_language_id_for_code(
+                    cursor=cursor,
+                    language_code=analysis_result.get("message_language_code"),
+                )
+                trade_id = create_dcx_trade_identity_with_first_version(
+                    cursor=cursor,
+                    initiating_user_id=message_input.get("user_id"),
+                    initiating_contact_method_id=message_input.get("contact_method_id"),
+                    source_message_id=message_id,
+                    source_workflow_item_id=workflow_item_id,
+                    source_channel_type=message_input.get("channel_type", ""),
+                    source_language_id=source_language_id,
+                    trade_projection_status="completed",
+                    trade_confirmation_status=(
+                        "needs_more_detail" if trade_projection.get("missing_required_fields") else "pending_confirmation"
+                    ),
+                    trade_status="draft",
+                    trade_projection=trade_projection,
+                    version_source_type="llm_projection",
+                    now_ts_ms=now_ts_ms,
+                )
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_message_workflow_items
+                    SET item_status = 'projected', updated_at_ts_ms = %s
+                    WHERE id = %s
+                    """,
+                    (now_ts_ms, workflow_item_id),
+                )
+                pending_notification = _build_trade_candidate_confirmation_notification_payload(
+                    trade_id=trade_id,
+                    message_input=message_input,
+                    trade_projection=trade_projection,
+                )
+                if pending_notification is not None:
+                    pending_trade_confirmation_notifications.append(pending_notification)
+            except Exception as exc:
+                projection_errors.append(
+                    {
+                        "item_index": workflow_item_index,
+                        "item_kind": item_kind,
+                        "error_code": "API_DCX_GEMINI_TRADE_PROJECTION_FAILED",
+                        "error_detail": _read_exception_detail(exc),
+                    }
+                )
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_message_workflow_items
+                    SET item_status = 'failed', updated_at_ts_ms = %s
+                    WHERE id = %s
+                    """,
+                    (now_ts_ms, workflow_item_id),
+                )
+        elif item_kind == "market_topic":
+            try:
+                topic_seed = generate_dcx_gemini_structured_market_topic_seed(
+                    message_input={
+                        **message_input,
+                        "analysis_summary_text": analysis_result.get("message_summary", ""),
+                        "derived_text_content": analysis_result.get("message_text_synthesis", ""),
+                    },
+                    workflow_item=workflow_item,
+                    attachment_inputs=referenced_attachment_inputs,
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO stephen_dcx_market_topics (
+                        source_message_id,
+                        source_workflow_item_id,
+                        initiating_user_id,
+                        initiating_contact_method_id,
+                        topic_status,
+                        topic_title,
+                        topic_summary_text,
+                        topic_scope_text,
+                        topic_tags_json,
+                        topic_metadata_json,
+                        created_at_ts_ms,
+                        updated_at_ts_ms
+                    )
+                    VALUES (%s, %s, %s, %s, 'open', %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        message_id,
+                        workflow_item_id,
+                        message_input.get("user_id"),
+                        message_input.get("contact_method_id"),
+                        topic_seed.get("topic_title", ""),
+                        topic_seed.get("topic_summary_text", ""),
+                        topic_seed.get("topic_scope_text", ""),
+                        psycopg2.extras.Json(topic_seed.get("topic_tags", [])),
+                        psycopg2.extras.Json(
+                            {
+                                "provider_name": topic_seed.get("provider_name", ""),
+                                "model_name": topic_seed.get("model_name", ""),
+                                "prompt_version": topic_seed.get("prompt_version", ""),
+                                "suggested_next_prompts": topic_seed.get("suggested_next_prompts", []),
+                                "raw_output_json": topic_seed.get("raw_output_json", {}),
+                            }
+                        ),
+                        now_ts_ms,
+                        now_ts_ms,
+                    ),
+                )
+                market_topic_id = cursor.fetchone()[0]
+                cursor.execute(
+                    """
+                    INSERT INTO stephen_dcx_market_topic_turns (
+                        market_topic_id,
+                        turn_role,
+                        source_message_id,
+                        turn_text,
+                        turn_metadata_json,
+                        created_at_ts_ms,
+                        updated_at_ts_ms
+                    )
+                    VALUES
+                        (%s, 'user', %s, %s, %s::jsonb, %s, %s),
+                        (%s, 'assistant', %s, %s, %s::jsonb, %s, %s)
+                    """,
+                    (
+                        market_topic_id,
+                        message_id,
+                        workflow_item.get("source_excerpt_text") or workflow_item.get("item_summary", ""),
+                        psycopg2.extras.Json({"seed_turn": True}),
+                        now_ts_ms,
+                        now_ts_ms,
+                        market_topic_id,
+                        message_id,
+                        topic_seed.get("opening_ai_response_text", ""),
+                        psycopg2.extras.Json({"seed_turn": True}),
+                        now_ts_ms,
+                        now_ts_ms,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_message_workflow_items
+                    SET item_status = 'projected', updated_at_ts_ms = %s
+                    WHERE id = %s
+                    """,
+                    (now_ts_ms, workflow_item_id),
+                )
+            except Exception as exc:
+                projection_errors.append(
+                    {
+                        "item_index": workflow_item_index,
+                        "item_kind": item_kind,
+                        "error_code": "API_DCX_GEMINI_MARKET_TOPIC_SEED_FAILED",
+                        "error_detail": _read_exception_detail(exc),
+                    }
+                )
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_message_workflow_items
+                    SET item_status = 'failed', updated_at_ts_ms = %s
+                    WHERE id = %s
+                    """,
+                    (now_ts_ms, workflow_item_id),
+                )
+        else:
+            cursor.execute(
+                """
+                UPDATE stephen_dcx_message_workflow_items
+                SET item_status = 'projected', updated_at_ts_ms = %s
+                WHERE id = %s
+                """,
+                (now_ts_ms, workflow_item_id),
+            )
+
+    workflow_classification_status = "partial" if projection_errors else "completed"
+    cursor.execute(
+        """
+        UPDATE stephen_dcx_contact_messages
+        SET
+            workflow_classification_status = %s,
+            workflow_metadata_json = workflow_metadata_json || %s::jsonb,
+            workflow_completed_at_ts_ms = %s
+        WHERE id = %s
+        """,
+        (
+            workflow_classification_status,
+            psycopg2.extras.Json(
+                {
+                    "workflow_items": workflow_items,
+                    "projection_errors": projection_errors,
+                }
+            ),
+            now_ts_ms,
+            message_id,
+        ),
+    )
+    return pending_trade_confirmation_notifications
+
+
+def _build_trade_candidate_confirmation_notification_payload(
+    trade_id: int,
+    message_input: dict,
+    trade_projection: dict,
+) -> dict | None:
+    channel_type = str(message_input.get("channel_type") or "").strip().lower()
+    recipient_handle = str(message_input.get("source_handle_normalized") or "").strip()
+    if channel_type not in {"whatsapp", "email"} or recipient_handle == "":
+        return None
+
+    return {
+        "trade_id": trade_id,
+        "channel_type": channel_type,
+        "recipient_handle": recipient_handle,
+        "trade_summary_text": str(trade_projection.get("trade_summary_text") or "").strip(),
+    }
+
+
+def _deliver_trade_candidate_confirmation_notifications(
+    pending_notifications: list[dict],
+    connect: Callable[..., Any],
+    now_ts_ms: int,
+) -> None:
+    for pending_notification in pending_notifications:
+        trade_id = pending_notification["trade_id"]
+        trade_review_url = build_dcx_app_trade_candidate_review_url(trade_id)
+        trade_summary_text = pending_notification["trade_summary_text"] or f"Trade candidate #{trade_id}"
+
+        try:
+            if pending_notification["channel_type"] == "whatsapp":
+                send_dcx_whatsapp_trade_candidate_confirmation_message(
+                    phone_e164=pending_notification["recipient_handle"],
+                    trade_summary_text=trade_summary_text,
+                    trade_review_url=trade_review_url,
+                )
+            elif pending_notification["channel_type"] == "email":
+                send_dcx_email_trade_candidate_confirmation_message(
+                    recipient_email=pending_notification["recipient_handle"],
+                    trade_summary_text=trade_summary_text,
+                    trade_review_url=trade_review_url,
+                )
+            _mark_trade_candidate_confirmation_notification_result(
+                connect=connect,
+                trade_id=trade_id,
+                notification_status="sent",
+                notification_error="",
+                now_ts_ms=now_ts_ms,
+            )
+        except Exception as exc:
+            logger.warning(
+                "trade_candidate_confirmation_notification_failed "
+                "trade_id=%s channel=%s recipient=%s error=%s",
+                trade_id,
+                pending_notification.get("channel_type"),
+                pending_notification.get("recipient_handle"),
+                _read_exception_detail(exc),
+            )
+            _mark_trade_candidate_confirmation_notification_result(
+                connect=connect,
+                trade_id=trade_id,
+                notification_status="failed",
+                notification_error=_read_exception_detail(exc),
+                now_ts_ms=now_ts_ms,
+            )
+
+
+def _mark_trade_candidate_confirmation_notification_result(
+    connect: Callable[..., Any],
+    trade_id: int,
+    notification_status: str,
+    notification_error: str,
+    now_ts_ms: int,
+) -> None:
+    with connect(**DB_CONFIG) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE stephen_dcx_trade_versions trade_version
+                SET
+                    trade_metadata_json = trade_version.trade_metadata_json || %s::jsonb
+                FROM stephen_dcx_trades trade
+                WHERE trade.id = %s
+                  AND trade.current_version_id = trade_version.id
+                """,
+                (
+                    psycopg2.extras.Json(
+                        {
+                            "confirmation_notification_status": notification_status,
+                            "confirmation_notification_error": notification_error,
+                            "confirmation_notification_sent_at_ts_ms": (
+                                now_ts_ms if notification_status == "sent" else None
+                            ),
+                        }
+                    ),
+                    trade_id,
+                ),
+            )
 
 
 def _read_exception_detail(exc: Exception) -> str:

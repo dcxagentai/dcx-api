@@ -42,7 +42,7 @@ def read_authenticated_dcx_user_contact_message_detail(
       WHAT CAN GO WRONG:
         - The message may not belong to the current user.
       WHAT COMES NEXT:
-        - Attachments and richer provider metadata can be layered onto this contract later.
+        - Trades, topics, and later interaction-thread context can be layered onto this contract.
 
     TESTS:
       - returns_message_detail_when_visible_message_belongs_to_user
@@ -84,6 +84,13 @@ def read_authenticated_dcx_user_contact_message_detail(
                         message.analysis_model_name,
                         message.analysis_metadata_json,
                         message.analysis_completed_at_ts_ms,
+                        message.workflow_classification_status,
+                        message.primary_workflow_kind,
+                        message.contains_trade_items,
+                        message.contains_market_topic_items,
+                        message.contains_other_items,
+                        message.workflow_reason_summary,
+                        message.workflow_metadata_json,
                         language.language_code,
                         message.received_at_ts_ms,
                         message.created_at_ts_ms,
@@ -103,6 +110,9 @@ def read_authenticated_dcx_user_contact_message_detail(
                 )
                 message_row = cursor.fetchone()
                 attachment_rows = []
+                workflow_item_rows = []
+                trade_rows = []
+                topic_rows = []
                 if message_row is not None:
                     cursor.execute(
                         """
@@ -138,6 +148,63 @@ def read_authenticated_dcx_user_contact_message_detail(
                         (message_id,),
                     )
                     attachment_rows = cursor.fetchall()
+
+                    cursor.execute(
+                        """
+                        SELECT
+                            workflow_item.id,
+                            workflow_item.item_index,
+                            workflow_item.item_kind,
+                            workflow_item.item_status,
+                            workflow_item.item_title,
+                            workflow_item.item_summary_text,
+                            workflow_item.source_excerpt_text,
+                            workflow_item.referenced_attachment_ids_json,
+                            workflow_item.confidence_label,
+                            workflow_item.workflow_item_metadata_json
+                        FROM stephen_dcx_message_workflow_items workflow_item
+                        WHERE workflow_item.message_id = %s
+                        ORDER BY workflow_item.item_index ASC, workflow_item.id ASC
+                        """,
+                        (message_id,),
+                    )
+                    workflow_item_rows = cursor.fetchall()
+
+                    cursor.execute(
+                        """
+                        SELECT
+                            trade.id,
+                            trade.source_workflow_item_id_initial,
+                            trade_version.trade_confirmation_status,
+                            trade_version.trade_status,
+                            trade_version.trade_summary_text,
+                            trade_version.normalized_trade_side,
+                            trade_version.normalized_material_name
+                        FROM stephen_dcx_trades trade
+                        INNER JOIN stephen_dcx_trade_versions trade_version
+                          ON trade_version.id = trade.current_version_id
+                        WHERE trade.source_message_id_initial = %s
+                        ORDER BY trade.id ASC
+                        """,
+                        (message_id,),
+                    )
+                    trade_rows = cursor.fetchall()
+
+                    cursor.execute(
+                        """
+                        SELECT
+                            topic.id,
+                            topic.source_workflow_item_id,
+                            topic.topic_status,
+                            topic.topic_title,
+                            topic.topic_summary_text
+                        FROM stephen_dcx_market_topics topic
+                        WHERE topic.source_message_id = %s
+                        ORDER BY topic.id ASC
+                        """,
+                        (message_id,),
+                    )
+                    topic_rows = cursor.fetchall()
     except Exception as exc:
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_MESSAGE_DETAIL_READ_FAILED") from exc
 
@@ -148,6 +215,10 @@ def read_authenticated_dcx_user_contact_message_detail(
     message_is_prohibited = moderation_status == "prohibited"
 
     return {
+        "requires_user_attention": any(
+            trade_row[2] in {"pending_confirmation", "needs_more_detail"}
+            for trade_row in trade_rows
+        ),
         "message_id": message_row[0],
         "channel_type": message_row[1],
         "provider_type": message_row[2],
@@ -163,10 +234,59 @@ def read_authenticated_dcx_user_contact_message_detail(
         "analysis_model_name": message_row[12],
         "analysis_metadata_json": message_row[13],
         "analysis_completed_at_ts_ms": message_row[14],
-        "detected_language_code": message_row[15],
-        "received_at_ts_ms": message_row[16],
-        "created_at_ts_ms": message_row[17],
-        "updated_at_ts_ms": message_row[18],
+        "workflow_classification_status": message_row[15],
+        "primary_workflow_kind": message_row[16],
+        "contains_trade_items": message_row[17],
+        "contains_market_topic_items": message_row[18],
+        "contains_other_items": message_row[19],
+        "workflow_reason_summary": message_row[20],
+        "workflow_metadata_json": message_row[21] if isinstance(message_row[21], dict) else {},
+        "detected_language_code": message_row[22],
+        "received_at_ts_ms": message_row[23],
+        "created_at_ts_ms": message_row[24],
+        "updated_at_ts_ms": message_row[25],
+        "workflow_items": [] if message_is_prohibited else [
+            {
+                "workflow_item_id": workflow_item_row[0],
+                "item_index": workflow_item_row[1],
+                "item_kind": workflow_item_row[2],
+                "item_status": workflow_item_row[3],
+                "item_title": workflow_item_row[4],
+                "item_summary_text": workflow_item_row[5],
+                "source_excerpt_text": workflow_item_row[6],
+                "referenced_attachment_ids_json": workflow_item_row[7] if isinstance(workflow_item_row[7], list) else [],
+                "confidence_label": workflow_item_row[8],
+                "workflow_item_metadata_json": workflow_item_row[9] if isinstance(workflow_item_row[9], dict) else {},
+                "requires_user_attention": any(
+                    trade_row[1] == workflow_item_row[0]
+                    and trade_row[2] in {"pending_confirmation", "needs_more_detail"}
+                    for trade_row in trade_rows
+                ),
+            }
+            for workflow_item_row in workflow_item_rows
+        ],
+        "linked_trades": [
+            {
+                "trade_id": trade_row[0],
+                "source_workflow_item_id": trade_row[1],
+                "trade_confirmation_status": trade_row[2],
+                "trade_status": trade_row[3],
+                "trade_summary_text": trade_row[4],
+                "normalized_trade_side": trade_row[5],
+                "normalized_material_name": trade_row[6],
+            }
+            for trade_row in trade_rows
+        ],
+        "linked_market_topics": [
+            {
+                "market_topic_id": topic_row[0],
+                "source_workflow_item_id": topic_row[1],
+                "topic_status": topic_row[2],
+                "topic_title": topic_row[3],
+                "topic_summary_text": topic_row[4],
+            }
+            for topic_row in topic_rows
+        ],
         "attachments": ([] if message_is_prohibited else [
             {
                 "attachment_id": attachment_row[0],

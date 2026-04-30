@@ -27,6 +27,7 @@ dcx_api_routes_users_me_messages_inbox_router = APIRouter(prefix="/users", tags=
 def get_authenticated_dcx_user_messages_inbox(
     request: Request,
     message_format_filter: str | None = None,
+    workflow_kind_filter: str | None = None,
 ):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -42,6 +43,7 @@ def get_authenticated_dcx_user_messages_inbox(
         inbox_payload = read_authenticated_dcx_user_messages_inbox(
             authenticated_user_id=authenticated_user_id,
             message_format_filter=message_format_filter,
+            workflow_kind_filter=workflow_kind_filter,
         )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
@@ -66,6 +68,18 @@ def get_authenticated_dcx_user_messages_inbox(
                         "code": "API_USERS_ME_MESSAGES_USER_NOT_FOUND",
                         "message": "We could not find that DCX user account.",
                         "suggested_action": "Sign in again and retry after confirming the account still exists.",
+                    },
+                },
+            )
+        if error_code == "API_AUTHENTICATED_DCX_USER_MESSAGES_WORKFLOW_FILTER_INVALID":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "API_USERS_ME_MESSAGES_WORKFLOW_FILTER_INVALID",
+                        "message": "That workflow filter is not supported.",
+                        "suggested_action": "Retry with all, trade, market_topic, or other.",
                     },
                 },
             )

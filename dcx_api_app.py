@@ -187,6 +187,27 @@ from routes.users.dcx_api_routes_users_me_messages_retry_analysis import (
 from routes.users.dcx_api_routes_users_me_messages_inbox import (
     dcx_api_routes_users_me_messages_inbox_router,
 )
+from routes.users.dcx_api_routes_users_me_trades_catalog import (
+    dcx_api_routes_users_me_trades_catalog_router,
+)
+from routes.users.dcx_api_routes_users_me_trade_detail import (
+    dcx_api_routes_users_me_trade_detail_router,
+)
+from routes.users.dcx_api_routes_users_me_trade_confirm import (
+    dcx_api_routes_users_me_trade_confirm_router,
+)
+from routes.users.dcx_api_routes_users_me_trade_reject import (
+    dcx_api_routes_users_me_trade_reject_router,
+)
+from routes.users.dcx_api_routes_users_me_trade_update import (
+    dcx_api_routes_users_me_trade_update_router,
+)
+from routes.users.dcx_api_routes_users_me_market_topics_catalog import (
+    dcx_api_routes_users_me_market_topics_catalog_router,
+)
+from routes.users.dcx_api_routes_users_me_market_topic_detail import (
+    dcx_api_routes_users_me_market_topic_detail_router,
+)
 from routes.users.dcx_api_routes_users_me_message_attachment_file import (
     dcx_api_routes_users_me_message_attachment_file_router,
 )
@@ -220,7 +241,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(read_allowed_dcx_frontend_origins()),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Origin"],
 )
 app.mount("/static", StaticFiles(directory=DCX_API_STATIC_DIR), name="static")
@@ -274,6 +295,13 @@ app.include_router(dcx_api_routes_users_me_messages_inbox_router)
 app.include_router(dcx_api_routes_users_me_messages_detail_router)
 app.include_router(dcx_api_routes_users_me_messages_create_router)
 app.include_router(dcx_api_routes_users_me_messages_retry_analysis_router)
+app.include_router(dcx_api_routes_users_me_trades_catalog_router)
+app.include_router(dcx_api_routes_users_me_trade_detail_router)
+app.include_router(dcx_api_routes_users_me_trade_confirm_router)
+app.include_router(dcx_api_routes_users_me_trade_reject_router)
+app.include_router(dcx_api_routes_users_me_trade_update_router)
+app.include_router(dcx_api_routes_users_me_market_topics_catalog_router)
+app.include_router(dcx_api_routes_users_me_market_topic_detail_router)
 app.include_router(dcx_api_routes_users_me_file_object_router)
 app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
 app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)

@@ -16,9 +16,11 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
 
-PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_26_v3"
+PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_28_v4"
 DCX_MESSAGE_TEXT_SUMMARY_WORD_COUNT_THRESHOLD = 100
 DCX_MESSAGE_TEXT_SYNTHESIS_WORD_COUNT_THRESHOLD = 500
+DCX_WORKFLOW_ITEM_KINDS = ("trade", "market_topic", "other")
+DCX_WORKFLOW_ITEM_CONFIDENCE_LABELS = ("high", "medium", "low")
 DCX_PROHIBITED_MESSAGE_REASON_CODES = (
     "prohibited_children",
     "prohibited_sexually_explicit",
@@ -46,7 +48,8 @@ def generate_dcx_gemini_structured_message_analysis(
           content_type, original_filename, and file_bytes.
         - GEMINI_API_KEY is configured unless send_gemini_request is injected by tests.
       postconditions:
-        - Returns one normalized analysis payload with message-level summary and per-file analysis.
+        - Returns one normalized analysis payload with message-level summary, workflow routing,
+          and per-file analysis.
         - Uses a strict prompt and JSON response shape suitable for database writes.
       side_effects:
         - may call Google Gemini over HTTPS
@@ -65,7 +68,7 @@ def generate_dcx_gemini_structured_message_analysis(
         - Use it after the raw message and all attachments have been stored and before the message is
           marked ready for the trader.
       WHEN NOT TO USE it:
-        - Do not use it as the final deal/trade extractor or compliance classifier.
+        - Do not use it as the final structured trade extractor.
       WHAT CAN GO WRONG:
         - Gemini credentials may be missing.
         - The SDK may not support the file type or structured-output config in the current environment.
@@ -201,6 +204,20 @@ Return JSON only. Do not wrap JSON in markdown.
 - Identify the language the message is written in. Return the ISO language code.
 {message_summary_instruction}
 {text_synthesis_instruction}
+- After evaluating moderation, identify one or more workflow items from the message.
+- Workflow routing must consider the whole message context, not only the main text body.
+- If the raw text is empty, very short, ambiguous, or purely incidental, use the attachment content and
+  the attachment-level description/transcription/summary/synthesis/context to decide workflow routing.
+- A workflow item is one distinct commercially meaningful or user-meaningful unit that should be routed
+  into a later product flow.
+- A single message may contain:
+    - multiple trade items;
+    - multiple market-topic items;
+    - a mix of trade items, market-topic items, and other items.
+- If the message is prohibited, moderation overrides workflow routing. In that case:
+    - set moderation_status = "prohibited";
+    - set primary_workflow_kind = "";
+    - return workflow_items = [].
 
 - All attachments require:
     - a 1-3 sentence summary;
@@ -240,6 +257,38 @@ Return JSON only. Do not wrap JSON in markdown.
     - do not soften or omit categories just because the message is commercial or framed as a trade.
 </analysis_rules>
 
+<workflow_taxonomy>
+- trade:
+    Use this when the message contains any item, offer, bid, ask, negotiation element, logistics step,
+    or commercially actionable reference that pertains to an actual trade or part of a trade process,
+    whether new or existing.
+    Examples:
+      - "Selling 500 MT soybean meal FOB Santos."
+      - "Need freight quote for moving copper cathodes from Tema to Antwerp."
+      - "Buyer confirms interest in 2 containers if payment terms hold."
+
+- market_topic:
+    Use this when the message contains trader-relevant market, business, commodity, policy, sanctions,
+    logistics, or commercial discussion that is not itself an actionable structured trade item.
+    Examples:
+      - "How do new cocoa export taxes affect availability next quarter?"
+      - "What are traders saying about sanctions on Russian diesel?"
+      - "Attached article about port congestion in Lagos."
+
+- other:
+    Use this when the message contains content that is not a trade item and not a trader-relevant market topic.
+    Examples:
+      - personal or accidental messages
+      - general chatter unrelated to trading
+      - irrelevant media with no business context
+
+- prohibited override:
+    Discussion about sanctions, controlled goods, or prohibited material as market context can still be allowed
+    as a market_topic.
+    Attempts to buy, sell, move, source, route, or evade controls around prohibited materials or sanctions
+    are prohibited.
+</workflow_taxonomy>
+
 <prohibited_categories>
 - prohibited_children
 - prohibited_sexually_explicit
@@ -277,6 +326,33 @@ def _build_dcx_message_analysis_response_schema() -> dict:
             "message_text_synthesis": {"type": "string"},
             "moderation_status": {"type": "string"},
             "moderation_reason_summary": {"type": "string"},
+            "primary_workflow_kind": {"type": "string"},
+            "workflow_reason_summary": {"type": "string"},
+            "workflow_items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item_kind": {"type": "string"},
+                        "item_title": {"type": "string"},
+                        "item_summary": {"type": "string"},
+                        "source_excerpt_text": {"type": "string"},
+                        "referenced_attachment_ids": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                        },
+                        "confidence_label": {"type": "string"},
+                    },
+                    "required": [
+                        "item_kind",
+                        "item_title",
+                        "item_summary",
+                        "source_excerpt_text",
+                        "referenced_attachment_ids",
+                        "confidence_label",
+                    ],
+                },
+            },
             "matched_prohibited_categories": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -318,6 +394,9 @@ def _build_dcx_message_analysis_response_schema() -> dict:
             "message_text_synthesis",
             "moderation_status",
             "moderation_reason_summary",
+            "primary_workflow_kind",
+            "workflow_reason_summary",
+            "workflow_items",
             "matched_prohibited_categories",
             "attachments",
         ],
@@ -402,6 +481,28 @@ def _normalize_gemini_message_analysis_output(
     elif moderation_reason_summary == "":
         moderation_reason_summary = "The message matched one or more prohibited content categories."
 
+    normalized_workflow_items = _normalize_workflow_items(
+        parsed_output.get("workflow_items"),
+        file_inputs=file_inputs,
+    )
+    if moderation_status != "prohibited" and not normalized_workflow_items:
+        normalized_workflow_items = _build_fallback_workflow_items_from_message_context(
+            message_input=message_input,
+            normalized_attachments=normalized_attachments,
+        )
+    primary_workflow_kind = _normalize_primary_workflow_kind(
+        parsed_output.get("primary_workflow_kind"),
+        normalized_workflow_items=normalized_workflow_items,
+        moderation_status=moderation_status,
+    )
+    workflow_reason_summary = str(parsed_output.get("workflow_reason_summary") or "").strip()
+    if moderation_status == "prohibited":
+        primary_workflow_kind = ""
+        workflow_reason_summary = ""
+        normalized_workflow_items = []
+    elif workflow_reason_summary == "" and normalized_workflow_items:
+        workflow_reason_summary = f"Identified {len(normalized_workflow_items)} workflow item(s) from the message."
+
     return {
         "provider_name": provider_name,
         "model_name": model_name,
@@ -414,6 +515,10 @@ def _normalize_gemini_message_analysis_output(
         "moderation_status": moderation_status,
         "moderation_reason_summary": moderation_reason_summary,
         "matched_prohibited_categories": moderation_reason_codes,
+        "primary_workflow_kind": primary_workflow_kind,
+        "workflow_reason_summary": workflow_reason_summary,
+        "workflow_classification_status": "completed",
+        "workflow_items": normalized_workflow_items,
         "attachments": normalized_attachments,
         "raw_output_json": parsed_output,
     }
@@ -440,6 +545,10 @@ def _build_fallback_message_analysis(
         "moderation_status": "not_reviewed",
         "moderation_reason_summary": "",
         "matched_prohibited_categories": [],
+        "primary_workflow_kind": "",
+        "workflow_reason_summary": "",
+        "workflow_classification_status": "not_started",
+        "workflow_items": [],
         "attachments": [
             {
                 "attachment_id": file_input["attachment_id"],
@@ -520,6 +629,103 @@ def _normalize_moderation_status(value: Any) -> str:
     if normalized_value == "allowed":
         return "allowed"
     return "allowed"
+
+
+def _normalize_workflow_items(value: Any, file_inputs: list[dict]) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+
+    known_attachment_ids = {
+        int(file_input["attachment_id"])
+        for file_input in file_inputs
+        if isinstance(file_input.get("attachment_id"), int)
+    }
+    normalized_items: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        item_kind = str(item.get("item_kind") or "").strip().lower()
+        if item_kind not in DCX_WORKFLOW_ITEM_KINDS:
+            continue
+        referenced_attachment_ids = []
+        for referenced_attachment_id in item.get("referenced_attachment_ids") or []:
+            attachment_id = _coerce_positive_int(referenced_attachment_id)
+            if attachment_id is not None and attachment_id in known_attachment_ids and attachment_id not in referenced_attachment_ids:
+                referenced_attachment_ids.append(attachment_id)
+        confidence_label = str(item.get("confidence_label") or "").strip().lower()
+        if confidence_label not in DCX_WORKFLOW_ITEM_CONFIDENCE_LABELS:
+            confidence_label = "medium"
+        normalized_items.append(
+            {
+                "item_kind": item_kind,
+                "item_title": str(item.get("item_title") or "").strip(),
+                "item_summary": str(item.get("item_summary") or "").strip(),
+                "source_excerpt_text": str(item.get("source_excerpt_text") or "").strip(),
+                "referenced_attachment_ids": referenced_attachment_ids,
+                "confidence_label": confidence_label,
+            }
+        )
+    return normalized_items
+
+
+def _build_fallback_workflow_items_from_message_context(
+    message_input: dict,
+    normalized_attachments: list[dict],
+) -> list[dict]:
+    raw_text = str(message_input.get("raw_text_content") or "").strip()
+    raw_text_word_count = _count_words(raw_text)
+    if raw_text_word_count > 3 or not normalized_attachments:
+        return []
+
+    fallback_summary_parts: list[str] = []
+    referenced_attachment_ids: list[int] = []
+    for attachment in normalized_attachments:
+        attachment_context_text = (
+            str(attachment.get("summary") or "").strip()
+            or str(attachment.get("description") or "").strip()
+            or str(attachment.get("transcription") or "").strip()
+            or str(attachment.get("synthesis") or "").strip()
+            or str(attachment.get("context_within_message") or "").strip()
+        )
+        if attachment_context_text != "":
+            fallback_summary_parts.append(attachment_context_text)
+        attachment_id = _coerce_positive_int(attachment.get("attachment_id"))
+        if attachment_id is not None and attachment_id not in referenced_attachment_ids:
+            referenced_attachment_ids.append(attachment_id)
+
+    fallback_summary_text = " ".join(fallback_summary_parts).strip()
+    if fallback_summary_text == "":
+        fallback_summary_text = "Attachment-led message with no meaningful body text."
+
+    return [
+        {
+            "item_kind": "other",
+            "item_title": "Attachment-led message",
+            "item_summary": fallback_summary_text[:4000],
+            "source_excerpt_text": fallback_summary_text[:4000],
+            "referenced_attachment_ids": referenced_attachment_ids,
+            "confidence_label": "medium",
+        }
+    ]
+
+
+def _normalize_primary_workflow_kind(
+    value: Any,
+    normalized_workflow_items: list[dict],
+    moderation_status: str,
+) -> str:
+    if moderation_status == "prohibited":
+        return ""
+    normalized_value = str(value or "").strip().lower()
+    if normalized_value in DCX_WORKFLOW_ITEM_KINDS:
+        return normalized_value
+    if any(item["item_kind"] == "trade" for item in normalized_workflow_items):
+        return "trade"
+    if any(item["item_kind"] == "market_topic" for item in normalized_workflow_items):
+        return "market_topic"
+    if any(item["item_kind"] == "other" for item in normalized_workflow_items):
+        return "other"
+    return ""
 
 
 def _normalize_prohibited_category_codes(value: Any) -> list[str]:
