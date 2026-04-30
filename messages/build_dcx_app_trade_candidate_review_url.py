@@ -7,8 +7,6 @@ the same review surface without duplicating host/path logic across message-domai
 
 from __future__ import annotations
 
-from urllib.parse import urlencode
-
 from users.account_phone.dcx_whatsapp_phone_link_challenge_support import read_dcx_app_base_url
 
 
@@ -19,7 +17,7 @@ def build_dcx_app_trade_candidate_review_url(trade_id: int) -> str:
         - trade_id identifies one persisted trade candidate row.
         - The app base URL can be derived from DCX_APP_BASE_URL or the runtime environment.
       postconditions:
-        - Returns one authenticated app URL targeting the Trades screen with the target trade preselected.
+        - Returns one authenticated app URL targeting the clean per-trade route.
       side_effects: []
       idempotent: true
       retry_safe: true
@@ -57,7 +55,4 @@ def build_dcx_app_trade_candidate_review_url(trade_id: int) -> str:
     if not isinstance(trade_id, int) or trade_id <= 0:
         raise RuntimeError("API_DCX_TRADE_REVIEW_URL_INVALID_TRADE_ID")
 
-    return (
-        f"{read_dcx_app_base_url().rstrip('/')}/me/trades?"
-        f"{urlencode({'trade_id': trade_id})}"
-    )
+    return f"{read_dcx_app_base_url().rstrip('/')}/me/trades/{trade_id}"
