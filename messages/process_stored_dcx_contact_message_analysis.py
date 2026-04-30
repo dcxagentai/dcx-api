@@ -1243,28 +1243,28 @@ def _build_message_workflow_outcome_notification_payload(
     if trade_outputs:
         message_lines.append("")
         message_lines.append("Trade candidates:")
-        for output_index, trade_output in enumerate(trade_outputs, start=1):
+        for trade_output in trade_outputs:
             trade_id = trade_output["trade_id"]
             trade_summary = _read_first_nonempty_text(
                 trade_output.get("summary"),
                 trade_output.get("title"),
                 f"Trade candidate #{trade_id}",
             )
-            message_lines.append(f"{output_index}. {trade_summary}")
-            message_lines.append(f"   Review: {build_dcx_app_trade_candidate_review_url(trade_id)}")
+            message_lines.append(trade_summary)
+            message_lines.append(f"Review: {build_dcx_app_trade_candidate_review_url(trade_id)}")
 
     if topic_outputs:
         message_lines.append("")
         message_lines.append("Market topics:")
-        for output_index, topic_output in enumerate(topic_outputs, start=1):
+        for topic_output in topic_outputs:
             market_topic_id = topic_output["market_topic_id"]
             topic_title = _read_first_nonempty_text(
                 topic_output.get("title"),
                 topic_output.get("summary"),
                 f"Market topic #{market_topic_id}",
             )
-            message_lines.append(f"{output_index}. {topic_title}")
-            message_lines.append(f"   Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
+            message_lines.append(topic_title)
+            message_lines.append(f"Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
 
     if not trade_outputs and not topic_outputs and other_outputs:
         message_lines.append("")

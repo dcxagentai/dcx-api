@@ -44,11 +44,11 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
         "message_text": (
             "DCX processed your message.\n\n"
             "Trade candidates:\n"
-            "1. Offer for 200 MT urea CFR Tema for June.\n"
-            "   Review: https://app.dcxagent.ai/me/trades/12\n\n"
+            "Offer for 200 MT urea CFR Tema for June.\n"
+            "Review: https://app.dcxagent.ai/me/trades/12\n\n"
             "Market topics:\n"
-            "1. Sanctions impact on fertilizer shipping to Ghana\n"
-            "   Open: https://app.dcxagent.ai/me/topics/7"
+            "Sanctions impact on fertilizer shipping to Ghana\n"
+            "Open: https://app.dcxagent.ai/me/topics/7"
         ),
         "trade_ids": [12],
         "market_topic_ids": [7],
