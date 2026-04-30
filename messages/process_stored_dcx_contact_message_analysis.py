@@ -26,14 +26,17 @@ from apis.gemini.generate_dcx_gemini_structured_trade_projection import (
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
-from apis.meta_whatsapp.send_dcx_whatsapp_trade_candidate_confirmation_message import (
-    send_dcx_whatsapp_trade_candidate_confirmation_message,
+from apis.meta_whatsapp.send_dcx_whatsapp_message_workflow_outcome_notification import (
+    send_dcx_whatsapp_message_workflow_outcome_notification,
 )
-from emails.transactional.send_dcx_email_trade_candidate_confirmation_message import (
-    send_dcx_email_trade_candidate_confirmation_message,
+from emails.transactional.send_dcx_email_message_workflow_outcome_notification import (
+    send_dcx_email_message_workflow_outcome_notification,
 )
 from files.build_dcx_r2_s3_client import build_dcx_r2_s3_client
 from files.read_dcx_r2_bucket_name_for_alias import read_dcx_r2_bucket_name_for_alias
+from messages.build_dcx_app_market_topic_review_url import (
+    build_dcx_app_market_topic_review_url,
+)
 from messages.build_dcx_app_trade_candidate_review_url import (
     build_dcx_app_trade_candidate_review_url,
 )
@@ -180,7 +183,7 @@ def process_stored_dcx_contact_message_analysis(
         analysis_error_code = "API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED"
 
     try:
-        pending_trade_confirmation_notifications = _persist_message_analysis_result(
+        pending_workflow_outcome_notification = _persist_message_analysis_result(
             message_id=message_id,
             active_job_id=active_job_id,
             message_input=message_input,
@@ -195,8 +198,8 @@ def process_stored_dcx_contact_message_analysis(
     except Exception as exc:
         raise RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED") from exc
 
-    _deliver_trade_candidate_confirmation_notifications(
-        pending_notifications=pending_trade_confirmation_notifications,
+    _deliver_message_workflow_outcome_notification(
+        pending_notification=pending_workflow_outcome_notification,
         connect=connect,
         now_ts_ms=now_ts_ms,
     )
@@ -530,7 +533,7 @@ def _persist_message_analysis_result(
                 ),
             )
 
-            pending_trade_confirmation_notifications = _rebuild_message_workflow_projections(
+            workflow_projection_result = _rebuild_message_workflow_projections(
                 cursor=cursor,
                 message_id=message_id,
                 message_input=message_input,
@@ -728,7 +731,13 @@ def _persist_message_analysis_result(
                 ),
             )
 
-    return pending_trade_confirmation_notifications
+    return _build_message_workflow_outcome_notification_payload(
+        message_id=message_id,
+        message_input=message_input,
+        analysis_result=analysis_result,
+        analysis_run_status=analysis_run_status,
+        workflow_projection_result=workflow_projection_result,
+    )
 
 
 def _read_language_id_for_code(cursor: Any, language_code: Any) -> int | None:
@@ -881,7 +890,7 @@ def _rebuild_message_workflow_projections(
     analysis_result: dict,
     analysis_run_status: str,
     now_ts_ms: int,
-) -> list[dict]:
+) -> dict:
     enriched_attachment_inputs = _build_attachment_projection_inputs(
         attachment_inputs=attachment_inputs,
         analysis_result=analysis_result,
@@ -911,14 +920,14 @@ def _rebuild_message_workflow_projections(
     )
 
     if analysis_run_status != "completed" or analysis_result.get("moderation_status") == "prohibited":
-        return []
+        return _build_empty_workflow_projection_result()
 
     workflow_items = analysis_result.get("workflow_items", [])
     if not isinstance(workflow_items, list) or not workflow_items:
-        return []
+        return _build_empty_workflow_projection_result()
 
     projection_errors: list[dict] = []
-    pending_trade_confirmation_notifications: list[dict] = []
+    workflow_projection_result = _build_empty_workflow_projection_result()
 
     for workflow_item_index, workflow_item in enumerate(workflow_items, start=1):
         referenced_attachment_ids = workflow_item.get("referenced_attachment_ids", [])
@@ -1004,13 +1013,14 @@ def _rebuild_message_workflow_projections(
                     """,
                     (now_ts_ms, workflow_item_id),
                 )
-                pending_notification = _build_trade_candidate_confirmation_notification_payload(
-                    trade_id=trade_id,
-                    message_input=message_input,
-                    trade_projection=trade_projection,
+                workflow_projection_result["trade_outputs"].append(
+                    {
+                        "trade_id": trade_id,
+                        "workflow_item_id": workflow_item_id,
+                        "title": str(workflow_item.get("item_title") or "").strip(),
+                        "summary": str(trade_projection.get("trade_summary_text") or workflow_item.get("item_summary") or "").strip(),
+                    }
                 )
-                if pending_notification is not None:
-                    pending_trade_confirmation_notifications.append(pending_notification)
             except Exception as exc:
                 projection_errors.append(
                     {
@@ -1119,6 +1129,14 @@ def _rebuild_message_workflow_projections(
                     """,
                     (now_ts_ms, workflow_item_id),
                 )
+                workflow_projection_result["market_topic_outputs"].append(
+                    {
+                        "market_topic_id": market_topic_id,
+                        "workflow_item_id": workflow_item_id,
+                        "title": str(topic_seed.get("topic_title") or workflow_item.get("item_title") or "").strip(),
+                        "summary": str(topic_seed.get("topic_summary_text") or workflow_item.get("item_summary") or "").strip(),
+                    }
+                )
             except Exception as exc:
                 projection_errors.append(
                     {
@@ -1145,8 +1163,16 @@ def _rebuild_message_workflow_projections(
                 """,
                 (now_ts_ms, workflow_item_id),
             )
+            workflow_projection_result["other_outputs"].append(
+                {
+                    "workflow_item_id": workflow_item_id,
+                    "title": str(workflow_item.get("item_title") or "Other message").strip(),
+                    "summary": str(workflow_item.get("item_summary") or "").strip(),
+                }
+            )
 
     workflow_classification_status = "partial" if projection_errors else "completed"
+    workflow_projection_result["projection_errors"] = projection_errors
     cursor.execute(
         """
         UPDATE stephen_dcx_contact_messages
@@ -1168,73 +1194,227 @@ def _rebuild_message_workflow_projections(
             message_id,
         ),
     )
-    return pending_trade_confirmation_notifications
+    return workflow_projection_result
 
 
-def _build_trade_candidate_confirmation_notification_payload(
-    trade_id: int,
-    message_input: dict,
-    trade_projection: dict,
-) -> dict | None:
-    channel_type = str(message_input.get("channel_type") or "").strip().lower()
-    recipient_handle = str(message_input.get("source_handle_normalized") or "").strip()
-    if channel_type not in {"whatsapp", "email"} or recipient_handle == "":
-        return None
-
+def _build_empty_workflow_projection_result() -> dict:
     return {
-        "trade_id": trade_id,
-        "channel_type": channel_type,
-        "recipient_handle": recipient_handle,
-        "trade_summary_text": str(trade_projection.get("trade_summary_text") or "").strip(),
+        "trade_outputs": [],
+        "market_topic_outputs": [],
+        "other_outputs": [],
+        "projection_errors": [],
     }
 
 
-def _deliver_trade_candidate_confirmation_notifications(
-    pending_notifications: list[dict],
+def _build_message_workflow_outcome_notification_payload(
+    message_id: int,
+    message_input: dict,
+    analysis_result: dict,
+    analysis_run_status: str,
+    workflow_projection_result: dict,
+) -> dict | None:
+    channel_type = str(message_input.get("channel_type") or "").strip().lower()
+    recipient_handle = str(message_input.get("source_handle_normalized") or "").strip()
+    if channel_type not in {"whatsapp", "email"} or recipient_handle == "" or analysis_run_status != "completed":
+        return None
+
+    trade_outputs = workflow_projection_result.get("trade_outputs", [])
+    topic_outputs = workflow_projection_result.get("market_topic_outputs", [])
+    other_outputs = workflow_projection_result.get("other_outputs", [])
+    projection_errors = workflow_projection_result.get("projection_errors", [])
+    moderation_status = str(analysis_result.get("moderation_status") or "").strip().lower()
+
+    if moderation_status == "prohibited":
+        return {
+            "message_id": message_id,
+            "channel_type": channel_type,
+            "recipient_handle": recipient_handle,
+            "subject": "DCX message blocked",
+            "message_text": (
+                "We received your message, but it was blocked by DCX content policy.\n\n"
+                "It has not been routed into a trade or market topic workflow."
+            ),
+            "trade_ids": [],
+            "market_topic_ids": [],
+        }
+
+    message_lines: list[str] = ["DCX processed your message."]
+
+    if trade_outputs:
+        message_lines.append("")
+        message_lines.append("Trade candidates:")
+        for output_index, trade_output in enumerate(trade_outputs, start=1):
+            trade_id = trade_output["trade_id"]
+            trade_summary = _read_first_nonempty_text(
+                trade_output.get("summary"),
+                trade_output.get("title"),
+                f"Trade candidate #{trade_id}",
+            )
+            message_lines.append(f"{output_index}. {trade_summary}")
+            message_lines.append(f"   Review: {build_dcx_app_trade_candidate_review_url(trade_id)}")
+
+    if topic_outputs:
+        message_lines.append("")
+        message_lines.append("Market topics:")
+        for output_index, topic_output in enumerate(topic_outputs, start=1):
+            market_topic_id = topic_output["market_topic_id"]
+            topic_title = _read_first_nonempty_text(
+                topic_output.get("title"),
+                topic_output.get("summary"),
+                f"Market topic #{market_topic_id}",
+            )
+            message_lines.append(f"{output_index}. {topic_title}")
+            message_lines.append(f"   Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
+
+    if not trade_outputs and not topic_outputs and other_outputs:
+        message_lines.append("")
+        message_lines.append("We saved your message. It was not treated as a trade or market topic.")
+
+    if not trade_outputs and not topic_outputs and not other_outputs:
+        message_lines.append("")
+        message_lines.append("We saved your message, but no trade or market topic workflow was created.")
+
+    if projection_errors:
+        message_lines.append("")
+        message_lines.append("Some items could not be routed yet. You can retry workflow processing from the DCX app.")
+
+    subject = "DCX processed your message"
+    if trade_outputs and topic_outputs:
+        subject = "DCX found trades and market topics"
+    elif trade_outputs:
+        subject = "DCX found trade candidates"
+    elif topic_outputs:
+        subject = "DCX opened market topics"
+    elif other_outputs:
+        subject = "DCX saved your message"
+
+    return {
+        "message_id": message_id,
+        "channel_type": channel_type,
+        "recipient_handle": recipient_handle,
+        "subject": subject,
+        "message_text": "\n".join(message_lines).strip(),
+        "trade_ids": [trade_output["trade_id"] for trade_output in trade_outputs],
+        "market_topic_ids": [topic_output["market_topic_id"] for topic_output in topic_outputs],
+    }
+
+
+def _read_first_nonempty_text(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip() != "":
+            return value.strip()
+    return ""
+
+
+def _deliver_message_workflow_outcome_notification(
+    pending_notification: dict | None,
     connect: Callable[..., Any],
     now_ts_ms: int,
 ) -> None:
-    for pending_notification in pending_notifications:
-        trade_id = pending_notification["trade_id"]
-        trade_review_url = build_dcx_app_trade_candidate_review_url(trade_id)
-        trade_summary_text = pending_notification["trade_summary_text"] or f"Trade candidate #{trade_id}"
+    if pending_notification is None:
+        return
 
-        try:
-            if pending_notification["channel_type"] == "whatsapp":
-                send_dcx_whatsapp_trade_candidate_confirmation_message(
-                    phone_e164=pending_notification["recipient_handle"],
-                    trade_summary_text=trade_summary_text,
-                    trade_review_url=trade_review_url,
+    try:
+        if pending_notification["channel_type"] == "whatsapp":
+            send_dcx_whatsapp_message_workflow_outcome_notification(
+                phone_e164=pending_notification["recipient_handle"],
+                message_text=pending_notification["message_text"],
+            )
+        elif pending_notification["channel_type"] == "email":
+            send_dcx_email_message_workflow_outcome_notification(
+                recipient_email=pending_notification["recipient_handle"],
+                subject=pending_notification["subject"],
+                message_text=pending_notification["message_text"],
+            )
+        _mark_message_workflow_outcome_notification_result(
+            connect=connect,
+            pending_notification=pending_notification,
+            notification_status="sent",
+            notification_error="",
+            now_ts_ms=now_ts_ms,
+        )
+    except Exception as exc:
+        logger.warning(
+            "message_workflow_outcome_notification_failed "
+            "message_id=%s channel=%s recipient=%s error=%s",
+            pending_notification.get("message_id"),
+            pending_notification.get("channel_type"),
+            pending_notification.get("recipient_handle"),
+            _read_exception_detail(exc),
+        )
+        _mark_message_workflow_outcome_notification_result(
+            connect=connect,
+            pending_notification=pending_notification,
+            notification_status="failed",
+            notification_error=_read_exception_detail(exc),
+            now_ts_ms=now_ts_ms,
+        )
+
+
+def _mark_message_workflow_outcome_notification_result(
+    connect: Callable[..., Any],
+    pending_notification: dict,
+    notification_status: str,
+    notification_error: str,
+    now_ts_ms: int,
+) -> None:
+    trade_ids = [
+        trade_id
+        for trade_id in pending_notification.get("trade_ids", [])
+        if isinstance(trade_id, int) and trade_id > 0
+    ]
+    with connect(**DB_CONFIG) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE stephen_dcx_contact_messages
+                SET workflow_metadata_json = workflow_metadata_json || %s::jsonb
+                WHERE id = %s
+                """,
+                (
+                    psycopg2.extras.Json(
+                        {
+                            "workflow_outcome_notification": {
+                                "status": notification_status,
+                                "error": notification_error,
+                                "channel_type": pending_notification.get("channel_type"),
+                                "sent_at_ts_ms": now_ts_ms if notification_status == "sent" else None,
+                                "trade_ids": trade_ids,
+                                "market_topic_ids": pending_notification.get("market_topic_ids", []),
+                            }
+                        }
+                    ),
+                    pending_notification["message_id"],
+                ),
+            )
+            if trade_ids:
+                cursor.execute(
+                    """
+                    UPDATE stephen_dcx_trade_versions trade_version
+                    SET
+                        trade_metadata_json = trade_version.trade_metadata_json || %s::jsonb
+                    FROM stephen_dcx_trades trade
+                    WHERE trade.id = ANY(%s)
+                      AND trade.current_version_id = trade_version.id
+                    """,
+                    (
+                        psycopg2.extras.Json(
+                            {
+                                "confirmation_notification_status": notification_status,
+                                "confirmation_notification_error": notification_error,
+                                "confirmation_notification_sent_at_ts_ms": (
+                                    now_ts_ms if notification_status == "sent" else None
+                                ),
+                                "workflow_outcome_notification_status": notification_status,
+                                "workflow_outcome_notification_error": notification_error,
+                                "workflow_outcome_notification_sent_at_ts_ms": (
+                                    now_ts_ms if notification_status == "sent" else None
+                                ),
+                            }
+                        ),
+                        trade_ids,
+                    ),
                 )
-            elif pending_notification["channel_type"] == "email":
-                send_dcx_email_trade_candidate_confirmation_message(
-                    recipient_email=pending_notification["recipient_handle"],
-                    trade_summary_text=trade_summary_text,
-                    trade_review_url=trade_review_url,
-                )
-            _mark_trade_candidate_confirmation_notification_result(
-                connect=connect,
-                trade_id=trade_id,
-                notification_status="sent",
-                notification_error="",
-                now_ts_ms=now_ts_ms,
-            )
-        except Exception as exc:
-            logger.warning(
-                "trade_candidate_confirmation_notification_failed "
-                "trade_id=%s channel=%s recipient=%s error=%s",
-                trade_id,
-                pending_notification.get("channel_type"),
-                pending_notification.get("recipient_handle"),
-                _read_exception_detail(exc),
-            )
-            _mark_trade_candidate_confirmation_notification_result(
-                connect=connect,
-                trade_id=trade_id,
-                notification_status="failed",
-                notification_error=_read_exception_detail(exc),
-                now_ts_ms=now_ts_ms,
-            )
 
 
 def _mark_trade_candidate_confirmation_notification_result(
