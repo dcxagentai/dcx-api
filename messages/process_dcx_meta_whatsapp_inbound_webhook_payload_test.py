@@ -3,8 +3,8 @@ from messages.process_dcx_meta_whatsapp_inbound_webhook_payload import (
 )
 
 
-def test_processes_meta_whatsapp_payload_into_stored_message_and_acknowledgement() -> None:
-    sent_acknowledgements: list[dict] = []
+def test_processes_meta_whatsapp_payload_into_stored_message_and_read_receipt() -> None:
+    marked_messages: list[dict] = []
 
     result = process_dcx_meta_whatsapp_inbound_webhook_payload(
         webhook_payload={"entry": [{"changes": []}]},
@@ -18,7 +18,7 @@ def test_processes_meta_whatsapp_payload_into_stored_message_and_acknowledgement
                 "message_subject": "",
                 "raw_text_content": "Hola, tengo trigo disponible.",
                 "received_at_ts_ms": 1777000000000,
-                "should_send_ack": True,
+                "should_mark_read": True,
                 "message_metadata_json": {"meta_message_type": "text"},
             }
         ],
@@ -32,18 +32,18 @@ def test_processes_meta_whatsapp_payload_into_stored_message_and_acknowledgement
             "resolved_contact_method_id": 91,
             "resolution_status": "matched_contact_method",
         },
-        send_whatsapp_text_message=lambda **kwargs: sent_acknowledgements.append(kwargs)
-        or {"provider_message_id": "wamid.ack"},
+        mark_whatsapp_message_as_read=lambda **kwargs: marked_messages.append(kwargs)
+        or {"status": "accepted"},
     )
 
     assert result["status"] == "processed"
     assert result["processed_message_count"] == 1
     assert result["messages"][0]["message_id"] == 501
+    assert result["messages"][0]["read_receipt_status"] == "accepted"
     assert result["messages"][0]["acknowledgement_status"] == "accepted"
-    assert sent_acknowledgements == [
+    assert marked_messages == [
         {
-            "phone_e164": "+34600111222",
-            "message_text": "Received. I'm analysing this now.",
+            "provider_message_id": "wamid.123",
         }
     ]
 
@@ -63,7 +63,7 @@ def test_processes_meta_whatsapp_media_attachment_into_inbound_attachment_inputs
                 "message_subject": "",
                 "raw_text_content": "See photo",
                 "received_at_ts_ms": 1777000000000,
-                "should_send_ack": False,
+                "should_mark_read": False,
                 "message_metadata_json": {"meta_message_type": "image"},
                 "attachment_descriptors": [
                     {
@@ -119,7 +119,7 @@ def test_processes_meta_whatsapp_message_when_one_attachment_fetch_fails() -> No
                 "message_subject": "",
                 "raw_text_content": "See files",
                 "received_at_ts_ms": 1777000000000,
-                "should_send_ack": False,
+                "should_mark_read": False,
                 "message_metadata_json": {"meta_message_type": "document"},
                 "attachment_descriptors": [
                     {
@@ -176,8 +176,8 @@ def test_processes_meta_whatsapp_message_when_one_attachment_fetch_fails() -> No
     ]
 
 
-def test_suppresses_repeated_acknowledgements_for_multi_image_whatsapp_burst() -> None:
-    sent_acknowledgements: list[dict] = []
+def test_marks_each_image_in_multi_image_whatsapp_burst_as_read_without_sending_text() -> None:
+    marked_messages: list[dict] = []
 
     result = process_dcx_meta_whatsapp_inbound_webhook_payload(
         webhook_payload={"entry": [{"changes": []}]},
@@ -191,7 +191,7 @@ def test_suppresses_repeated_acknowledgements_for_multi_image_whatsapp_burst() -
                 "message_subject": "",
                 "raw_text_content": "",
                 "received_at_ts_ms": 1777000000000,
-                "should_send_ack": True,
+                "should_mark_read": True,
                 "message_metadata_json": {"meta_message_type": "image"},
                 "attachment_descriptors": [],
             },
@@ -203,7 +203,7 @@ def test_suppresses_repeated_acknowledgements_for_multi_image_whatsapp_burst() -
                 "message_subject": "",
                 "raw_text_content": "",
                 "received_at_ts_ms": 1777000001000,
-                "should_send_ack": True,
+                "should_mark_read": True,
                 "message_metadata_json": {"meta_message_type": "image"},
                 "attachment_descriptors": [],
             },
@@ -218,17 +218,15 @@ def test_suppresses_repeated_acknowledgements_for_multi_image_whatsapp_burst() -
             "resolved_contact_method_id": 91,
             "resolution_status": "matched_contact_method",
         },
-        send_whatsapp_text_message=lambda **kwargs: sent_acknowledgements.append(kwargs)
-        or {"provider_message_id": "wamid.ack"},
+        mark_whatsapp_message_as_read=lambda **kwargs: marked_messages.append(kwargs)
+        or {"status": "accepted"},
     )
 
-    assert [message["acknowledgement_status"] for message in result["messages"]] == [
+    assert [message["read_receipt_status"] for message in result["messages"]] == [
         "accepted",
-        "suppressed",
+        "accepted",
     ]
-    assert sent_acknowledgements == [
-        {
-            "phone_e164": "+34600111222",
-            "message_text": "Received. I'm analysing this now.",
-        }
+    assert marked_messages == [
+        {"provider_message_id": "wamid.image.1"},
+        {"provider_message_id": "wamid.image.2"},
     ]

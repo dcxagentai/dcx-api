@@ -2,7 +2,7 @@
 CONTEXT:
 This file processes one verified Meta WhatsApp inbound webhook payload into canonical DCX messages.
 It exists so incoming WhatsApp trader messages become stored, derived DCX contact-message rows with
-one immediate WhatsApp acknowledgement.
+one quiet provider read receipt instead of one extra acknowledgement bubble.
 """
 
 from __future__ import annotations
@@ -15,7 +15,9 @@ from apis.meta_whatsapp.read_dcx_meta_whatsapp_inbound_message_envelopes_from_we
 from apis.meta_whatsapp.read_dcx_meta_whatsapp_media_bytes import (
     read_dcx_meta_whatsapp_media_bytes,
 )
-from apis.meta_whatsapp.send_dcx_whatsapp_text_message import send_dcx_whatsapp_text_message
+from apis.meta_whatsapp.mark_dcx_meta_whatsapp_inbound_message_as_read import (
+    mark_dcx_meta_whatsapp_inbound_message_as_read,
+)
 from messages.ingest_dcx_contact_message_from_inbound_envelope import (
     ingest_dcx_contact_message_from_inbound_envelope,
 )
@@ -23,16 +25,13 @@ from messages.store_dcx_contact_message_provider_event import (
     store_dcx_contact_message_provider_event,
 )
 
-_DCX_META_WHATSAPP_ACKNOWLEDGEMENT_TEXT = "Received. I'm analysing this now."
-
-
 def process_dcx_meta_whatsapp_inbound_webhook_payload(
     webhook_payload: dict,
     store_provider_event: Callable[..., dict] | None = None,
     read_message_envelopes: Callable[[dict], list[dict]] | None = None,
     read_media_bytes: Callable[[str], dict] | None = None,
     ingest_inbound_envelope: Callable[..., dict] | None = None,
-    send_whatsapp_text_message: Callable[..., dict] | None = None,
+    mark_whatsapp_message_as_read: Callable[..., dict] | None = None,
 ) -> dict:
     """
     CONTRACT:
@@ -42,11 +41,11 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
         - Stores one provider-event row for the webhook payload.
         - Stores one canonical DCX message row per normalized inbound message envelope.
         - Downloads and stores supported media attachments when the inbound envelope references them.
-        - Attempts one acknowledgement message per inbound envelope.
+        - Attempts one WhatsApp read receipt per inbound envelope.
       side_effects:
         - writes to stephen_dcx_contact_message_provider_events
         - writes to stephen_dcx_contact_messages
-        - may send outbound WhatsApp acknowledgement messages
+        - may mark inbound WhatsApp messages as read through Meta
       idempotent: true
       retry_safe: true
       async: false
@@ -66,12 +65,15 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
       WHAT CAN GO WRONG:
         - The payload may contain no inbound messages.
         - Message ingestion can fail for one or more envelopes.
-        - The acknowledgement send can fail after the inbound message is already stored.
+        - The read-receipt request can fail without blocking message ingestion.
       WHAT COMES NEXT:
         - Media download, transcription, and richer trade classification can build on these stored rows.
 
     TESTS:
-      - none yet in this first provider-intake pass
+      - test_processes_meta_whatsapp_payload_into_stored_message_and_read_receipt
+      - test_processes_meta_whatsapp_media_attachment_into_inbound_attachment_inputs
+      - test_processes_meta_whatsapp_message_when_one_attachment_fetch_fails
+      - test_marks_each_image_in_multi_image_whatsapp_burst_as_read_without_sending_text
 
     ERRORS:
       - API_DCX_META_WHATSAPP_INBOUND_PROCESS_FAILED:
@@ -104,8 +106,18 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
         raise RuntimeError("API_DCX_META_WHATSAPP_INBOUND_PROCESS_FAILED") from exc
 
     processed_messages: list[dict] = []
-    acknowledged_image_source_handles: set[str] = set()
     for message_envelope in message_envelopes:
+        read_receipt_status = "not_sent"
+        should_mark_message_as_read = message_envelope.get("should_mark_read") is True
+        if should_mark_message_as_read:
+            try:
+                (mark_whatsapp_message_as_read or mark_dcx_meta_whatsapp_inbound_message_as_read)(
+                    provider_message_id=message_envelope["provider_message_id"],
+                )
+                read_receipt_status = "accepted"
+            except Exception:
+                read_receipt_status = "failed"
+
         try:
             attachment_inputs = []
             skipped_attachment_reads = []
@@ -157,34 +169,12 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
         except Exception as exc:
             raise RuntimeError("API_DCX_META_WHATSAPP_INBOUND_PROCESS_FAILED") from exc
 
-        acknowledgement_status = "not_sent"
-        normalized_source_handle = str(message_envelope.get("source_handle") or "").strip()
-        should_send_acknowledgement = message_envelope.get("should_send_ack") is True
-        if (
-            should_send_acknowledgement
-            and message_envelope.get("message_format") == "image"
-            and normalized_source_handle in acknowledged_image_source_handles
-        ):
-            should_send_acknowledgement = False
-            acknowledgement_status = "suppressed"
-
-        if should_send_acknowledgement:
-            try:
-                (send_whatsapp_text_message or send_dcx_whatsapp_text_message)(
-                    phone_e164=ingest_result.get("normalized_source_handle") or normalized_source_handle,
-                    message_text=_DCX_META_WHATSAPP_ACKNOWLEDGEMENT_TEXT,
-                )
-                acknowledgement_status = "accepted"
-                if message_envelope.get("message_format") == "image" and normalized_source_handle != "":
-                    acknowledged_image_source_handles.add(normalized_source_handle)
-            except Exception:
-                acknowledgement_status = "failed"
-
         processed_messages.append(
             {
                 **ingest_result,
                 "provider_message_id": message_envelope["provider_message_id"],
-                "acknowledgement_status": acknowledgement_status,
+                "read_receipt_status": read_receipt_status,
+                "acknowledgement_status": read_receipt_status,
             }
         )
 

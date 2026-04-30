@@ -105,7 +105,7 @@ def read_dcx_meta_whatsapp_inbound_message_envelopes_from_webhook_payload(
                         "message_subject": "",
                         "raw_text_content": raw_text_content,
                         "received_at_ts_ms": _read_dcx_meta_whatsapp_timestamp_ms(message.get("timestamp")),
-                        "should_send_ack": True,
+                        "should_mark_read": True,
                         "message_metadata_json": {
                             "meta_message_type": raw_message_type,
                             "meta_contact_profile_name": contact_profile_name,

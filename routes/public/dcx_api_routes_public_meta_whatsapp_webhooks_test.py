@@ -36,7 +36,7 @@ def test_meta_whatsapp_webhook_post_accepts_verified_payload_for_background_proc
             "status": "processed",
             "provider_event_id": 88,
             "processed_message_count": 1,
-            "messages": [{"message_id": 501, "acknowledgement_status": "accepted"}],
+            "messages": [{"message_id": 501, "read_receipt_status": "accepted"}],
         },
     ) as process_inbound_whatsapp:
         response = client.post(

@@ -1,8 +1,8 @@
 """
 CONTEXT:
 This file sends one free-text WhatsApp message through the Meta WhatsApp Cloud API.
-It exists so inbound WhatsApp intake can acknowledge message receipt without leaking provider-specific
-payload details into route or message-domain code.
+It exists so DCX workflow follow-ups can send simple WhatsApp text without leaking provider-specific
+payload details into route, account, or message-domain code.
 """
 
 from __future__ import annotations
@@ -34,9 +34,9 @@ def send_dcx_whatsapp_text_message(
 
     NARRATIVE:
       WHY this exists:
-        - Traders should get one immediate acknowledgement that DCX received the inbound WhatsApp message.
+        - Traders should get clear WhatsApp follow-up messages when DCX has a real workflow outcome to share.
       WHEN TO USE it:
-        - Use it only as a short acknowledgement within the open inbound WhatsApp conversation window.
+        - Use it for simple free-text follow-ups within an open inbound WhatsApp conversation window.
       WHEN NOT TO USE it:
         - Do not use it for template-only verification flows or inbound webhook verification.
       WHAT CAN GO WRONG:

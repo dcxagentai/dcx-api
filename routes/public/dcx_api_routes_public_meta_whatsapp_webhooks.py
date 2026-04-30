@@ -103,13 +103,13 @@ async def post_dcx_public_meta_whatsapp_webhook_event(
       postconditions:
         - Returns `200` with one canonical success wrapper as soon as the webhook is verified and accepted.
         - Schedules the heavier provider-event store, canonical message ingest, media download, and
-          acknowledgement work in one background task.
+          read-receipt and workflow-processing work in one background task.
         - Returns one canonical error wrapper when the webhook is invalid or cannot be processed.
       side_effects:
         - enqueues one background task
         - background execution may store provider-event rows
         - background execution may store contact-message rows
-        - background execution may send WhatsApp acknowledgement messages
+        - background execution may mark inbound WhatsApp messages as read and may send workflow follow-ups
       idempotent: true
       retry_safe: true
       async: true

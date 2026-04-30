@@ -43,7 +43,7 @@ def test_returns_supported_image_message_envelope_with_attachment_descriptor() -
             "message_subject": "",
             "raw_text_content": "Look at this chart",
             "received_at_ts_ms": 1777000000000,
-            "should_send_ack": True,
+            "should_mark_read": True,
             "message_metadata_json": {
                 "meta_message_type": "image",
                 "meta_contact_profile_name": "Trader",
