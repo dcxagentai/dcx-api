@@ -202,11 +202,23 @@ from routes.users.dcx_api_routes_users_me_trade_reject import (
 from routes.users.dcx_api_routes_users_me_trade_update import (
     dcx_api_routes_users_me_trade_update_router,
 )
+from routes.users.dcx_api_routes_users_me_trade_visibility import (
+    dcx_api_routes_users_me_trade_visibility_router,
+)
 from routes.users.dcx_api_routes_users_me_market_topics_catalog import (
     dcx_api_routes_users_me_market_topics_catalog_router,
 )
 from routes.users.dcx_api_routes_users_me_market_topic_detail import (
     dcx_api_routes_users_me_market_topic_detail_router,
+)
+from routes.users.dcx_api_routes_users_me_market_topic_visibility import (
+    dcx_api_routes_users_me_market_topic_visibility_router,
+)
+from routes.users.dcx_api_routes_users_me_market_trades import (
+    dcx_api_routes_users_me_market_trades_router,
+)
+from routes.users.dcx_api_routes_users_me_market_forum import (
+    dcx_api_routes_users_me_market_forum_router,
 )
 from routes.users.dcx_api_routes_users_me_message_attachment_file import (
     dcx_api_routes_users_me_message_attachment_file_router,
@@ -300,8 +312,12 @@ app.include_router(dcx_api_routes_users_me_trade_detail_router)
 app.include_router(dcx_api_routes_users_me_trade_confirm_router)
 app.include_router(dcx_api_routes_users_me_trade_reject_router)
 app.include_router(dcx_api_routes_users_me_trade_update_router)
+app.include_router(dcx_api_routes_users_me_trade_visibility_router)
 app.include_router(dcx_api_routes_users_me_market_topics_catalog_router)
 app.include_router(dcx_api_routes_users_me_market_topic_detail_router)
+app.include_router(dcx_api_routes_users_me_market_topic_visibility_router)
+app.include_router(dcx_api_routes_users_me_market_trades_router)
+app.include_router(dcx_api_routes_users_me_market_forum_router)
 app.include_router(dcx_api_routes_users_me_file_object_router)
 app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
 app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)

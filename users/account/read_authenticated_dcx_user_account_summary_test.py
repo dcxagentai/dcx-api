@@ -97,6 +97,9 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         "Europe/Madrid",
                         "(UTC+1/+2) Madrid",
                         "Europe",
+                        "Stephen Trader",
+                        "stephen_trader",
+                        "handle",
                     )
                 ],
                 [
@@ -162,6 +165,12 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
         "last_seen_at_ts_ms": 1775324331389,
         "created_at_ts_ms": 1773936459277,
         "updated_at_ts_ms": 1775324331563,
+        "public_identity": {
+            "public_display_name": "Stephen Trader",
+            "public_handle": "stephen_trader",
+            "public_identity_mode": "handle",
+            "public_identity_label": "@stephen_trader",
+        },
         "preferred_language": {
             "id": 4,
             "language_code": "de",
@@ -271,6 +280,16 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "label": "Alle E-Mails",
             },
         ],
+        "available_public_identity_modes": [
+            {
+                "value": "display_name",
+                "label": "Name",
+            },
+            {
+                "value": "handle",
+                "label": "Nickname",
+            },
+        ],
     }
 
 
@@ -317,6 +336,9 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         None,
                         None,
                         None,
+                        "",
+                        "",
+                        "anonymous",
                     )
                 ],
                 [

@@ -120,7 +120,10 @@ def read_authenticated_dcx_user_account_summary_capability(
                         tz.id,
                         tz.iana_name,
                         tz.display_label,
-                        tz.region_label
+                        tz.region_label,
+                        u.public_display_name,
+                        u.public_handle,
+                        u.public_identity_mode
                     FROM stephen_dcx_users u
                     LEFT JOIN LATERAL (
                         SELECT
@@ -402,6 +405,17 @@ def read_authenticated_dcx_user_account_summary_capability(
         "last_seen_at_ts_ms": user_row[11],
         "created_at_ts_ms": user_row[12],
         "updated_at_ts_ms": user_row[13],
+        "public_identity": {
+            "public_display_name": user_row[23],
+            "public_handle": user_row[24],
+            "public_identity_mode": user_row[25],
+            "public_identity_label": _read_public_identity_label(
+                user_id=user_row[0],
+                public_display_name=user_row[23],
+                public_handle=user_row[24],
+                public_identity_mode=user_row[25],
+            ),
+        },
         "preferred_language": preferred_language,
         "preferred_timezone": preferred_timezone,
         "email_contact_methods": email_contact_methods,
@@ -433,6 +447,16 @@ def read_authenticated_dcx_user_account_summary_capability(
                 ),
             },
         ],
+        "available_public_identity_modes": [
+            {
+                "value": "display_name",
+                "label": "Name",
+            },
+            {
+                "value": "handle",
+                "label": "Nickname",
+            },
+        ],
     }
 
 
@@ -458,3 +482,28 @@ def _read_email_communication_preference_label(
         return ux_strings.get("email_preference_all_email") or "All email"
 
     return email_communication_preference
+
+
+def _read_public_identity_label(
+    user_id: int,
+    public_display_name: str | None,
+    public_handle: str | None,
+    public_identity_mode: str | None,
+) -> str:
+    normalized_display_name = public_display_name.strip() if isinstance(public_display_name, str) else ""
+    normalized_handle = public_handle.strip() if isinstance(public_handle, str) else ""
+    normalized_mode = public_identity_mode.strip() if isinstance(public_identity_mode, str) else ""
+
+    if normalized_mode == "anonymous":
+        return f"Trader #{user_id}"
+
+    if normalized_mode == "handle" and normalized_handle:
+        return f"@{normalized_handle}"
+
+    if normalized_display_name:
+        return normalized_display_name
+
+    if normalized_handle:
+        return f"@{normalized_handle}"
+
+    return f"Trader #{user_id}"

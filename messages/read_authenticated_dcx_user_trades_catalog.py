@@ -58,6 +58,11 @@ def read_authenticated_dcx_user_trades_catalog(
                         trade_version.normalized_destination_location,
                         trade_version.missing_required_fields_json,
                         trade_version.trade_metadata_json,
+                        trade.visibility_status,
+                        publication.id AS trade_publication_id,
+                        publication.public_reference_code,
+                        publication.visibility_status AS publication_visibility_status,
+                        publication.publication_status,
                         trade.updated_at_ts_ms,
                         message.channel_type,
                         message.created_at_ts_ms
@@ -66,6 +71,9 @@ def read_authenticated_dcx_user_trades_catalog(
                       ON trade_version.id = trade.current_version_id
                     INNER JOIN stephen_dcx_contact_messages message
                       ON message.id = trade.source_message_id_initial
+                    LEFT JOIN stephen_dcx_trade_publications publication
+                      ON publication.trade_id = trade.id
+                     AND publication.publication_status = 'active'
                     WHERE trade.initiating_user_id = %s
                     ORDER BY trade.updated_at_ts_ms DESC, trade.id DESC
                     """,
@@ -98,10 +106,15 @@ def read_authenticated_dcx_user_trades_catalog(
                 "normalized_destination_location": row[15],
                 "missing_required_fields_json": row[16] if isinstance(row[16], list) else [],
                 "trade_metadata_json": row[17] if isinstance(row[17], dict) else {},
+                "visibility_status": row[18] or "private",
+                "trade_publication_id": row[19],
+                "public_reference_code": row[20],
+                "publication_visibility_status": row[21],
+                "publication_status": row[22],
                 "requires_user_attention": row[2] in {"pending_confirmation", "needs_more_detail"},
-                "updated_at_ts_ms": row[18],
-                "source_channel_type": row[19],
-                "source_created_at_ts_ms": row[20],
+                "updated_at_ts_ms": row[23],
+                "source_channel_type": row[24],
+                "source_created_at_ts_ms": row[25],
             }
             for row in trade_rows
         ],

@@ -8,6 +8,7 @@ to controlled inline autosave behavior without yet touching high-risk fields suc
 from __future__ import annotations
 
 from typing import Any, Callable
+import re
 
 import psycopg2
 
@@ -19,12 +20,23 @@ ALLOWED_EMAIL_COMMUNICATION_PREFERENCES = {
     "all_email",
 }
 
+ALLOWED_PUBLIC_IDENTITY_MODES = {
+    "display_name",
+    "handle",
+    "anonymous",
+}
+
+PUBLIC_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
+
 
 def save_authenticated_dcx_user_account_editable_settings_capability(
     authenticated_user_id: int,
     preferred_language_id: int | None,
     preferred_timezone_id: int | None,
     email_communication_preference: str,
+    public_display_name: str,
+    public_handle: str,
+    public_identity_mode: str,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -147,6 +159,18 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     if normalized_email_communication_preference not in ALLOWED_EMAIL_COMMUNICATION_PREFERENCES:
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_EMAIL_PREFERENCE_INVALID")
 
+    normalized_public_display_name = public_display_name.strip() if isinstance(public_display_name, str) else ""
+    if len(normalized_public_display_name) > 80:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
+
+    normalized_public_handle = public_handle.strip().removeprefix("@") if isinstance(public_handle, str) else ""
+    if normalized_public_handle and PUBLIC_HANDLE_PATTERN.fullmatch(normalized_public_handle) is None:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
+
+    normalized_public_identity_mode = public_identity_mode.strip().lower() if isinstance(public_identity_mode, str) else ""
+    if normalized_public_identity_mode not in ALLOWED_PUBLIC_IDENTITY_MODES:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
+
     if preferred_language_id is not None and (
         not isinstance(preferred_language_id, int) or preferred_language_id <= 0
     ):
@@ -190,6 +214,23 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                     if cursor.fetchone() is None:
                         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
 
+                if normalized_public_handle:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM stephen_dcx_users
+                        WHERE lower(public_handle) = lower(%s)
+                          AND id <> %s
+                        LIMIT 1
+                        """,
+                        (
+                            normalized_public_handle,
+                            authenticated_user_id,
+                        ),
+                    )
+                    if cursor.fetchone() is not None:
+                        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_HANDLE_TAKEN")
+
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_users
@@ -197,14 +238,20 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         preferred_language_id = %s,
                         preferred_timezone_id = %s,
                         email_communication_preference = %s,
+                        public_display_name = %s,
+                        public_handle = %s,
+                        public_identity_mode = %s,
                         updated_at_ts_ms = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
                     WHERE id = %s
-                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference
+                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode
                     """,
                     (
                         preferred_language_id,
                         preferred_timezone_id,
                         normalized_email_communication_preference,
+                        normalized_public_display_name,
+                        normalized_public_handle,
+                        normalized_public_identity_mode,
                         authenticated_user_id,
                     ),
                 )
@@ -222,4 +269,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "preferred_language_id": saved_row[1],
         "preferred_timezone_id": saved_row[2],
         "email_communication_preference": saved_row[3],
+        "public_display_name": saved_row[4],
+        "public_handle": saved_row[5],
+        "public_identity_mode": saved_row[6],
     }

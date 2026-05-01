@@ -69,11 +69,19 @@ def read_authenticated_dcx_user_trade_detail(
                         trade_version.trade_extraction_notes_text,
                         trade_version.missing_required_fields_json,
                         trade_version.trade_metadata_json,
+                        trade.visibility_status,
+                        publication.id AS trade_publication_id,
+                        publication.public_reference_code,
+                        publication.visibility_status AS publication_visibility_status,
+                        publication.publication_status,
                         trade.created_at_ts_ms,
                         trade.updated_at_ts_ms
                     FROM stephen_dcx_trades trade
                     INNER JOIN stephen_dcx_trade_versions trade_version
                       ON trade_version.id = trade.current_version_id
+                    LEFT JOIN stephen_dcx_trade_publications publication
+                      ON publication.trade_id = trade.id
+                     AND publication.publication_status = 'active'
                     WHERE trade.id = %s
                       AND trade.initiating_user_id = %s
                     LIMIT 1
@@ -155,6 +163,11 @@ def read_authenticated_dcx_user_trade_detail(
         "trade_extraction_notes_text": trade_row[35],
         "missing_required_fields_json": trade_row[36] if isinstance(trade_row[36], list) else [],
         "trade_metadata_json": trade_row[37] if isinstance(trade_row[37], dict) else {},
+        "visibility_status": trade_row[38] or "private",
+        "trade_publication_id": trade_row[39],
+        "public_reference_code": trade_row[40],
+        "publication_visibility_status": trade_row[41],
+        "publication_status": trade_row[42],
         "requires_user_attention": trade_row[3] in {"pending_confirmation", "needs_more_detail"},
         "can_confirm": trade_row[3] != "rejected" and not _read_trade_confirm_blocking_missing_fields(
             {
@@ -163,8 +176,8 @@ def read_authenticated_dcx_user_trade_detail(
             }
         ),
         "can_reject": trade_row[3] != "rejected",
-        "created_at_ts_ms": trade_row[38],
-        "updated_at_ts_ms": trade_row[39],
+        "created_at_ts_ms": trade_row[43],
+        "updated_at_ts_ms": trade_row[44],
         "trade_versions": [
             {
                 "version_id": version_row[0],

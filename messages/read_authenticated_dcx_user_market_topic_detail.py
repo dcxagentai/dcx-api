@@ -34,9 +34,17 @@ def read_authenticated_dcx_user_market_topic_detail(
                         topic.topic_scope_text,
                         topic.topic_tags_json,
                         topic.topic_metadata_json,
+                        topic.visibility_status,
+                        forum_post.id AS forum_post_id,
+                        forum_post.public_reference_code,
+                        forum_post.visibility_status AS forum_visibility_status,
+                        forum_post.forum_post_status,
                         topic.created_at_ts_ms,
                         topic.updated_at_ts_ms
                     FROM stephen_dcx_market_topics topic
+                    LEFT JOIN stephen_dcx_forum_posts forum_post
+                      ON forum_post.source_market_topic_id = topic.id
+                     AND forum_post.forum_post_status IN ('open', 'closed')
                     WHERE topic.id = %s
                       AND topic.initiating_user_id = %s
                     LIMIT 1
@@ -77,8 +85,13 @@ def read_authenticated_dcx_user_market_topic_detail(
         "topic_scope_text": topic_row[5],
         "topic_tags_json": topic_row[6] if isinstance(topic_row[6], list) else [],
         "topic_metadata_json": topic_row[7] if isinstance(topic_row[7], dict) else {},
-        "created_at_ts_ms": topic_row[8],
-        "updated_at_ts_ms": topic_row[9],
+        "visibility_status": topic_row[8] or "private",
+        "forum_post_id": topic_row[9],
+        "public_reference_code": topic_row[10],
+        "forum_visibility_status": topic_row[11],
+        "forum_post_status": topic_row[12],
+        "created_at_ts_ms": topic_row[13],
+        "updated_at_ts_ms": topic_row[14],
         "turns": [
             {
                 "market_topic_turn_id": row[0],

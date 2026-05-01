@@ -43,7 +43,12 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         preferred_language_id=4,
         preferred_timezone_id=2,
         email_communication_preference="newsletters",
-        connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
+        public_display_name="Stephen Trader",
+        public_handle="stephen_trader",
+        public_identity_mode="handle",
+        connect_to_database=lambda **_: _FakeConnection(
+            [(1,), (1,), None, (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle")]
+        ),
     )
 
     assert result == {
@@ -51,6 +56,9 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         "preferred_language_id": 4,
         "preferred_timezone_id": 2,
         "email_communication_preference": "newsletters",
+        "public_display_name": "Stephen Trader",
+        "public_handle": "stephen_trader",
+        "public_identity_mode": "handle",
     }
 
 
@@ -61,6 +69,9 @@ def test_raises_clear_error_for_invalid_email_communication_preference() -> None
             preferred_language_id=4,
             preferred_timezone_id=2,
             email_communication_preference="marketing_everything",
+            public_display_name="Stephen Trader",
+            public_handle="",
+            public_identity_mode="display_name",
             connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:
@@ -76,6 +87,9 @@ def test_raises_clear_error_for_missing_user_row() -> None:
             preferred_language_id=None,
             preferred_timezone_id=None,
             email_communication_preference="no_email",
+            public_display_name="",
+            public_handle="",
+            public_identity_mode="anonymous",
             connect_to_database=lambda **_: _FakeConnection([None]),
         )
     except RuntimeError as exc:
@@ -91,6 +105,9 @@ def test_raises_clear_error_for_invalid_timezone() -> None:
             preferred_language_id=4,
             preferred_timezone_id=-1,
             email_communication_preference="newsletters",
+            public_display_name="Stephen Trader",
+            public_handle="",
+            public_identity_mode="display_name",
             connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:

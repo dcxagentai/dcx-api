@@ -47,12 +47,20 @@ def read_authenticated_dcx_user_market_topics_catalog(
                         topic.topic_summary_text,
                         topic.topic_scope_text,
                         topic.topic_tags_json,
+                        topic.visibility_status,
+                        forum_post.id AS forum_post_id,
+                        forum_post.public_reference_code,
+                        forum_post.visibility_status AS forum_visibility_status,
+                        forum_post.forum_post_status,
                         topic.updated_at_ts_ms,
                         message.channel_type,
                         message.created_at_ts_ms
                     FROM stephen_dcx_market_topics topic
                     INNER JOIN stephen_dcx_contact_messages message
                       ON message.id = topic.source_message_id
+                    LEFT JOIN stephen_dcx_forum_posts forum_post
+                      ON forum_post.source_market_topic_id = topic.id
+                     AND forum_post.forum_post_status IN ('open', 'closed')
                     WHERE topic.initiating_user_id = %s
                     ORDER BY topic.updated_at_ts_ms DESC, topic.id DESC
                     """,
@@ -74,9 +82,14 @@ def read_authenticated_dcx_user_market_topics_catalog(
                 "topic_summary_text": row[4],
                 "topic_scope_text": row[5],
                 "topic_tags_json": row[6] if isinstance(row[6], list) else [],
-                "updated_at_ts_ms": row[7],
-                "source_channel_type": row[8],
-                "source_created_at_ts_ms": row[9],
+                "visibility_status": row[7] or "private",
+                "forum_post_id": row[8],
+                "public_reference_code": row[9],
+                "forum_visibility_status": row[10],
+                "forum_post_status": row[11],
+                "updated_at_ts_ms": row[12],
+                "source_channel_type": row[13],
+                "source_created_at_ts_ms": row[14],
             }
             for row in topic_rows
         ],

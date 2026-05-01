@@ -33,6 +33,9 @@ class DcxUsersMeAccountSettingsSaveRequest(BaseModel):
     preferred_language_id: int | None
     preferred_timezone_id: int | None
     email_communication_preference: str
+    public_display_name: str
+    public_handle: str
+    public_identity_mode: str
 
 
 @dcx_api_routes_users_me_account_settings_router.post("/me/account-settings", response_model=None)
@@ -112,6 +115,9 @@ def post_authenticated_dcx_user_account_settings(
             preferred_language_id=account_settings_save_request.preferred_language_id,
             preferred_timezone_id=account_settings_save_request.preferred_timezone_id,
             email_communication_preference=account_settings_save_request.email_communication_preference,
+            public_display_name=account_settings_save_request.public_display_name,
+            public_handle=account_settings_save_request.public_handle,
+            public_identity_mode=account_settings_save_request.public_identity_mode,
         )
         refreshed_account_summary = read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=authenticated_user_id,
@@ -136,6 +142,8 @@ def post_authenticated_dcx_user_account_settings(
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_LANGUAGE_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_EMAIL_PREFERENCE_INVALID",
+            "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID",
+            "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_HANDLE_TAKEN",
         }:
             return JSONResponse(
                 status_code=400,
