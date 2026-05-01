@@ -217,6 +217,9 @@ from routes.users.dcx_api_routes_users_me_market_topic_visibility import (
 from routes.users.dcx_api_routes_users_me_market_trades import (
     dcx_api_routes_users_me_market_trades_router,
 )
+from routes.users.dcx_api_routes_users_me_trade_threads import (
+    dcx_api_routes_users_me_trade_threads_router,
+)
 from routes.users.dcx_api_routes_users_me_market_forum import (
     dcx_api_routes_users_me_market_forum_router,
 )
@@ -317,6 +320,7 @@ app.include_router(dcx_api_routes_users_me_market_topics_catalog_router)
 app.include_router(dcx_api_routes_users_me_market_topic_detail_router)
 app.include_router(dcx_api_routes_users_me_market_topic_visibility_router)
 app.include_router(dcx_api_routes_users_me_market_trades_router)
+app.include_router(dcx_api_routes_users_me_trade_threads_router)
 app.include_router(dcx_api_routes_users_me_market_forum_router)
 app.include_router(dcx_api_routes_users_me_file_object_router)
 app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
