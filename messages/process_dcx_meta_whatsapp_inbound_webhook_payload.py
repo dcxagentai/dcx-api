@@ -12,6 +12,9 @@ from typing import Any, Callable
 from apis.meta_whatsapp.read_dcx_meta_whatsapp_inbound_message_envelopes_from_webhook_payload import (
     read_dcx_meta_whatsapp_inbound_message_envelopes_from_webhook_payload,
 )
+from apis.meta_whatsapp.read_dcx_meta_whatsapp_outbound_status_events_from_webhook_payload import (
+    read_dcx_meta_whatsapp_outbound_status_events_from_webhook_payload,
+)
 from apis.meta_whatsapp.read_dcx_meta_whatsapp_media_bytes import (
     read_dcx_meta_whatsapp_media_bytes,
 )
@@ -24,11 +27,16 @@ from messages.ingest_dcx_contact_message_from_inbound_envelope import (
 from messages.store_dcx_contact_message_provider_event import (
     store_dcx_contact_message_provider_event,
 )
+from messages.record_dcx_meta_whatsapp_outbound_status_event import (
+    record_dcx_meta_whatsapp_outbound_status_event,
+)
 
 def process_dcx_meta_whatsapp_inbound_webhook_payload(
     webhook_payload: dict,
     store_provider_event: Callable[..., dict] | None = None,
     read_message_envelopes: Callable[[dict], list[dict]] | None = None,
+    read_outbound_status_events: Callable[[dict], list[dict]] | None = None,
+    record_outbound_status_event: Callable[[dict], dict] | None = None,
     read_media_bytes: Callable[[str], dict] | None = None,
     ingest_inbound_envelope: Callable[..., dict] | None = None,
     mark_whatsapp_message_as_read: Callable[..., dict] | None = None,
@@ -102,8 +110,23 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
         message_envelopes = (
             read_message_envelopes or read_dcx_meta_whatsapp_inbound_message_envelopes_from_webhook_payload
         )(webhook_payload)
+        outbound_status_events = (
+            read_outbound_status_events or read_dcx_meta_whatsapp_outbound_status_events_from_webhook_payload
+        )(webhook_payload)
     except Exception as exc:
         raise RuntimeError("API_DCX_META_WHATSAPP_INBOUND_PROCESS_FAILED") from exc
+
+    recorded_status_events: list[dict] = []
+    failed_status_event_count = 0
+    for status_event in outbound_status_events:
+        try:
+            recorded_status_events.append(
+                (record_outbound_status_event or record_dcx_meta_whatsapp_outbound_status_event)(
+                    status_event
+                )
+            )
+        except Exception:
+            failed_status_event_count += 1
 
     processed_messages: list[dict] = []
     for message_envelope in message_envelopes:
@@ -182,5 +205,9 @@ def process_dcx_meta_whatsapp_inbound_webhook_payload(
         "status": "processed",
         "provider_event_id": provider_event_result["provider_event_id"],
         "processed_message_count": len(processed_messages),
+        "outbound_status_event_count": len(outbound_status_events),
+        "recorded_outbound_status_event_count": len(recorded_status_events),
+        "failed_outbound_status_event_count": failed_status_event_count,
+        "outbound_status_events": recorded_status_events,
         "messages": processed_messages,
     }

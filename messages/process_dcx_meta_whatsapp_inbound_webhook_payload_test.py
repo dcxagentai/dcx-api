@@ -230,3 +230,42 @@ def test_marks_each_image_in_multi_image_whatsapp_burst_as_read_without_sending_
         {"provider_message_id": "wamid.image.1"},
         {"provider_message_id": "wamid.image.2"},
     ]
+
+
+def test_processes_meta_whatsapp_outbound_status_webhook_event() -> None:
+    recorded_events: list[dict] = []
+
+    result = process_dcx_meta_whatsapp_inbound_webhook_payload(
+        webhook_payload={"entry": [{"changes": []}]},
+        store_provider_event=lambda **_kwargs: {"provider_event_id": 17, "payload_hash": "hash-1"},
+        read_message_envelopes=lambda _payload: [],
+        read_outbound_status_events=lambda _payload: [
+            {
+                "provider_message_id": "wamid.outbound.123",
+                "provider_status": "failed",
+                "status_timestamp_ms": 1777744000000,
+                "recipient_id": "34647818143",
+                "errors": [
+                    {
+                        "code": 131047,
+                        "title": "Re-engagement message",
+                    }
+                ],
+                "conversation": {},
+                "pricing": {},
+            }
+        ],
+        record_outbound_status_event=lambda status_event: recorded_events.append(status_event)
+        or {
+            "status": "recorded",
+            "outbound_route_id": 9,
+            "provider_message_id": status_event["provider_message_id"],
+            "provider_status": status_event["provider_status"],
+        },
+    )
+
+    assert result["processed_message_count"] == 0
+    assert result["outbound_status_event_count"] == 1
+    assert result["recorded_outbound_status_event_count"] == 1
+    assert recorded_events[0]["provider_message_id"] == "wamid.outbound.123"
+    assert recorded_events[0]["provider_status"] == "failed"
