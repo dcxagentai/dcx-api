@@ -123,7 +123,8 @@ def read_authenticated_dcx_user_account_summary_capability(
                         tz.region_label,
                         u.public_display_name,
                         u.public_handle,
-                        u.public_identity_mode
+                        u.public_identity_mode,
+                        COALESCE(u.default_interaction_channel, 'app_only')
                     FROM stephen_dcx_users u
                     LEFT JOIN LATERAL (
                         SELECT
@@ -416,6 +417,7 @@ def read_authenticated_dcx_user_account_summary_capability(
                 public_identity_mode=user_row[25],
             ),
         },
+        "default_interaction_channel": user_row[26],
         "preferred_language": preferred_language,
         "preferred_timezone": preferred_timezone,
         "email_contact_methods": email_contact_methods,
@@ -455,6 +457,20 @@ def read_authenticated_dcx_user_account_summary_capability(
             {
                 "value": "handle",
                 "label": "Nickname",
+            },
+        ],
+        "available_default_interaction_channels": [
+            {
+                "value": "app_only",
+                "label": "App only",
+            },
+            {
+                "value": "email",
+                "label": "Email",
+            },
+            {
+                "value": "whatsapp",
+                "label": "WhatsApp",
             },
         ],
     }

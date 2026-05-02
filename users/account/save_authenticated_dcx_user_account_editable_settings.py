@@ -26,6 +26,12 @@ ALLOWED_PUBLIC_IDENTITY_MODES = {
     "anonymous",
 }
 
+ALLOWED_DEFAULT_INTERACTION_CHANNELS = {
+    "app_only",
+    "email",
+    "whatsapp",
+}
+
 PUBLIC_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 
 
@@ -37,6 +43,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     public_display_name: str,
     public_handle: str,
     public_identity_mode: str,
+    default_interaction_channel: str,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -171,6 +178,14 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     if normalized_public_identity_mode not in ALLOWED_PUBLIC_IDENTITY_MODES:
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
 
+    normalized_default_interaction_channel = (
+        default_interaction_channel.strip().lower()
+        if isinstance(default_interaction_channel, str)
+        else ""
+    )
+    if normalized_default_interaction_channel not in ALLOWED_DEFAULT_INTERACTION_CHANNELS:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_DEFAULT_INTERACTION_CHANNEL_INVALID")
+
     if preferred_language_id is not None and (
         not isinstance(preferred_language_id, int) or preferred_language_id <= 0
     ):
@@ -241,9 +256,10 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         public_display_name = %s,
                         public_handle = %s,
                         public_identity_mode = %s,
+                        default_interaction_channel = %s,
                         updated_at_ts_ms = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
                     WHERE id = %s
-                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode
+                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel
                     """,
                     (
                         preferred_language_id,
@@ -252,6 +268,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         normalized_public_display_name,
                         normalized_public_handle,
                         normalized_public_identity_mode,
+                        normalized_default_interaction_channel,
                         authenticated_user_id,
                     ),
                 )
@@ -272,4 +289,5 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "public_display_name": saved_row[4],
         "public_handle": saved_row[5],
         "public_identity_mode": saved_row[6],
+        "default_interaction_channel": saved_row[7],
     }

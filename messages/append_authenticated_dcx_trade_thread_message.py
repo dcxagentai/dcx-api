@@ -77,6 +77,9 @@ from apis.gemini.translate_dcx_gemini_trade_thread_message import (
 from messages.read_authenticated_dcx_trade_thread_detail import (
     read_authenticated_dcx_trade_thread_detail,
 )
+from messages.send_dcx_trade_thread_message_notification import (
+    send_dcx_trade_thread_message_notification,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -85,6 +88,9 @@ def append_authenticated_dcx_trade_thread_message(
     trade_thread_id: int,
     message_text: str,
     language_code: str = "en",
+    source_channel_type: str = "app",
+    source_contact_message_id: int | None = None,
+    notify_other_participant: bool = True,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict | None:
     normalized_message_text = message_text.strip() if isinstance(message_text, str) else ""
@@ -94,9 +100,14 @@ def append_authenticated_dcx_trade_thread_message(
     normalized_language_code = language_code.strip().lower()[:12] if isinstance(language_code, str) else "en"
     if not normalized_language_code:
         normalized_language_code = "en"
+    normalized_source_channel_type = source_channel_type.strip().lower() if isinstance(source_channel_type, str) else "app"
+    if normalized_source_channel_type not in {"app", "email", "whatsapp"}:
+        normalized_source_channel_type = "app"
 
     connect = connect_to_database or psycopg2.connect
     now_ts_ms = int(time.time() * 1000)
+    inserted_message_id: int | None = None
+    recipient_user_id: int | None = None
 
     try:
         thread_context = _read_trade_thread_append_context(
@@ -113,6 +124,11 @@ def append_authenticated_dcx_trade_thread_message(
             thread_context["counterparty_language_code"]
             if thread_context["owner_user_id"] == authenticated_user_id
             else thread_context["owner_language_code"]
+        )
+        recipient_user_id = (
+            thread_context["counterparty_user_id"]
+            if thread_context["owner_user_id"] == authenticated_user_id
+            else thread_context["owner_user_id"]
         )
         translations_json = _build_trade_thread_message_translations_json(
             message_text=normalized_message_text,
@@ -144,6 +160,7 @@ def append_authenticated_dcx_trade_thread_message(
                     """
                     INSERT INTO stephen_dcx_trade_thread_messages (
                         thread_id,
+                        source_contact_message_id,
                         sender_user_id,
                         source_channel_type,
                         raw_message_text,
@@ -155,11 +172,14 @@ def append_authenticated_dcx_trade_thread_message(
                         created_at_ts_ms,
                         updated_at_ts_ms
                     )
-                    VALUES (%s, %s, 'app', %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                     """,
                     (
                         trade_thread_id,
+                        source_contact_message_id,
                         authenticated_user_id,
+                        normalized_source_channel_type,
                         normalized_message_text,
                         normalized_message_text,
                         message_summary_text,
@@ -170,6 +190,7 @@ def append_authenticated_dcx_trade_thread_message(
                         now_ts_ms,
                     ),
                 )
+                inserted_message_id = cursor.fetchone()[0]
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_trade_threads
@@ -182,6 +203,19 @@ def append_authenticated_dcx_trade_thread_message(
         raise
     except Exception as exc:
         raise RuntimeError("API_DCX_TRADE_THREAD_MESSAGE_APPEND_FAILED") from exc
+
+    if notify_other_participant and recipient_user_id is not None:
+        try:
+            send_dcx_trade_thread_message_notification(
+                trade_thread_id=trade_thread_id,
+                sender_user_id=authenticated_user_id,
+                recipient_user_id=recipient_user_id,
+                message_text=normalized_message_text,
+                source_trade_thread_message_id=inserted_message_id,
+                connect_to_database=connect_to_database,
+            )
+        except RuntimeError:
+            pass
 
     return read_authenticated_dcx_trade_thread_detail(
         authenticated_user_id=authenticated_user_id,
