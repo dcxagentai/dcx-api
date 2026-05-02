@@ -65,6 +65,7 @@ CODE:
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Callable
 
@@ -81,6 +82,9 @@ from messages.send_dcx_trade_thread_message_notification import (
     send_dcx_trade_thread_message_notification,
 )
 from storage.db_config import DB_CONFIG
+
+
+logger = logging.getLogger(__name__)
 
 
 def append_authenticated_dcx_trade_thread_message(
@@ -206,7 +210,7 @@ def append_authenticated_dcx_trade_thread_message(
 
     if notify_other_participant and recipient_user_id is not None:
         try:
-            send_dcx_trade_thread_message_notification(
+            notification_result = send_dcx_trade_thread_message_notification(
                 trade_thread_id=trade_thread_id,
                 sender_user_id=authenticated_user_id,
                 recipient_user_id=recipient_user_id,
@@ -214,8 +218,20 @@ def append_authenticated_dcx_trade_thread_message(
                 source_trade_thread_message_id=inserted_message_id,
                 connect_to_database=connect_to_database,
             )
+            logger.info(
+                "trade_thread_message_notification_result thread_id=%s sender_user_id=%s recipient_user_id=%s result=%s",
+                trade_thread_id,
+                authenticated_user_id,
+                recipient_user_id,
+                notification_result,
+            )
         except RuntimeError:
-            pass
+            logger.exception(
+                "trade_thread_message_notification_failed thread_id=%s sender_user_id=%s recipient_user_id=%s",
+                trade_thread_id,
+                authenticated_user_id,
+                recipient_user_id,
+            )
 
     return read_authenticated_dcx_trade_thread_detail(
         authenticated_user_id=authenticated_user_id,

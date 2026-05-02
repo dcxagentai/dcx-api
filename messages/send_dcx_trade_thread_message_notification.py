@@ -372,7 +372,6 @@ def _read_whatsapp_notification_contact_row(cursor: Any, recipient_user_id: int,
           AND cm.contact_type = 'phone'
           AND cm.is_active = TRUE
           AND cm.is_verified = TRUE
-          AND cm.is_notification_enabled = TRUE
           AND (%s IS NULL OR cm.id = %s)
         ORDER BY cm.is_primary DESC, cm.id ASC
         LIMIT 1
