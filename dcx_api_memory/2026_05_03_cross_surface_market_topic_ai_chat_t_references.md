@@ -20,10 +20,15 @@ CHANGES:
 - Updated topic creation outcome notifications in
   `messages/process_stored_dcx_contact_message_analysis.py` to include `#T{id}` and reply
   instructions.
+- Follow-up polish: initial email/WhatsApp topic creation notifications now also include the
+  opening AI response, so the external channel shows the start of the conversation rather than
+  only the topic handle.
 
 VERIFICATION:
 - `.\.venv\Scripts\python.exe -m pytest messages\route_dcx_inbound_contact_message_to_trade_thread_if_applicable_test.py messages\route_dcx_inbound_contact_message_to_market_topic_if_applicable_test.py messages\process_stored_dcx_contact_message_analysis_test.py`
 - `.\.venv\Scripts\python.exe -m compileall messages\dcx_inbound_cross_surface_reference_text.py messages\route_dcx_inbound_contact_message_to_trade_thread_if_applicable.py messages\route_dcx_inbound_contact_message_to_market_topic_if_applicable.py messages\append_authenticated_dcx_user_market_topic_ai_chat_turn.py messages\send_dcx_market_topic_ai_turn_response_notification.py messages\process_stored_dcx_contact_message_analysis.py messages\ingest_dcx_contact_message_from_inbound_envelope.py`
+- `.\.venv\Scripts\python.exe -m pytest messages\process_stored_dcx_contact_message_analysis_test.py messages\route_dcx_inbound_contact_message_to_market_topic_if_applicable_test.py`
+- `.\.venv\Scripts\python.exe -m compileall messages\process_stored_dcx_contact_message_analysis.py`
 
 NOTES:
 - This remains webhook-inline for the MVP mini slice. A jobs queue should later own AI generation

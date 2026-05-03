@@ -1142,6 +1142,7 @@ def _rebuild_message_workflow_projections(
                         "workflow_item_id": workflow_item_id,
                         "title": str(topic_seed.get("topic_title") or workflow_item.get("item_title") or "").strip(),
                         "summary": str(topic_seed.get("topic_summary_text") or workflow_item.get("item_summary") or "").strip(),
+                        "opening_ai_response_text": str(topic_seed.get("opening_ai_response_text") or "").strip(),
                     }
                 )
             except Exception as exc:
@@ -1272,6 +1273,9 @@ def _build_message_workflow_outcome_notification_payload(
                 f"Market topic #{market_topic_id}",
             )
             message_lines.append(f"#{topic_reference_code} {topic_title}")
+            opening_ai_response_text = _read_first_nonempty_text(topic_output.get("opening_ai_response_text"))
+            if opening_ai_response_text:
+                message_lines.append(opening_ai_response_text)
             message_lines.append(f"Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
             message_lines.append(f"Reply with #{topic_reference_code} followed by your question.")
 

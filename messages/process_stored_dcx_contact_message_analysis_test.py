@@ -29,6 +29,7 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
                     "market_topic_id": 7,
                     "title": "Sanctions impact on fertilizer shipping to Ghana",
                     "summary": "Inquiry about sanctions and shipping.",
+                    "opening_ai_response_text": "EU sanctions may tighten vessel availability and raise risk premiums.",
                 }
             ],
             "other_outputs": [],
@@ -48,6 +49,7 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
             "Review: https://app.dcxagent.ai/me/trades/12\n\n"
             "Market topics:\n"
             "#T7 Sanctions impact on fertilizer shipping to Ghana\n"
+            "EU sanctions may tighten vessel availability and raise risk premiums.\n"
             "Open: https://app.dcxagent.ai/me/topics/7\n"
             "Reply with #T7 followed by your question."
         ),
