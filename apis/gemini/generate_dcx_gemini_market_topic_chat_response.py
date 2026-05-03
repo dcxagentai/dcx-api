@@ -92,7 +92,7 @@ def generate_dcx_gemini_market_topic_chat_response(
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED")
 
     system_instruction = build_dcx_gemini_market_topic_system_instruction()
-    google_search_enabled = _should_enable_google_search_for_market_topic_chat(user_turn_text)
+    google_search_enabled = True
     contents = _build_market_topic_chat_contents(
         topic_context=topic_context,
         prior_turns=prior_turns,
@@ -150,10 +150,9 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
     config_kwargs: dict[str, Any] = {
         "system_instruction": request_context["system_instruction"],
     }
-    if request_context.get("google_search_enabled") is True:
-        config_kwargs["tools"] = [
-            types.Tool(google_search=types.GoogleSearch()),
-        ]
+    config_kwargs["tools"] = [
+        types.Tool(google_search=types.GoogleSearch()),
+    ]
 
     client = genai.Client(api_key=request_context["api_key"])
     response = client.models.generate_content(
@@ -175,10 +174,8 @@ def _build_market_topic_chat_contents(
     google_search_enabled: bool,
 ) -> list[dict]:
     search_instruction = (
-        "\n- Use Google Search grounding for current facts, latest news, recent reports, dates, and source-sensitive claims."
-        "\n- Prefer a concise synthesis of the most relevant recent reports over a long article list."
-        if google_search_enabled
-        else ""
+        "\n- Google Search is available. Use it only when the latest user input asks for current, latest, recent, time-sensitive, or source-sensitive facts."
+        "\n- Prefer a concise synthesis of the most relevant recent reports over a long article list when search is useful."
     )
     contents = [
         {
@@ -238,35 +235,6 @@ def _build_gemini_content_objects(contents: list[dict], types: Any) -> list[Any]
         if part_objects:
             content_objects.append(types.Content(role=role, parts=part_objects))
     return content_objects
-
-
-def _should_enable_google_search_for_market_topic_chat(user_turn_text: str) -> bool:
-    normalized_text = f" {user_turn_text.strip().lower()} "
-    trigger_phrases = [
-        " latest ",
-        " latest news ",
-        " current ",
-        " recent ",
-        " update ",
-        " updates ",
-        " today ",
-        " now ",
-        " this week ",
-        " breaking ",
-        " confirmed ",
-        " source ",
-        " sources ",
-        " news ",
-        " what happened ",
-        " developments ",
-        " últimas ",
-        " ultima ",
-        " noticias ",
-        " actualidad ",
-        " hoy ",
-        " reciente ",
-    ]
-    return any(trigger_phrase in normalized_text for trigger_phrase in trigger_phrases)
 
 
 def _read_dcx_gemini_response_grounding_metadata(response: Any) -> dict:
@@ -329,7 +297,7 @@ def _append_dcx_grounding_sources_to_assistant_text(assistant_turn_text: str, gr
         uri = str(source_dict.get("uri") or "").strip()
         if uri == "":
             continue
-        source_lines.append(f"- {title}: {uri}" if title else f"- {uri}")
+        source_lines.append(f"- [{title}]({uri})" if title else f"- {uri}")
     if not source_lines:
         return assistant_turn_text
     return f"{assistant_turn_text.strip()}\n\nSources:\n{chr(10).join(source_lines)}"

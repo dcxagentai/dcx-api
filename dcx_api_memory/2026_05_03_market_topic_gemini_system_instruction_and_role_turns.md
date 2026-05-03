@@ -53,12 +53,16 @@ chat context alongside title, summary, and tags.
 
 ## Basic Google Search Grounding Test Path
 - Added an MVP Google Search grounding path for private market-topic chat follow-ups.
-- The path is deliberately narrow for testing: it enables Gemini `google_search` only when the latest
-  trader turn looks current/news-sensitive, such as "latest", "current", "news", "today", "update",
-  "recent", or Spanish equivalents.
+- The search tool is now always available in the Gemini topic-chat config so Gemini can decide whether
+  current/search grounding is useful from the user's message in any language.
+- The shared system instruction tells Gemini to use Google Search for current, latest, recent,
+  time-sensitive, or source-sensitive facts, and otherwise answer from topic context and conversation
+  history.
 - Grounding metadata is normalized into assistant turn metadata:
   - `google_search_enabled`
   - `grounding_metadata.web_search_queries`
   - `grounding_metadata.sources`
-- When sources are returned, the assistant text gets a compact `Sources:` block so WhatsApp/email/app
-  users can inspect the source pages without a separate UI pass.
+- When sources are returned, the assistant text gets a compact markdown `Sources:` block so the app can
+  render readable links.
+- WhatsApp topic-continuation delivery strips source URLs from that `Sources:` block and leaves only
+  source names to avoid long redirect URLs in chat bubbles.

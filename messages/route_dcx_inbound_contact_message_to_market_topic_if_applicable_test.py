@@ -13,6 +13,7 @@ from messages.route_dcx_inbound_contact_message_to_market_topic_if_applicable im
 )
 from messages.send_dcx_market_topic_ai_turn_response_notification import (
     _build_market_topic_ai_response_notification_text,
+    _read_whatsapp_market_topic_assistant_text_without_source_links,
 )
 
 
@@ -52,4 +53,18 @@ def test_builds_same_channel_ai_response_with_topic_reference_instruction(monkey
         "#T2 Aluminum premiums\n"
         "https://app.dcxagent.ai/me/topics/2\n\n"
         "The main drivers are Chinese restocking and freight volatility."
+    )
+
+
+def test_strips_source_links_from_whatsapp_topic_ai_response_text() -> None:
+    assert _read_whatsapp_market_topic_assistant_text_without_source_links(
+        "Latest report summary.\n\n"
+        "Sources:\n"
+        "- [UN](https://example.com/un)\n"
+        "- Reuters: https://example.com/reuters"
+    ) == (
+        "Latest report summary.\n\n"
+        "Sources:\n"
+        "- UN\n"
+        "- Reuters"
     )

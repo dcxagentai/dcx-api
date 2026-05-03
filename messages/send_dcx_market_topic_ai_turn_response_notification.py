@@ -57,6 +57,8 @@ CODE:
 
 from __future__ import annotations
 
+import re
+
 from emails.transactional.send_dcx_email_message_workflow_outcome_notification import (
     send_dcx_email_message_workflow_outcome_notification,
 )
@@ -90,11 +92,16 @@ def send_dcx_market_topic_ai_turn_response_notification(
     ):
         raise RuntimeError("API_DCX_MARKET_TOPIC_AI_RESPONSE_NOTIFICATION_INVALID")
 
+    assistant_text_for_surface = (
+        _read_whatsapp_market_topic_assistant_text_without_source_links(normalized_assistant_turn_text)
+        if normalized_channel_type == "whatsapp"
+        else normalized_assistant_turn_text
+    )
     message_text = _build_market_topic_ai_response_notification_text(
         market_topic_id=market_topic_id,
         route_reference_code=normalized_reference_code,
         topic_title=topic_title,
-        assistant_turn_text=normalized_assistant_turn_text,
+        assistant_turn_text=assistant_text_for_surface,
     )
 
     try:
@@ -135,3 +142,21 @@ def _build_market_topic_ai_response_notification_text(
         topic_title=topic_title,
         message_text=assistant_turn_text,
     )
+
+
+def _read_whatsapp_market_topic_assistant_text_without_source_links(assistant_turn_text: str) -> str:
+    lines = assistant_turn_text.strip().splitlines()
+    cleaned_lines = []
+    in_sources_block = False
+    for line in lines:
+        if line.strip().lower() == "sources:":
+            in_sources_block = True
+            cleaned_lines.append(line)
+            continue
+        if in_sources_block:
+            cleaned_line = re.sub(r"^- \[([^\]]+)\]\([^)]+\)\s*$", r"- \1", line.strip())
+            cleaned_line = re.sub(r"^- ([^:]+):\s*https?://\S+\s*$", r"- \1", cleaned_line)
+            cleaned_lines.append(cleaned_line)
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
