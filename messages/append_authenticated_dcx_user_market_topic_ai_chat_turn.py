@@ -89,7 +89,7 @@ from apis.gemini.generate_dcx_gemini_market_topic_chat_response import (
 )
 from storage.db_config import DB_CONFIG
 
-DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS = 28000
+DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS = 100000
 DCX_MARKET_TOPIC_CHAT_USER_TURN_MAX_CHARACTERS = 4000
 
 

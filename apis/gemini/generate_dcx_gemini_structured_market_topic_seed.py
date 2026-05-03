@@ -11,6 +11,9 @@ import json
 import os
 from typing import Any, Callable
 
+from apis.gemini.build_dcx_gemini_market_topic_system_instruction import (
+    build_dcx_gemini_market_topic_system_instruction,
+)
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
@@ -86,6 +89,7 @@ def generate_dcx_gemini_structured_market_topic_seed(
             workflow_item=workflow_item,
             attachment_inputs=attachment_inputs,
         ),
+        "system_instruction": build_dcx_gemini_market_topic_system_instruction(),
         "response_schema": _build_dcx_market_topic_seed_response_schema(),
     }
 
@@ -108,6 +112,7 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
         model=request_context["model_name"],
         contents=[request_context["prompt_text"]],
         config=types.GenerateContentConfig(
+            system_instruction=request_context["system_instruction"],
             response_mime_type="application/json",
             response_schema=request_context["response_schema"],
         ),
@@ -131,24 +136,17 @@ def _build_dcx_market_topic_seed_prompt(
         for attachment_input in attachment_inputs
     ]
     return f"""
-<dcx_task>
-Turn this trader-relevant market topic into a structured topic seed and one opening AI response.
-Return JSON only.
-</dcx_task>
-
-<topic_seed_rules>
-- Treat the topic as commercially relevant market, commodity, logistics, sanctions, regulatory,
-  or business context rather than as a structured trade.
+<task>
+- Formulate the first reply to the user's message or question.
 - Write a concise topic title.
-- Write a practical topic summary in trader-facing language.
+- Write a practical topic summary.
+- Write a topic_scope_text as a concise boundary for what this topic chat is about.
 - Suggest useful tags or themes for later filtering.
-- Write one opening_ai_response_text that feels like the first useful reply from DCX AI:
+- Write one opening_ai_response_text:
     - grounded
     - concise but substantive
-    - useful to a trader
-    - not overlong
-- suggested_next_prompts should be short trader-appropriate follow-up directions.
-</topic_seed_rules>
+- Return JSON only.
+</task>
 
 <message>
 message_id={message_input.get("message_id")}
@@ -185,10 +183,6 @@ def _build_dcx_market_topic_seed_response_schema() -> dict:
                 "items": {"type": "string"},
             },
             "opening_ai_response_text": {"type": "string"},
-            "suggested_next_prompts": {
-                "type": "array",
-                "items": {"type": "string"},
-            },
         },
         "required": [
             "topic_title",
@@ -196,7 +190,6 @@ def _build_dcx_market_topic_seed_response_schema() -> dict:
             "topic_scope_text",
             "topic_tags",
             "opening_ai_response_text",
-            "suggested_next_prompts",
         ],
     }
 
@@ -211,7 +204,6 @@ def _normalize_market_topic_seed_output(parsed_output: dict, model_name: str) ->
         "topic_scope_text": str(parsed_output.get("topic_scope_text") or "").strip(),
         "topic_tags": _normalize_string_list(parsed_output.get("topic_tags")),
         "opening_ai_response_text": str(parsed_output.get("opening_ai_response_text") or "").strip(),
-        "suggested_next_prompts": _normalize_string_list(parsed_output.get("suggested_next_prompts")),
         "raw_output_json": parsed_output,
     }
 

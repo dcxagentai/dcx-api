@@ -1082,7 +1082,6 @@ def _rebuild_message_workflow_projections(
                                 "provider_name": topic_seed.get("provider_name", ""),
                                 "model_name": topic_seed.get("model_name", ""),
                                 "prompt_version": topic_seed.get("prompt_version", ""),
-                                "suggested_next_prompts": topic_seed.get("suggested_next_prompts", []),
                                 "raw_output_json": topic_seed.get("raw_output_json", {}),
                             }
                         ),

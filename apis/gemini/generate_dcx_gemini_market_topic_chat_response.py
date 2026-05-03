@@ -64,9 +64,13 @@ CODE:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from typing import Any, Callable
 
+from apis.gemini.build_dcx_gemini_market_topic_system_instruction import (
+    build_dcx_gemini_market_topic_system_instruction,
+)
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
@@ -87,7 +91,8 @@ def generate_dcx_gemini_market_topic_chat_response(
     if api_key == "" and send_gemini_request is None:
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED")
 
-    prompt_text = _build_market_topic_chat_prompt(
+    system_instruction = build_dcx_gemini_market_topic_system_instruction()
+    contents = _build_market_topic_chat_contents(
         topic_context=topic_context,
         prior_turns=prior_turns,
         user_turn_text=user_turn_text,
@@ -96,7 +101,8 @@ def generate_dcx_gemini_market_topic_chat_response(
     request_context = {
         "api_key": api_key,
         "model_name": model_name,
-        "prompt_text": prompt_text,
+        "system_instruction": system_instruction,
+        "contents": contents,
     }
 
     try:
@@ -113,48 +119,51 @@ def generate_dcx_gemini_market_topic_chat_response(
         "model_name": model_name,
         "provider_name": "google_gemini",
         "prompt_version": PROMPT_VERSION_DCX_MARKET_TOPIC_CHAT,
-        "prompt_fingerprint": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
+        "prompt_fingerprint": hashlib.sha256(
+            json.dumps(
+                {
+                    "system_instruction": system_instruction,
+                    "contents": contents,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
     }
 
 
 def _send_gemini_generate_content_request(request_context: dict) -> dict:
     from google import genai
+    from google.genai import types
 
     client = genai.Client(api_key=request_context["api_key"])
     response = client.models.generate_content(
         model=request_context["model_name"],
-        contents=[request_context["prompt_text"]],
+        contents=_build_gemini_content_objects(request_context["contents"], types),
+        config=types.GenerateContentConfig(
+            system_instruction=request_context["system_instruction"],
+        ),
     )
     return {"output_text": (response.text or "").strip()}
 
 
-def _build_market_topic_chat_prompt(
+def _build_market_topic_chat_contents(
     topic_context: dict,
     prior_turns: list[dict],
     user_turn_text: str,
     preferred_language_code: str,
-) -> str:
-    turn_lines = []
-    for turn in prior_turns:
-        role = str(turn.get("turn_role") or "user").strip().lower()
-        turn_text = str(turn.get("turn_text") or "").strip()
-        if turn_text:
-            turn_lines.append(f"{role}: {turn_text}")
-
-    return f"""
-<dcx_task>
-Continue a private trader-to-DCX-AI market topic conversation.
-Reply only with the assistant message text. Do not return JSON.
-</dcx_task>
-
-<reply_rules>
-- Use practical trader-facing language.
-- Keep the reply concise but useful.
-- Stay focused on the market/business/trade topic.
-- If the user asks for illegal evasion, prohibited movement of goods, or sanction circumvention, refuse briefly and redirect to compliant market analysis.
-- Reply in the user's likely language. If unsure, use language_code={preferred_language_code}.
-- Do not claim live market data unless it was provided in the conversation.
-</reply_rules>
+) -> list[dict]:
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {
+                    "text": f"""
+<task>
+- You are chatting to a user about this topic.
+- Continue the chat with your next response.
+- Formulate your next reply.
+- Reply in the language of the latest user input.
+</task>
 
 <topic>
 market_topic_id={topic_context.get("market_topic_id")}
@@ -163,13 +172,40 @@ summary={topic_context.get("topic_summary_text")}
 scope={topic_context.get("topic_scope_text")}
 tags={", ".join(topic_context.get("topic_tags_json") or [])}
 </topic>
-
-<conversation_so_far>
-{chr(10).join(turn_lines) if turn_lines else "- none"}
-</conversation_so_far>
-
-<new_user_message>
-{user_turn_text}
-</new_user_message>
 """.strip()
+                }
+            ],
+        }
+    ]
+    for turn in prior_turns:
+        role = str(turn.get("turn_role") or "user").strip().lower()
+        turn_text = str(turn.get("turn_text") or "").strip()
+        if turn_text:
+            contents.append(
+                {
+                    "role": "model" if role == "assistant" else "user",
+                    "parts": [{"text": turn_text}],
+                }
+            )
 
+    contents.append(
+        {
+            "role": "user",
+            "parts": [{"text": user_turn_text}],
+        }
+    )
+    return contents
+
+
+def _build_gemini_content_objects(contents: list[dict], types: Any) -> list[Any]:
+    content_objects = []
+    for content in contents:
+        role = str(content.get("role") or "user").strip().lower()
+        part_objects = [
+            types.Part(text=str(part.get("text") or ""))
+            for part in content.get("parts", [])
+            if str(part.get("text") or "").strip() != ""
+        ]
+        if part_objects:
+            content_objects.append(types.Content(role=role, parts=part_objects))
+    return content_objects
