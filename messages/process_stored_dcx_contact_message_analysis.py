@@ -1302,7 +1302,15 @@ def _build_message_workflow_outcome_notification_payload(
     elif trade_outputs:
         subject = "DCX found trade candidates"
     elif topic_outputs:
-        subject = "DCX opened market topics"
+        if len(topic_outputs) == 1:
+            topic_title = _read_first_nonempty_text(
+                topic_outputs[0].get("title"),
+                topic_outputs[0].get("summary"),
+                f"Market topic #{topic_outputs[0]['market_topic_id']}",
+            )
+            subject = f"DCX: {topic_title}"
+        else:
+            subject = "DCX opened market topics"
     elif other_outputs:
         subject = "DCX saved your message"
 

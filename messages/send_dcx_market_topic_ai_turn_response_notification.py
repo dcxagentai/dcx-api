@@ -107,7 +107,7 @@ def send_dcx_market_topic_ai_turn_response_notification(
         if normalized_channel_type == "email":
             provider_result = send_dcx_email_message_workflow_outcome_notification(
                 recipient_email=normalized_recipient_handle,
-                subject=f"DCX market topic {normalized_reference_code}",
+                subject=f"DCX: {topic_title.strip() or normalized_reference_code}",
                 message_text=message_text,
             )
             provider_type = "resend"

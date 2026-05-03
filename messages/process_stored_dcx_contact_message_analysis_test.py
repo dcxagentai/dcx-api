@@ -88,6 +88,38 @@ def test_builds_policy_blocked_workflow_outcome_for_prohibited_whatsapp_message(
     }
 
 
+def test_builds_topic_only_email_subject_from_topic_title(monkeypatch) -> None:
+    monkeypatch.setenv("DCX_APP_BASE_URL", "https://app.dcxagent.ai")
+
+    payload = _build_message_workflow_outcome_notification_payload(
+        message_id=47,
+        message_input={
+            "channel_type": "email",
+            "source_handle_normalized": "trader@example.com",
+        },
+        analysis_result={
+            "moderation_status": "allowed",
+        },
+        analysis_run_status="completed",
+        workflow_projection_result={
+            "trade_outputs": [],
+            "market_topic_outputs": [
+                {
+                    "market_topic_id": 25,
+                    "title": "Maritime Security Crisis in the Strait of Hormuz",
+                    "summary": "Latest maritime incident analysis.",
+                    "opening_ai_response_text": "The situation in the Strait of Hormuz remains critical.",
+                }
+            ],
+            "other_outputs": [],
+            "projection_errors": [],
+        },
+    )
+
+    assert payload is not None
+    assert payload["subject"] == "DCX: Maritime Security Crisis in the Strait of Hormuz"
+
+
 def test_skips_workflow_outcome_notification_for_app_originated_message() -> None:
     payload = _build_message_workflow_outcome_notification_payload(
         message_id=46,
