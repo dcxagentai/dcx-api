@@ -10,6 +10,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from messages.read_authenticated_dcx_source_message_first_image_attachment import (
+    read_authenticated_dcx_source_message_first_image_attachment,
+)
 from storage.db_config import DB_CONFIG
 
 DCX_TRADE_CONFIRMABLE_NORMALIZED_FIELDS = {
@@ -90,7 +93,13 @@ def read_authenticated_dcx_user_trade_detail(
                 )
                 trade_row = cursor.fetchone()
                 trade_version_rows = []
+                source_first_image_attachment = None
                 if trade_row is not None:
+                    source_first_image_attachment = read_authenticated_dcx_source_message_first_image_attachment(
+                        cursor=cursor,
+                        authenticated_user_id=authenticated_user_id,
+                        source_message_id=trade_row[1],
+                    )
                     cursor.execute(
                         """
                         SELECT
@@ -127,6 +136,7 @@ def read_authenticated_dcx_user_trade_detail(
     return {
         "trade_id": trade_row[0],
         "source_message_id": trade_row[1],
+        "source_first_image_attachment": source_first_image_attachment,
         "trade_projection_status": trade_row[2],
         "trade_confirmation_status": trade_row[3],
         "trade_status": trade_row[4],

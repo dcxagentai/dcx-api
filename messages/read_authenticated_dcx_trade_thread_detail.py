@@ -42,6 +42,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from messages.read_authenticated_dcx_source_message_first_image_attachment import (
+    read_authenticated_dcx_source_message_first_image_attachment,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -98,6 +101,7 @@ def read_authenticated_dcx_trade_thread_detail(
                         trade_version.normalized_currency_code,
                         trade_version.normalized_origin_location,
                         trade_version.normalized_destination_location,
+                        trade.source_message_id_initial,
                         CASE
                           WHEN owner_user.public_identity_mode = 'anonymous' THEN 'Trader #' || owner_user.id::text
                           WHEN owner_user.public_identity_mode = 'handle' AND NULLIF(owner_user.public_handle, '') IS NOT NULL THEN '@' || owner_user.public_handle
@@ -130,6 +134,11 @@ def read_authenticated_dcx_trade_thread_detail(
                 thread_row = cursor.fetchone()
                 if thread_row is None:
                     return None
+                source_first_image_attachment = read_authenticated_dcx_source_message_first_image_attachment(
+                    cursor=cursor,
+                    authenticated_user_id=authenticated_user_id,
+                    source_message_id=thread_row[19],
+                )
 
                 cursor.execute(
                     """
@@ -185,9 +194,11 @@ def read_authenticated_dcx_trade_thread_detail(
         "normalized_currency_code": thread_row[16],
         "normalized_origin_location": thread_row[17],
         "normalized_destination_location": thread_row[18],
-        "owner_public_identity_label": thread_row[19],
-        "counterparty_public_identity_label": thread_row[20],
-        "other_participant_public_identity_label": thread_row[20] if is_owner else thread_row[19],
+        "source_message_id": thread_row[19],
+        "source_first_image_attachment": source_first_image_attachment,
+        "owner_public_identity_label": thread_row[20],
+        "counterparty_public_identity_label": thread_row[21],
+        "other_participant_public_identity_label": thread_row[21] if is_owner else thread_row[20],
         "is_authenticated_user_owner": is_owner,
         "messages": [
             _format_trade_thread_message_row(
