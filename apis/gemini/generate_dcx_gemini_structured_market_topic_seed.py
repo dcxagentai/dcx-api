@@ -160,7 +160,7 @@ def _build_dcx_market_topic_seed_prompt(
 - Suggest useful tags or themes for later filtering.
 - Write one opening_ai_response_text:
     - grounded
-    - concise but substantive
+    - approx 100 words unless it obviously needs to be longer or shorter
 - Return JSON only.
 </task>
 
