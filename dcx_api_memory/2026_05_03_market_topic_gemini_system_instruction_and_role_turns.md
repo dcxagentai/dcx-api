@@ -39,3 +39,26 @@ though no monitoring job exists for that topic.
 `topic_scope_text` is the concise boundary of the topic chat: what this topic is about and what kind of
 follow-up analysis belongs inside it. It is not shown prominently in the current UI, but it anchors the
 chat context alongside title, summary, and tags.
+
+## Follow-up Notification Formatter Tidy
+- Initial topic creation and later `#T` continuation replies briefly had separate WhatsApp/email text
+  formatters.
+- Added `messages/build_dcx_market_topic_cross_surface_notification_text.py` as the shared compact
+  formatter for both paths.
+- The canonical cross-surface topic notification shape is now:
+  - `#T18 Topic title`
+  - topic URL
+  - blank line
+  - AI message text
+
+## Basic Google Search Grounding Test Path
+- Added an MVP Google Search grounding path for private market-topic chat follow-ups.
+- The path is deliberately narrow for testing: it enables Gemini `google_search` only when the latest
+  trader turn looks current/news-sensitive, such as "latest", "current", "news", "today", "update",
+  "recent", or Spanish equivalents.
+- Grounding metadata is normalized into assistant turn metadata:
+  - `google_search_enabled`
+  - `grounding_metadata.web_search_queries`
+  - `grounding_metadata.sources`
+- When sources are returned, the assistant text gets a compact `Sources:` block so WhatsApp/email/app
+  users can inspect the source pages without a separate UI pass.

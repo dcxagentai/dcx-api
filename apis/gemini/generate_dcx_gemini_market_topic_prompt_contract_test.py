@@ -11,7 +11,7 @@ def test_market_topic_seed_uses_shared_system_instruction_and_omits_unused_sugge
     monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
 
     def _send_fake_gemini_request(request_context: dict) -> dict:
-        assert "private market-topic analysis assistant" in request_context["system_instruction"]
+        assert "A user is asking you about this topic" in request_context["system_instruction"]
         assert "suggested_next_prompts" not in request_context["prompt_text"]
         assert "suggested_next_prompts" not in request_context["response_schema"]["properties"]
         assert "suggested_next_prompts" not in request_context["response_schema"]["required"]
@@ -56,13 +56,14 @@ def test_market_topic_chat_sends_role_based_contents_with_shared_system_instruct
     monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
 
     def _send_fake_gemini_request(request_context: dict) -> dict:
-        assert "private market-topic analysis assistant" in request_context["system_instruction"]
+        assert "A user is asking you about this topic" in request_context["system_instruction"]
         assert [content["role"] for content in request_context["contents"]] == [
             "user",
             "user",
             "model",
             "user",
         ]
+        assert request_context["google_search_enabled"] is False
         assert "conversation_so_far" not in request_context
         assert request_context["contents"][-1]["parts"][0]["text"] == "What could this do to war-risk premiums?"
         return {"output_text": "War-risk premiums may rise if the incident is confirmed."}
@@ -84,3 +85,52 @@ def test_market_topic_chat_sends_role_based_contents_with_shared_system_instruct
     )
 
     assert result["assistant_turn_text"] == "War-risk premiums may rise if the incident is confirmed."
+    assert result["google_search_enabled"] is False
+
+
+def test_market_topic_chat_enables_google_search_for_latest_news_and_appends_sources(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test")
+
+    def _send_fake_gemini_request(request_context: dict) -> dict:
+        assert request_context["google_search_enabled"] is True
+        assert "Use Google Search grounding" in request_context["contents"][0]["parts"][0]["text"]
+        return {
+            "output_text": "Recent reports point to uncertainty around vessel security near the Gulf transit lanes.",
+            "grounding_metadata": {
+                "web_search_queries": ["latest Persian Gulf vessel security incident"],
+                "grounding_chunks": [
+                    {
+                        "web": {
+                            "title": "Maritime security alert",
+                            "uri": "https://example.com/maritime-alert",
+                        }
+                    },
+                    {
+                        "web": {
+                            "title": "Shipping risk update",
+                            "uri": "https://example.com/shipping-risk",
+                        }
+                    },
+                ],
+            },
+        }
+
+    result = generate_dcx_gemini_market_topic_chat_response(
+        topic_context={
+            "market_topic_id": 18,
+            "topic_title": "Maritime Security Risks in the Persian Gulf",
+            "topic_summary_text": "A report suggests security risk near Gulf transit lanes.",
+            "topic_scope_text": "Commercial implications for maritime security and freight.",
+            "topic_tags_json": ["Maritime Security", "Freight"],
+        },
+        prior_turns=[],
+        user_turn_text="What is the latest news on this situation?",
+        send_gemini_request=_send_fake_gemini_request,
+    )
+
+    assert result["google_search_enabled"] is True
+    assert "Sources:" in result["assistant_turn_text"]
+    assert "https://example.com/maritime-alert" in result["assistant_turn_text"]
+    assert result["grounding_metadata"]["web_search_queries"] == ["latest Persian Gulf vessel security incident"]
+    assert result["grounding_metadata"]["sources"][0]["title"] == "Maritime security alert"

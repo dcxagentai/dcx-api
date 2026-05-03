@@ -230,6 +230,8 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
                                 "model_name": ai_response.get("model_name"),
                                 "prompt_version": ai_response.get("prompt_version"),
                                 "prompt_fingerprint": ai_response.get("prompt_fingerprint"),
+                                "google_search_enabled": ai_response.get("google_search_enabled") is True,
+                                "grounding_metadata": ai_response.get("grounding_metadata") or {},
                                 "language_code": normalized_language_code,
                                 "source_surface": "ai",
                                 "response_route_reference_code": normalized_source_route_reference_code,

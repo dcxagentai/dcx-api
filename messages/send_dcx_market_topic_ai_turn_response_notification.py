@@ -63,12 +63,15 @@ from emails.transactional.send_dcx_email_message_workflow_outcome_notification i
 from apis.meta_whatsapp.send_dcx_whatsapp_message_workflow_outcome_notification import (
     send_dcx_whatsapp_message_workflow_outcome_notification,
 )
-from users.account_phone.dcx_whatsapp_phone_link_challenge_support import read_dcx_app_base_url
+from messages.build_dcx_market_topic_cross_surface_notification_text import (
+    build_dcx_market_topic_cross_surface_notification_text,
+)
 
 
 def send_dcx_market_topic_ai_turn_response_notification(
     market_topic_id: int,
     route_reference_code: str,
+    topic_title: str,
     channel_type: str,
     recipient_handle: str,
     assistant_turn_text: str,
@@ -90,6 +93,7 @@ def send_dcx_market_topic_ai_turn_response_notification(
     message_text = _build_market_topic_ai_response_notification_text(
         market_topic_id=market_topic_id,
         route_reference_code=normalized_reference_code,
+        topic_title=topic_title,
         assistant_turn_text=normalized_assistant_turn_text,
     )
 
@@ -122,14 +126,12 @@ def send_dcx_market_topic_ai_turn_response_notification(
 def _build_market_topic_ai_response_notification_text(
     market_topic_id: int,
     route_reference_code: str,
+    topic_title: str,
     assistant_turn_text: str,
 ) -> str:
-    app_topic_url = f"{read_dcx_app_base_url().rstrip('/')}/me/topics/{market_topic_id}"
-    return "\n\n".join(
-        [
-            f"DCX AI response for #{route_reference_code}.",
-            assistant_turn_text.strip(),
-            f"Open in DCX: {app_topic_url}",
-            f"Reply with #{route_reference_code} followed by your question.",
-        ]
+    return build_dcx_market_topic_cross_surface_notification_text(
+        market_topic_id=market_topic_id,
+        route_reference_code=route_reference_code,
+        topic_title=topic_title,
+        message_text=assistant_turn_text,
     )

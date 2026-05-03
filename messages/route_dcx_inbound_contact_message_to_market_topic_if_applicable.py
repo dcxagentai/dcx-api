@@ -153,6 +153,7 @@ def route_dcx_inbound_contact_message_to_market_topic_if_applicable(
                 )(
                     market_topic_id=market_topic_id,
                     route_reference_code=topic_reference_code,
+                    topic_title=topic_context["topic_title"],
                     channel_type=message_context["channel_type"],
                     recipient_handle=message_context["source_handle_normalized"],
                     assistant_turn_text=append_result["assistant_turn_text"],

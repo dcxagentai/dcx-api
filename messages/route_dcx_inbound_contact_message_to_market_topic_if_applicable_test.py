@@ -44,12 +44,12 @@ def test_builds_same_channel_ai_response_with_topic_reference_instruction(monkey
     message_text = _build_market_topic_ai_response_notification_text(
         market_topic_id=2,
         route_reference_code="T2",
+        topic_title="Aluminum premiums",
         assistant_turn_text="The main drivers are Chinese restocking and freight volatility.",
     )
 
     assert message_text == (
-        "DCX AI response for #T2.\n\n"
-        "The main drivers are Chinese restocking and freight volatility.\n\n"
-        "Open in DCX: https://app.dcxagent.ai/me/topics/2\n\n"
-        "Reply with #T2 followed by your question."
+        "#T2 Aluminum premiums\n"
+        "https://app.dcxagent.ai/me/topics/2\n\n"
+        "The main drivers are Chinese restocking and freight volatility."
     )

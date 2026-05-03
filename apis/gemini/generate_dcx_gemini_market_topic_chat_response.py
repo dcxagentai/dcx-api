@@ -92,17 +92,20 @@ def generate_dcx_gemini_market_topic_chat_response(
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED")
 
     system_instruction = build_dcx_gemini_market_topic_system_instruction()
+    google_search_enabled = _should_enable_google_search_for_market_topic_chat(user_turn_text)
     contents = _build_market_topic_chat_contents(
         topic_context=topic_context,
         prior_turns=prior_turns,
         user_turn_text=user_turn_text,
         preferred_language_code=preferred_language_code,
+        google_search_enabled=google_search_enabled,
     )
     request_context = {
         "api_key": api_key,
         "model_name": model_name,
         "system_instruction": system_instruction,
         "contents": contents,
+        "google_search_enabled": google_search_enabled,
     }
 
     try:
@@ -114,16 +117,25 @@ def generate_dcx_gemini_market_topic_chat_response(
     if assistant_turn_text == "":
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED")
 
+    grounding_metadata = _normalize_dcx_gemini_grounding_metadata(response_payload.get("grounding_metadata"))
+    assistant_turn_text = _append_dcx_grounding_sources_to_assistant_text(
+        assistant_turn_text=assistant_turn_text,
+        grounding_metadata=grounding_metadata,
+    )
+
     return {
         "assistant_turn_text": assistant_turn_text,
         "model_name": model_name,
         "provider_name": "google_gemini",
         "prompt_version": PROMPT_VERSION_DCX_MARKET_TOPIC_CHAT,
+        "google_search_enabled": google_search_enabled,
+        "grounding_metadata": grounding_metadata,
         "prompt_fingerprint": hashlib.sha256(
             json.dumps(
                 {
                     "system_instruction": system_instruction,
                     "contents": contents,
+                    "google_search_enabled": google_search_enabled,
                 },
                 sort_keys=True,
             ).encode("utf-8")
@@ -135,15 +147,24 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
     from google import genai
     from google.genai import types
 
+    config_kwargs: dict[str, Any] = {
+        "system_instruction": request_context["system_instruction"],
+    }
+    if request_context.get("google_search_enabled") is True:
+        config_kwargs["tools"] = [
+            types.Tool(google_search=types.GoogleSearch()),
+        ]
+
     client = genai.Client(api_key=request_context["api_key"])
     response = client.models.generate_content(
         model=request_context["model_name"],
         contents=_build_gemini_content_objects(request_context["contents"], types),
-        config=types.GenerateContentConfig(
-            system_instruction=request_context["system_instruction"],
-        ),
+        config=types.GenerateContentConfig(**config_kwargs),
     )
-    return {"output_text": (response.text or "").strip()}
+    return {
+        "output_text": (response.text or "").strip(),
+        "grounding_metadata": _read_dcx_gemini_response_grounding_metadata(response),
+    }
 
 
 def _build_market_topic_chat_contents(
@@ -151,7 +172,14 @@ def _build_market_topic_chat_contents(
     prior_turns: list[dict],
     user_turn_text: str,
     preferred_language_code: str,
+    google_search_enabled: bool,
 ) -> list[dict]:
+    search_instruction = (
+        "\n- Use Google Search grounding for current facts, latest news, recent reports, dates, and source-sensitive claims."
+        "\n- Prefer a concise synthesis of the most relevant recent reports over a long article list."
+        if google_search_enabled
+        else ""
+    )
     contents = [
         {
             "role": "user",
@@ -163,6 +191,7 @@ def _build_market_topic_chat_contents(
 - Continue the chat with your next response.
 - Formulate your next reply.
 - Reply in the language of the latest user input.
+{search_instruction}
 </task>
 
 <topic>
@@ -209,3 +238,121 @@ def _build_gemini_content_objects(contents: list[dict], types: Any) -> list[Any]
         if part_objects:
             content_objects.append(types.Content(role=role, parts=part_objects))
     return content_objects
+
+
+def _should_enable_google_search_for_market_topic_chat(user_turn_text: str) -> bool:
+    normalized_text = f" {user_turn_text.strip().lower()} "
+    trigger_phrases = [
+        " latest ",
+        " latest news ",
+        " current ",
+        " recent ",
+        " update ",
+        " updates ",
+        " today ",
+        " now ",
+        " this week ",
+        " breaking ",
+        " confirmed ",
+        " source ",
+        " sources ",
+        " news ",
+        " what happened ",
+        " developments ",
+        " últimas ",
+        " ultima ",
+        " noticias ",
+        " actualidad ",
+        " hoy ",
+        " reciente ",
+    ]
+    return any(trigger_phrase in normalized_text for trigger_phrase in trigger_phrases)
+
+
+def _read_dcx_gemini_response_grounding_metadata(response: Any) -> dict:
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return {}
+    grounding_metadata = getattr(candidates[0], "grounding_metadata", None)
+    return _model_dump_or_dict(grounding_metadata)
+
+
+def _normalize_dcx_gemini_grounding_metadata(value: Any) -> dict:
+    metadata = _model_dump_or_dict(value)
+    if not metadata:
+        return {}
+
+    search_queries = _normalize_string_list(
+        metadata.get("web_search_queries")
+        or metadata.get("webSearchQueries")
+        or []
+    )
+    grounding_chunks = metadata.get("grounding_chunks") or metadata.get("groundingChunks") or []
+    sources = []
+    seen_uris = set()
+    if isinstance(grounding_chunks, list):
+        for chunk in grounding_chunks:
+            chunk_dict = _model_dump_or_dict(chunk)
+            web_dict = _model_dump_or_dict(chunk_dict.get("web"))
+            uri = str(web_dict.get("uri") or "").strip()
+            title = str(web_dict.get("title") or "").strip()
+            if uri == "" or uri in seen_uris:
+                continue
+            seen_uris.add(uri)
+            sources.append(
+                {
+                    "title": title,
+                    "uri": uri,
+                }
+            )
+            if len(sources) >= 4:
+                break
+
+    normalized_metadata = {
+        "web_search_queries": search_queries,
+        "sources": sources,
+    }
+    return normalized_metadata if search_queries or sources else {}
+
+
+def _append_dcx_grounding_sources_to_assistant_text(assistant_turn_text: str, grounding_metadata: dict) -> str:
+    sources = grounding_metadata.get("sources") if isinstance(grounding_metadata, dict) else []
+    if not isinstance(sources, list) or not sources:
+        return assistant_turn_text
+    if "sources:" in assistant_turn_text.lower():
+        return assistant_turn_text
+
+    source_lines = []
+    for source in sources[:3]:
+        source_dict = _model_dump_or_dict(source)
+        title = str(source_dict.get("title") or "").strip()
+        uri = str(source_dict.get("uri") or "").strip()
+        if uri == "":
+            continue
+        source_lines.append(f"- {title}: {uri}" if title else f"- {uri}")
+    if not source_lines:
+        return assistant_turn_text
+    return f"{assistant_turn_text.strip()}\n\nSources:\n{chr(10).join(source_lines)}"
+
+
+def _model_dump_or_dict(value: Any) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(exclude_none=True)
+        return dumped if isinstance(dumped, dict) else {}
+    return {}
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized_items = []
+    for item in value:
+        normalized_item = str(item or "").strip()
+        if normalized_item and normalized_item not in normalized_items:
+            normalized_items.append(normalized_item)
+    return normalized_items

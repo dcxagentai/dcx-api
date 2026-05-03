@@ -34,8 +34,8 @@ from emails.transactional.send_dcx_email_message_workflow_outcome_notification i
 )
 from files.build_dcx_r2_s3_client import build_dcx_r2_s3_client
 from files.read_dcx_r2_bucket_name_for_alias import read_dcx_r2_bucket_name_for_alias
-from messages.build_dcx_app_market_topic_review_url import (
-    build_dcx_app_market_topic_review_url,
+from messages.build_dcx_market_topic_cross_surface_notification_text import (
+    build_dcx_market_topic_cross_surface_notification_text,
 )
 from messages.build_dcx_app_trade_candidate_review_url import (
     build_dcx_app_trade_candidate_review_url,
@@ -1271,12 +1271,16 @@ def _build_message_workflow_outcome_notification_payload(
                 topic_output.get("summary"),
                 f"Market topic #{market_topic_id}",
             )
-            message_lines.append(f"#{topic_reference_code} {topic_title}")
-            message_lines.append(build_dcx_app_market_topic_review_url(market_topic_id))
             opening_ai_response_text = _read_first_nonempty_text(topic_output.get("opening_ai_response_text"))
             if opening_ai_response_text:
-                message_lines.append("")
-                message_lines.append(opening_ai_response_text)
+                message_lines.append(
+                    build_dcx_market_topic_cross_surface_notification_text(
+                        market_topic_id=market_topic_id,
+                        route_reference_code=topic_reference_code,
+                        topic_title=topic_title,
+                        message_text=opening_ai_response_text,
+                    )
+                )
 
     if not trade_outputs and not topic_outputs and other_outputs:
         message_lines.append("")
