@@ -43,15 +43,12 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
         "recipient_handle": "trader@example.com",
         "subject": "DCX found trades and market topics",
         "message_text": (
-            "DCX processed your message.\n\n"
             "Trade candidates:\n"
             "Offer for 200 MT urea CFR Tema for June.\n"
             "Review: https://app.dcxagent.ai/me/trades/12\n\n"
-            "Market topics:\n"
             "#T7 Sanctions impact on fertilizer shipping to Ghana\n"
-            "EU sanctions may tighten vessel availability and raise risk premiums.\n"
-            "Open: https://app.dcxagent.ai/me/topics/7\n"
-            "Reply with #T7 followed by your question."
+            "https://app.dcxagent.ai/me/topics/7\n\n"
+            "EU sanctions may tighten vessel availability and raise risk premiums."
         ),
         "trade_ids": [12],
         "market_topic_ids": [7],

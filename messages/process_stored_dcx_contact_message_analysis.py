@@ -1245,7 +1245,7 @@ def _build_message_workflow_outcome_notification_payload(
             "market_topic_ids": [],
         }
 
-    message_lines: list[str] = ["DCX processed your message."]
+    message_lines: list[str] = []
 
     if trade_outputs:
         message_lines.append("")
@@ -1261,8 +1261,8 @@ def _build_message_workflow_outcome_notification_payload(
             message_lines.append(f"Review: {build_dcx_app_trade_candidate_review_url(trade_id)}")
 
     if topic_outputs:
-        message_lines.append("")
-        message_lines.append("Market topics:")
+        if message_lines:
+            message_lines.append("")
         for topic_output in topic_outputs:
             market_topic_id = topic_output["market_topic_id"]
             topic_reference_code = f"T{market_topic_id}"
@@ -1272,11 +1272,11 @@ def _build_message_workflow_outcome_notification_payload(
                 f"Market topic #{market_topic_id}",
             )
             message_lines.append(f"#{topic_reference_code} {topic_title}")
+            message_lines.append(build_dcx_app_market_topic_review_url(market_topic_id))
             opening_ai_response_text = _read_first_nonempty_text(topic_output.get("opening_ai_response_text"))
             if opening_ai_response_text:
+                message_lines.append("")
                 message_lines.append(opening_ai_response_text)
-            message_lines.append(f"Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
-            message_lines.append(f"Reply with #{topic_reference_code} followed by your question.")
 
     if not trade_outputs and not topic_outputs and other_outputs:
         message_lines.append("")
