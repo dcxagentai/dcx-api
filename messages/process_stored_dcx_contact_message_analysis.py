@@ -1082,6 +1082,7 @@ def _rebuild_message_workflow_projections(
                                 "provider_name": topic_seed.get("provider_name", ""),
                                 "model_name": topic_seed.get("model_name", ""),
                                 "prompt_version": topic_seed.get("prompt_version", ""),
+                                "grounding_metadata": topic_seed.get("grounding_metadata", {}),
                                 "raw_output_json": topic_seed.get("raw_output_json", {}),
                             }
                         ),
@@ -1279,6 +1280,7 @@ def _build_message_workflow_outcome_notification_payload(
                         route_reference_code=topic_reference_code,
                         topic_title=topic_title,
                         message_text=opening_ai_response_text,
+                        include_source_links=channel_type != "whatsapp",
                     )
                 )
 

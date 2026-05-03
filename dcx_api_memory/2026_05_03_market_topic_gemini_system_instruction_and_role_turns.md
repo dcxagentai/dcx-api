@@ -66,3 +66,7 @@ chat context alongside title, summary, and tags.
   render readable links.
 - WhatsApp topic-continuation delivery strips source URLs from that `Sources:` block and leaves only
   source names to avoid long redirect URLs in chat bubbles.
+- The initial market-topic seed prompt is now also configured with Google Search so screenshot/news
+  messages can ground the opening AI response when Gemini decides search is useful.
+- Existing model-generated source blocks are stripped and replaced with canonical markdown links from
+  Gemini grounding metadata before storage.

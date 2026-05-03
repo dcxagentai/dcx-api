@@ -12,6 +12,7 @@ def test_market_topic_seed_uses_shared_system_instruction_and_omits_unused_sugge
 
     def _send_fake_gemini_request(request_context: dict) -> dict:
         assert "A user is asking you about this topic" in request_context["system_instruction"]
+        assert request_context["google_search_enabled"] is True
         assert "suggested_next_prompts" not in request_context["prompt_text"]
         assert "suggested_next_prompts" not in request_context["response_schema"]["properties"]
         assert "suggested_next_prompts" not in request_context["response_schema"]["required"]

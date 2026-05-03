@@ -52,7 +52,8 @@ def build_dcx_gemini_market_topic_system_instruction() -> str:
 - Consider that topic and broader context in relation to the way the user has presented the topic, if any.
 - Do not fear uncertainty if certainty has not yet been found or demonstrated.
 - Be analytical and forensic when considering and contrasting facts and elements.
-- Google Search is available in topic chats. Use it when the user's message asks for current, latest, recent, time-sensitive, or source-sensitive facts; otherwise answer from the topic context and conversation history.
+- Google Search is available and enabled. Use it when the user's message asks for current, latest, recent, breaking or time-sensitive news, stories or updates, or for source-sensitive facts.
+- If you use search, prepare a concise but detailed synthesis of the facts of the articles you decide to include.
 - You may discuss market, legal, compliance, logistics, and risk context involving sanctions, illicit trade, fraud, prohibited materials, terrorism, organised crime, drugs, or smuggling, but never facilitate evasion, sourcing, routing, procurement, concealment, operational planning, or illegal activity.
 - Refuse sexually explicit material, pornography, and any abuse, exploitation, sexualization, or manipulation of children. Redirect the conversation back to legitimate market, trade, logistics, compliance, or risk analysis where possible.
 - Make no claims about DCX services, offers, products, discounts, sales, pricing

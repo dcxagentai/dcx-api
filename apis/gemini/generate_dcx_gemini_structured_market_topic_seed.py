@@ -14,6 +14,11 @@ from typing import Any, Callable
 from apis.gemini.build_dcx_gemini_market_topic_system_instruction import (
     build_dcx_gemini_market_topic_system_instruction,
 )
+from apis.gemini.format_dcx_gemini_grounding_metadata import (
+    append_dcx_grounding_sources_to_assistant_text,
+    normalize_dcx_gemini_grounding_metadata,
+    read_dcx_gemini_response_grounding_metadata,
+)
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
@@ -90,6 +95,7 @@ def generate_dcx_gemini_structured_market_topic_seed(
             attachment_inputs=attachment_inputs,
         ),
         "system_instruction": build_dcx_gemini_market_topic_system_instruction(),
+        "google_search_enabled": True,
         "response_schema": _build_dcx_market_topic_seed_response_schema(),
     }
 
@@ -100,7 +106,11 @@ def generate_dcx_gemini_structured_market_topic_seed(
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_SEED_FAILED") from exc
 
-    return _normalize_market_topic_seed_output(parsed_output=parsed_output, model_name=model_name)
+    return _normalize_market_topic_seed_output(
+        parsed_output=parsed_output,
+        model_name=model_name,
+        grounding_metadata=normalize_dcx_gemini_grounding_metadata(response_payload.get("grounding_metadata")),
+    )
 
 
 def _send_gemini_generate_content_request(request_context: dict) -> dict:
@@ -115,9 +125,15 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
             system_instruction=request_context["system_instruction"],
             response_mime_type="application/json",
             response_schema=request_context["response_schema"],
+            tools=[
+                types.Tool(google_search=types.GoogleSearch()),
+            ],
         ),
     )
-    return {"output_text": (response.text or "").strip()}
+    return {
+        "output_text": (response.text or "").strip(),
+        "grounding_metadata": read_dcx_gemini_response_grounding_metadata(response),
+    }
 
 
 def _build_dcx_market_topic_seed_prompt(
@@ -194,7 +210,8 @@ def _build_dcx_market_topic_seed_response_schema() -> dict:
     }
 
 
-def _normalize_market_topic_seed_output(parsed_output: dict, model_name: str) -> dict:
+def _normalize_market_topic_seed_output(parsed_output: dict, model_name: str, grounding_metadata: dict) -> dict:
+    opening_ai_response_text = str(parsed_output.get("opening_ai_response_text") or "").strip()
     return {
         "model_name": model_name,
         "provider_name": "google_gemini",
@@ -203,7 +220,11 @@ def _normalize_market_topic_seed_output(parsed_output: dict, model_name: str) ->
         "topic_summary_text": str(parsed_output.get("topic_summary_text") or "").strip(),
         "topic_scope_text": str(parsed_output.get("topic_scope_text") or "").strip(),
         "topic_tags": _normalize_string_list(parsed_output.get("topic_tags")),
-        "opening_ai_response_text": str(parsed_output.get("opening_ai_response_text") or "").strip(),
+        "opening_ai_response_text": append_dcx_grounding_sources_to_assistant_text(
+            assistant_turn_text=opening_ai_response_text,
+            grounding_metadata=grounding_metadata,
+        ),
+        "grounding_metadata": grounding_metadata,
         "raw_output_json": parsed_output,
     }
 

@@ -57,8 +57,6 @@ CODE:
 
 from __future__ import annotations
 
-import re
-
 from emails.transactional.send_dcx_email_message_workflow_outcome_notification import (
     send_dcx_email_message_workflow_outcome_notification,
 )
@@ -67,6 +65,7 @@ from apis.meta_whatsapp.send_dcx_whatsapp_message_workflow_outcome_notification 
 )
 from messages.build_dcx_market_topic_cross_surface_notification_text import (
     build_dcx_market_topic_cross_surface_notification_text,
+    read_dcx_market_topic_text_without_source_links,
 )
 
 
@@ -145,18 +144,4 @@ def _build_market_topic_ai_response_notification_text(
 
 
 def _read_whatsapp_market_topic_assistant_text_without_source_links(assistant_turn_text: str) -> str:
-    lines = assistant_turn_text.strip().splitlines()
-    cleaned_lines = []
-    in_sources_block = False
-    for line in lines:
-        if line.strip().lower() == "sources:":
-            in_sources_block = True
-            cleaned_lines.append(line)
-            continue
-        if in_sources_block:
-            cleaned_line = re.sub(r"^- \[([^\]]+)\]\([^)]+\)\s*$", r"- \1", line.strip())
-            cleaned_line = re.sub(r"^- ([^:]+):\s*https?://\S+\s*$", r"- \1", cleaned_line)
-            cleaned_lines.append(cleaned_line)
-            continue
-        cleaned_lines.append(line)
-    return "\n".join(cleaned_lines).strip()
+    return read_dcx_market_topic_text_without_source_links(assistant_turn_text)

@@ -49,6 +49,8 @@ CODE:
 
 from __future__ import annotations
 
+import re
+
 from users.account_phone.dcx_whatsapp_phone_link_challenge_support import read_dcx_app_base_url
 
 
@@ -57,10 +59,13 @@ def build_dcx_market_topic_cross_surface_notification_text(
     route_reference_code: str,
     topic_title: str,
     message_text: str,
+    include_source_links: bool = True,
 ) -> str:
     normalized_reference_code = route_reference_code.strip().upper() if isinstance(route_reference_code, str) else ""
     normalized_topic_title = " ".join(topic_title.strip().split()) if isinstance(topic_title, str) else ""
     normalized_message_text = message_text.strip() if isinstance(message_text, str) else ""
+    if include_source_links is False:
+        normalized_message_text = read_dcx_market_topic_text_without_source_links(normalized_message_text)
     app_topic_url = f"{read_dcx_app_base_url().rstrip('/')}/me/topics/{market_topic_id}"
     reference_line = f"#{normalized_reference_code}"
     if normalized_topic_title:
@@ -74,3 +79,21 @@ def build_dcx_market_topic_cross_surface_notification_text(
             normalized_message_text,
         ]
     ).strip()
+
+
+def read_dcx_market_topic_text_without_source_links(message_text: str) -> str:
+    lines = message_text.strip().splitlines()
+    cleaned_lines = []
+    in_sources_block = False
+    for line in lines:
+        if line.strip().lower() == "sources:":
+            in_sources_block = True
+            cleaned_lines.append(line)
+            continue
+        if in_sources_block:
+            cleaned_line = re.sub(r"^- \[([^\]]+)\]\([^)]+\)\s*$", r"- \1", line.strip())
+            cleaned_line = re.sub(r"^- ([^:]+):\s*https?://\S+\s*$", r"- \1", cleaned_line)
+            cleaned_lines.append(cleaned_line)
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
