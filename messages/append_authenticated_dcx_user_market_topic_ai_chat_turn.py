@@ -98,6 +98,11 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
     market_topic_id: int,
     user_turn_text: str,
     preferred_language_code: str = "en",
+    source_message_id: int | None = None,
+    source_channel_type: str = "app",
+    source_contact_method_id: int | None = None,
+    source_route_reference_code: str | None = None,
+    source_surface: str = "app",
     connect_to_database: Callable[..., Any] | None = None,
     generate_ai_response: Callable[..., dict] | None = None,
 ) -> dict | None:
@@ -108,6 +113,17 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
         raise RuntimeError("API_DCX_MARKET_TOPIC_CHAT_CONTEXT_LIMIT_REACHED")
 
     normalized_language_code = (preferred_language_code or "en").strip().lower() or "en"
+    normalized_source_channel_type = source_channel_type.strip().lower() if isinstance(source_channel_type, str) else "app"
+    if normalized_source_channel_type not in {"app", "email", "whatsapp"}:
+        normalized_source_channel_type = "app"
+    normalized_source_surface = source_surface.strip().lower() if isinstance(source_surface, str) else normalized_source_channel_type
+    if normalized_source_surface == "":
+        normalized_source_surface = normalized_source_channel_type
+    normalized_source_route_reference_code = (
+        source_route_reference_code.strip().upper()
+        if isinstance(source_route_reference_code, str)
+        else None
+    )
     connect = connect_to_database or psycopg2.connect
 
     try:
@@ -118,6 +134,15 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
         )
         if topic_context is None:
             return None
+
+        existing_turn_pair = _read_existing_market_topic_turn_pair_for_source_message(
+            authenticated_user_id=authenticated_user_id,
+            market_topic_id=market_topic_id,
+            source_message_id=source_message_id,
+            connect=connect,
+        )
+        if existing_turn_pair is not None:
+            return existing_turn_pair
 
         if _read_context_character_count(topic_context, prior_turns, normalized_user_turn_text) > (
             DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS
@@ -158,15 +183,19 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
                         created_at_ts_ms,
                         updated_at_ts_ms
                     )
-                    VALUES (%s, 'user', NULL, %s, %s, %s, %s)
+                    VALUES (%s, 'user', %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         market_topic_id,
+                        source_message_id,
                         normalized_user_turn_text,
                         Json(
                             {
-                                "source_surface": "app",
+                                "source_surface": normalized_source_surface,
+                                "source_channel_type": normalized_source_channel_type,
+                                "source_contact_method_id": source_contact_method_id,
+                                "source_route_reference_code": normalized_source_route_reference_code,
                                 "language_code": normalized_language_code,
                                 "context_limit_max_characters": DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS,
                             }
@@ -188,11 +217,12 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
                         created_at_ts_ms,
                         updated_at_ts_ms
                     )
-                    VALUES (%s, 'assistant', NULL, %s, %s, %s, %s)
+                    VALUES (%s, 'assistant', %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         market_topic_id,
+                        source_message_id,
                         str(ai_response["assistant_turn_text"]).strip(),
                         Json(
                             {
@@ -201,6 +231,8 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
                                 "prompt_version": ai_response.get("prompt_version"),
                                 "prompt_fingerprint": ai_response.get("prompt_fingerprint"),
                                 "language_code": normalized_language_code,
+                                "source_surface": "ai",
+                                "response_route_reference_code": normalized_source_route_reference_code,
                             }
                         ),
                         now_ts_ms,
@@ -228,6 +260,67 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
         "assistant_turn_id": assistant_turn_id,
         "assistant_turn_text": str(ai_response["assistant_turn_text"]).strip(),
         "created_at_ts_ms": now_ts_ms,
+    }
+
+
+def _read_existing_market_topic_turn_pair_for_source_message(
+    authenticated_user_id: int,
+    market_topic_id: int,
+    source_message_id: int | None,
+    connect: Callable[..., Any],
+) -> dict | None:
+    if source_message_id is None or not isinstance(source_message_id, int) or source_message_id <= 0:
+        return None
+
+    with connect(**DB_CONFIG) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM stephen_dcx_market_topics
+                WHERE id = %s
+                  AND initiating_user_id = %s
+                LIMIT 1
+                """,
+                (market_topic_id, authenticated_user_id),
+            )
+            if cursor.fetchone() is None:
+                return None
+
+            cursor.execute(
+                """
+                SELECT id, turn_role, turn_text, created_at_ts_ms
+                FROM stephen_dcx_market_topic_turns
+                WHERE market_topic_id = %s
+                  AND source_message_id = %s
+                ORDER BY created_at_ts_ms ASC, id ASC
+                """,
+                (market_topic_id, source_message_id),
+            )
+            rows = cursor.fetchall()
+
+    user_turn_id = None
+    assistant_turn_id = None
+    assistant_turn_text = ""
+    created_at_ts_ms = 0
+    for row in rows:
+        if row[1] == "user" and user_turn_id is None:
+            user_turn_id = row[0]
+            created_at_ts_ms = row[3]
+        if row[1] == "assistant" and assistant_turn_id is None:
+            assistant_turn_id = row[0]
+            assistant_turn_text = row[2] or ""
+            created_at_ts_ms = row[3]
+
+    if user_turn_id is None or assistant_turn_id is None:
+        return None
+    return {
+        "market_topic_id": market_topic_id,
+        "user_turn_id": user_turn_id,
+        "assistant_turn_id": assistant_turn_id,
+        "assistant_turn_text": assistant_turn_text,
+        "created_at_ts_ms": created_at_ts_ms,
+        "deduped": True,
     }
 
 
@@ -306,4 +399,3 @@ def _read_context_character_count(topic_context: dict, prior_turns: list[dict], 
         for turn in prior_turns
     )
     return len(topic_text) + len(turns_text) + len(user_turn_text)
-

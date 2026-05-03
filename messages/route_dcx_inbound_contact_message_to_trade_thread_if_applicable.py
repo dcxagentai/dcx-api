@@ -62,7 +62,6 @@ CODE:
 
 from __future__ import annotations
 
-import re
 import time
 from typing import Any, Callable
 
@@ -72,17 +71,14 @@ from psycopg2.extras import Json
 from messages.append_authenticated_dcx_trade_thread_message import (
     append_authenticated_dcx_trade_thread_message,
 )
+from messages.dcx_inbound_cross_surface_reference_text import (
+    build_dcx_cross_surface_routed_message_text,
+    extract_dcx_cross_surface_reference_code,
+)
 from messages.send_dcx_trade_thread_message_notification import (
     upsert_dcx_trade_thread_participant_route,
 )
 from storage.db_config import DB_CONFIG
-
-TRADE_THREAD_REFERENCE_PATTERN = re.compile(r"(?:^|[\s#])C(?P<thread_id>[0-9]{1,12})(?=\b)", re.IGNORECASE)
-EMAIL_REPLY_QUOTE_BOUNDARY_PATTERNS = [
-    re.compile(r"^replying to .+", re.IGNORECASE),
-    re.compile(r"^on .+ wrote:$", re.IGNORECASE),
-    re.compile(r"^(from|to|cc|bcc|date|sent|subject):\s*.+", re.IGNORECASE),
-]
 
 
 def route_dcx_inbound_contact_message_to_trade_thread_if_applicable(
@@ -100,6 +96,8 @@ def route_dcx_inbound_contact_message_to_trade_thread_if_applicable(
         if message_context is None:
             return None
         if message_context["user_id"] is None:
+            return None
+        if message_context["source_contact_is_verified"] is not True:
             return None
 
         thread_reference_code = _extract_trade_thread_reference_code(
@@ -137,10 +135,10 @@ def route_dcx_inbound_contact_message_to_trade_thread_if_applicable(
                 "derivation_status": "completed",
             }
 
-        routed_message_text = _build_routed_trade_thread_message_text(
+        routed_message_text = build_dcx_cross_surface_routed_message_text(
             message_subject=message_context["message_subject"],
             message_text=message_context["raw_text_content"],
-            thread_reference_code=thread_reference_code,
+            reference_code=thread_reference_code,
             include_subject=message_context["channel_type"] == "email",
         )
         if routed_message_text == "":
@@ -204,6 +202,7 @@ def _read_inbound_contact_message_trade_thread_route_context(
                     message.channel_type,
                     message.message_subject,
                     message.raw_text_content,
+                    message.message_metadata_json,
                     COALESCE(language.language_code, 'en') AS preferred_language_code
                 FROM stephen_dcx_contact_messages message
                 LEFT JOIN stephen_dcx_users user_row
@@ -229,16 +228,17 @@ def _read_inbound_contact_message_trade_thread_route_context(
         "channel_type": row[3],
         "message_subject": row[4] or "",
         "raw_text_content": row[5] or "",
-        "preferred_language_code": row[6] or "en",
+        "source_contact_is_verified": (
+            row[6].get("source_contact_is_verified") is True
+            if isinstance(row[6], dict)
+            else False
+        ),
+        "preferred_language_code": row[7] or "en",
     }
 
 
 def _extract_trade_thread_reference_code(text: str) -> str | None:
-    normalized_text = text if isinstance(text, str) else ""
-    match = TRADE_THREAD_REFERENCE_PATTERN.search(normalized_text)
-    if match is None:
-        return None
-    return f"C{match.group('thread_id')}"
+    return extract_dcx_cross_surface_reference_code(text=text, reference_prefix="C")
 
 
 def _read_referenced_trade_thread_for_participant(
@@ -289,83 +289,6 @@ def _read_existing_thread_message_id_for_contact_message(
             row = cursor.fetchone()
 
     return row[0] if row is not None else None
-
-
-def _strip_trade_thread_reference_from_message_text(message_text: str, thread_reference_code: str) -> str:
-    normalized_message_text = message_text.strip() if isinstance(message_text, str) else ""
-    if normalized_message_text == "":
-        return ""
-
-    stripped_lines = []
-    for raw_line in normalized_message_text.splitlines():
-        line = raw_line.strip()
-        if line == "":
-            continue
-        if line.startswith(">") or _read_line_is_email_reply_quote_boundary(line):
-            break
-        if "open in dcx:" in line.lower() or "reply with #" in line.lower():
-            continue
-        stripped_lines.append(line)
-
-    stripped_text = "\n".join(stripped_lines)
-    stripped_text = re.sub(rf"#?{re.escape(thread_reference_code)}\b", "", stripped_text, flags=re.IGNORECASE)
-    return stripped_text.strip()
-
-
-def _build_routed_trade_thread_message_text(
-    message_subject: str,
-    message_text: str,
-    thread_reference_code: str,
-    include_subject: bool,
-) -> str:
-    body_text = _strip_trade_thread_reference_from_message_text(
-        message_text=message_text,
-        thread_reference_code=thread_reference_code,
-    )
-    if not include_subject:
-        return body_text
-
-    subject_text = _strip_trade_thread_reference_from_subject(
-        message_subject=message_subject,
-        thread_reference_code=thread_reference_code,
-    )
-    if subject_text == "":
-        return body_text
-    if body_text == "":
-        return subject_text
-    if subject_text.lower() == body_text.lower():
-        return body_text
-    return f"{subject_text}\n\n{body_text}"
-
-
-def _strip_trade_thread_reference_from_subject(message_subject: str, thread_reference_code: str) -> str:
-    normalized_subject = message_subject.strip() if isinstance(message_subject, str) else ""
-    if normalized_subject == "":
-        return ""
-
-    while True:
-        stripped_subject = re.sub(r"^(re|fw|fwd):\s*", "", normalized_subject, flags=re.IGNORECASE)
-        if stripped_subject == normalized_subject:
-            break
-        normalized_subject = stripped_subject.strip()
-
-    normalized_subject = re.sub(
-        rf"#?{re.escape(thread_reference_code)}\b",
-        "",
-        normalized_subject,
-        flags=re.IGNORECASE,
-    )
-    normalized_subject = re.sub(r"\s+", " ", normalized_subject).strip(" #-:|")
-    if normalized_subject.lower() in {"dcx trade chat", "trade chat", "new dcx trade chat message in"}:
-        return ""
-    return normalized_subject
-
-
-def _read_line_is_email_reply_quote_boundary(line: str) -> bool:
-    normalized_line = line.strip() if isinstance(line, str) else ""
-    if normalized_line == "":
-        return False
-    return any(pattern.match(normalized_line) is not None for pattern in EMAIL_REPLY_QUOTE_BOUNDARY_PATTERNS)
 
 
 def _mark_contact_message_as_trade_thread_routed(

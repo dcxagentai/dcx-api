@@ -23,6 +23,9 @@ from messages.read_dcx_contact_message_format_for_raw_text_and_attachment_file_k
 from messages.route_dcx_inbound_contact_message_to_trade_thread_if_applicable import (
     route_dcx_inbound_contact_message_to_trade_thread_if_applicable,
 )
+from messages.route_dcx_inbound_contact_message_to_market_topic_if_applicable import (
+    route_dcx_inbound_contact_message_to_market_topic_if_applicable,
+)
 from messages.store_dcx_contact_message_attachment_file_object import (
     store_dcx_contact_message_attachment_file_object,
 )
@@ -279,6 +282,26 @@ def ingest_dcx_contact_message_from_inbound_envelope(
             "stored_attachment_count": len(stored_attachment_rows),
             "skipped_attachment_count": len(skipped_attachment_errors),
             "trade_thread_route": trade_thread_route_result,
+        }
+
+    market_topic_route_result = route_dcx_inbound_contact_message_to_market_topic_if_applicable(
+        contact_message_id=stored_message_id,
+        connect_to_database=connect,
+    )
+    if market_topic_route_result is not None:
+        return {
+            "message_id": stored_message_id,
+            "job_id": None,
+            "processing_status": market_topic_route_result["processing_status"],
+            "derivation_status": market_topic_route_result["derivation_status"],
+            "normalized_source_handle": normalized_source_handle,
+            "normalized_target_handle": normalized_target_handle,
+            "resolved_user_id": resolution["user_id"],
+            "resolved_contact_method_id": resolution["contact_method_id"],
+            "resolution_status": resolution["resolution_status"],
+            "stored_attachment_count": len(stored_attachment_rows),
+            "skipped_attachment_count": len(skipped_attachment_errors),
+            "market_topic_route": market_topic_route_result,
         }
 
     derivation_result = process_stored_dcx_contact_message_analysis(

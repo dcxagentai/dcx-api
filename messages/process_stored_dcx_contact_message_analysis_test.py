@@ -47,8 +47,9 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
             "Offer for 200 MT urea CFR Tema for June.\n"
             "Review: https://app.dcxagent.ai/me/trades/12\n\n"
             "Market topics:\n"
-            "Sanctions impact on fertilizer shipping to Ghana\n"
-            "Open: https://app.dcxagent.ai/me/topics/7"
+            "#T7 Sanctions impact on fertilizer shipping to Ghana\n"
+            "Open: https://app.dcxagent.ai/me/topics/7\n"
+            "Reply with #T7 followed by your question."
         ),
         "trade_ids": [12],
         "market_topic_ids": [7],

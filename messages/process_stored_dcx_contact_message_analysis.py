@@ -1110,13 +1110,20 @@ def _rebuild_message_workflow_projections(
                         market_topic_id,
                         message_id,
                         workflow_item.get("source_excerpt_text") or workflow_item.get("item_summary", ""),
-                        psycopg2.extras.Json({"seed_turn": True}),
+                        psycopg2.extras.Json(
+                            {
+                                "seed_turn": True,
+                                "source_surface": message_input.get("channel_type") or "app",
+                                "source_channel_type": message_input.get("channel_type") or "app",
+                                "source_contact_method_id": message_input.get("contact_method_id"),
+                            }
+                        ),
                         now_ts_ms,
                         now_ts_ms,
                         market_topic_id,
                         message_id,
                         topic_seed.get("opening_ai_response_text", ""),
-                        psycopg2.extras.Json({"seed_turn": True}),
+                        psycopg2.extras.Json({"seed_turn": True, "source_surface": "ai"}),
                         now_ts_ms,
                         now_ts_ms,
                     ),
@@ -1258,13 +1265,15 @@ def _build_message_workflow_outcome_notification_payload(
         message_lines.append("Market topics:")
         for topic_output in topic_outputs:
             market_topic_id = topic_output["market_topic_id"]
+            topic_reference_code = f"T{market_topic_id}"
             topic_title = _read_first_nonempty_text(
                 topic_output.get("title"),
                 topic_output.get("summary"),
                 f"Market topic #{market_topic_id}",
             )
-            message_lines.append(topic_title)
+            message_lines.append(f"#{topic_reference_code} {topic_title}")
             message_lines.append(f"Open: {build_dcx_app_market_topic_review_url(market_topic_id)}")
+            message_lines.append(f"Reply with #{topic_reference_code} followed by your question.")
 
     if not trade_outputs and not topic_outputs and other_outputs:
         message_lines.append("")
