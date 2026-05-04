@@ -156,7 +156,9 @@ def confirm_authenticated_dcx_user_trade_candidate(
                 connect_to_database=connect,
             )
         except Exception:
-            pass
+            import logging
+
+            logging.exception("dcx_trade_interest_alert_send_after_trade_confirm_failed trade_id=%s", trade_id)
 
     return {"trade_id": trade_id, "was_noop": False}
 

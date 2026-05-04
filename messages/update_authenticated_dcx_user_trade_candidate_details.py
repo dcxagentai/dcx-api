@@ -18,6 +18,9 @@ from messages.read_dcx_trade_interest_material_key import read_dcx_trade_interes
 from messages.read_current_dcx_trade_identity_and_version_rows_for_authenticated_user import (
     read_current_dcx_trade_identity_and_version_rows_for_authenticated_user,
 )
+from messages.send_dcx_trade_interest_alert_notifications import (
+    send_dcx_trade_interest_alert_notifications,
+)
 from storage.db_config import DB_CONFIG
 
 DCX_TRADE_EDITABLE_NORMALIZED_FIELDS = {
@@ -143,6 +146,7 @@ def update_authenticated_dcx_user_trade_candidate_details(
 
     now_ts_ms = (current_timestamp_ms_provider or _read_current_timestamp_ms)()
     connect = connect_to_database or psycopg2.connect
+    should_check_trade_interest_alerts = False
 
     with connect(**DB_CONFIG) as connection:
         with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -201,6 +205,10 @@ def update_authenticated_dcx_user_trade_candidate_details(
                 if requested_trade_status in DCX_TRADE_ALLOWED_TRADE_STATUSES
                 else current_trade_version_row.get("trade_status", "draft")
             )
+            should_check_trade_interest_alerts = (
+                next_confirmation_status == "confirmed"
+                and next_trade_status == "open"
+            )
             next_trade_version_values = {
                 **current_trade_version_row,
                 **{
@@ -226,6 +234,18 @@ def update_authenticated_dcx_user_trade_candidate_details(
                 version_source_type="user_edit",
                 now_ts_ms=now_ts_ms,
             )
+
+    if should_check_trade_interest_alerts:
+        try:
+            send_dcx_trade_interest_alert_notifications(
+                trade_id=trade_id,
+                trigger_source="trade_updated",
+                connect_to_database=connect,
+            )
+        except Exception:
+            import logging
+
+            logging.exception("dcx_trade_interest_alert_send_after_trade_update_failed trade_id=%s", trade_id)
 
     return {"trade_id": trade_id, "was_noop": False}
 

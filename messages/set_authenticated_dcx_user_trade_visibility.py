@@ -207,7 +207,9 @@ def set_authenticated_dcx_user_trade_visibility(
                     connect_to_database=connect,
                 )
             except Exception:
-                pass
+                import logging
+
+                logging.exception("dcx_trade_interest_alert_send_after_trade_visibility_failed trade_id=%s", trade_id)
         return result
     except RuntimeError:
         raise
