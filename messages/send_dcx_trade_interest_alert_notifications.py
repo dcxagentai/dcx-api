@@ -70,9 +70,6 @@ from emails.transactional.send_dcx_email_message_workflow_outcome_notification i
 from messages.build_dcx_trade_interest_alert_notification_text import (
     build_dcx_trade_interest_alert_notification_text,
 )
-from messages.read_dcx_trade_interest_material_key import (
-    read_dcx_trade_interest_material_key,
-)
 from storage.db_config import DB_CONFIG
 
 
@@ -100,11 +97,10 @@ def send_dcx_trade_interest_alert_notifications(
     if not alert_context["is_alert_eligible"]:
         return {"status": "skipped", "reason": "trade_not_alert_eligible", "sent_count": 0}
 
-    material_key = read_dcx_trade_interest_material_key(
-        alert_context["trade_snapshot"].get("normalized_material_name"),
-        alert_context["material_options"],
-    )
-    if material_key is None:
+    material_key = str(
+        alert_context["trade_snapshot"].get("normalized_material_key") or ""
+    ).strip().lower()
+    if material_key == "":
         return {"status": "skipped", "reason": "material_not_matched", "sent_count": 0}
 
     recipients = _read_interested_trade_alert_recipients(
@@ -163,6 +159,7 @@ def _read_trade_interest_alert_context(connect: Callable[..., Any], trade_id: in
                     trade_version.trade_summary_text,
                     trade_version.normalized_trade_side,
                     trade_version.normalized_material_name,
+                    trade_version.normalized_material_key,
                     trade_version.normalized_quantity_value,
                     trade_version.normalized_quantity_unit,
                     trade_version.normalized_price_value,
@@ -189,42 +186,26 @@ def _read_trade_interest_alert_context(connect: Callable[..., Any], trade_id: in
             if trade_row is None:
                 return None
 
-            cursor.execute(
-                """
-                SELECT material_key, synonyms_json
-                FROM stephen_dcx_trade_interest_material_options
-                WHERE is_active = TRUE
-                ORDER BY sort_order ASC, display_label ASC
-                """
-            )
-            material_option_rows = cursor.fetchall()
-
     is_confirmed_open = trade_row[3] == "confirmed" and trade_row[4] == "open"
-    has_active_publication = trade_row[15] is not None and trade_row[17] == "active"
+    has_active_publication = trade_row[16] is not None and trade_row[18] == "active"
     return {
         "trade_id": trade_row[0],
         "owner_user_id": trade_row[1],
-        "trade_publication_id": trade_row[15],
+        "trade_publication_id": trade_row[16],
         "is_alert_eligible": is_confirmed_open and has_active_publication,
         "trade_snapshot": {
             "trade_summary_text": trade_row[5] or "",
             "normalized_trade_side": trade_row[6] or "",
             "normalized_material_name": trade_row[7] or "",
-            "normalized_quantity_value": float(trade_row[8]) if trade_row[8] is not None else None,
-            "normalized_quantity_unit": trade_row[9] or "",
-            "normalized_price_value": float(trade_row[10]) if trade_row[10] is not None else None,
-            "normalized_price_unit_basis": trade_row[11] or "",
-            "normalized_currency_code": trade_row[12] or "",
-            "normalized_origin_location": trade_row[13] or "",
-            "normalized_destination_location": trade_row[14] or "",
+            "normalized_material_key": trade_row[8] or "",
+            "normalized_quantity_value": float(trade_row[9]) if trade_row[9] is not None else None,
+            "normalized_quantity_unit": trade_row[10] or "",
+            "normalized_price_value": float(trade_row[11]) if trade_row[11] is not None else None,
+            "normalized_price_unit_basis": trade_row[12] or "",
+            "normalized_currency_code": trade_row[13] or "",
+            "normalized_origin_location": trade_row[14] or "",
+            "normalized_destination_location": trade_row[15] or "",
         },
-        "material_options": [
-            {
-                "material_key": material_option_row[0],
-                "synonyms": material_option_row[1] if isinstance(material_option_row[1], list) else [],
-            }
-            for material_option_row in material_option_rows
-        ],
     }
 
 

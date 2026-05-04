@@ -14,6 +14,7 @@ import psycopg2.extras
 from messages.create_new_dcx_trade_version_and_promote_current_trade import (
     create_new_dcx_trade_version_and_promote_current_trade,
 )
+from messages.read_dcx_trade_interest_material_key import read_dcx_trade_interest_material_key
 from messages.read_current_dcx_trade_identity_and_version_rows_for_authenticated_user import (
     read_current_dcx_trade_identity_and_version_rows_for_authenticated_user,
 )
@@ -22,6 +23,7 @@ from storage.db_config import DB_CONFIG
 DCX_TRADE_EDITABLE_NORMALIZED_FIELDS = {
     "normalized_trade_side",
     "normalized_material_name",
+    "normalized_material_key",
     "normalized_quantity_value",
     "normalized_quantity_unit",
     "normalized_price_mode",
@@ -154,6 +156,14 @@ def update_authenticated_dcx_user_trade_candidate_details(
             )
             if trade_identity_row is None or current_trade_version_row is None:
                 return None
+            if "normalized_material_key" in normalized_patch_payload:
+                _raise_if_trade_material_key_is_not_active(
+                    cursor=cursor,
+                    material_key=_normalize_trade_patch_value(
+                        "normalized_material_key",
+                        normalized_patch_payload["normalized_material_key"],
+                    ),
+                )
             recompute_source = dict(current_trade_version_row)
             changed_field_names: list[str] = []
             for field_name, field_value in normalized_patch_payload.items():
@@ -162,6 +172,14 @@ def update_authenticated_dcx_user_trade_candidate_details(
                     continue
                 recompute_source[field_name] = normalized_value
                 changed_field_names.append(field_name)
+
+            if "normalized_material_name" in changed_field_names and "normalized_material_key" not in normalized_patch_payload:
+                inferred_material_key = read_dcx_trade_interest_material_key(
+                    recompute_source.get("normalized_material_name")
+                ) or ""
+                if recompute_source.get("normalized_material_key") != inferred_material_key:
+                    recompute_source["normalized_material_key"] = inferred_material_key
+                    changed_field_names.append("normalized_material_key")
 
             if not changed_field_names:
                 return {"trade_id": trade_id, "was_noop": True}
@@ -232,8 +250,27 @@ def _normalize_trade_patch_value(field_name: str, field_value: Any) -> Any:
             if normalized_text not in DCX_TRADE_ALLOWED_TRADE_STATUSES:
                 raise RuntimeError("API_AUTHENTICATED_DCX_USER_TRADE_PATCH_INVALID")
             return normalized_text
+        if field_name == "normalized_material_key":
+            return normalized_text.lower()
         return normalized_text
     return field_value
+
+
+def _raise_if_trade_material_key_is_not_active(cursor: Any, material_key: str) -> None:
+    if material_key == "":
+        return
+    cursor.execute(
+        """
+        SELECT 1
+        FROM stephen_dcx_trade_interest_material_options
+        WHERE material_key = %s
+          AND is_active = TRUE
+        LIMIT 1
+        """,
+        (material_key,),
+    )
+    if cursor.fetchone() is None:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_TRADE_PATCH_INVALID")
 
 
 def _read_trade_missing_required_fields(trade_row: dict) -> list[str]:

@@ -11,6 +11,8 @@ from typing import Any
 
 import psycopg2.extras
 
+from messages.read_dcx_trade_interest_material_key import read_dcx_trade_interest_material_key
+
 
 def create_dcx_trade_identity_with_first_version(
     cursor: Any,
@@ -65,6 +67,12 @@ def create_dcx_trade_identity_with_first_version(
 
     CODE:
     """
+    normalized_material_key = str(
+        trade_projection.get("normalized_material_key")
+        or read_dcx_trade_interest_material_key(trade_projection.get("normalized_material_name", ""))
+        or ""
+    ).strip().lower()
+
     cursor.execute(
         """
         INSERT INTO stephen_dcx_trades (
@@ -153,6 +161,7 @@ def create_dcx_trade_identity_with_first_version(
             raw_counterparty_scope_text,
             normalized_trade_side,
             normalized_material_name,
+            normalized_material_key,
             normalized_quantity_value,
             normalized_quantity_unit,
             normalized_price_mode,
@@ -217,6 +226,7 @@ def create_dcx_trade_identity_with_first_version(
             trade_projection.get("raw_counterparty_scope_text", ""),
             trade_projection.get("normalized_trade_side", ""),
             trade_projection.get("normalized_material_name", ""),
+            normalized_material_key,
             trade_projection.get("normalized_quantity_value"),
             trade_projection.get("normalized_quantity_unit", ""),
             trade_projection.get("normalized_price_mode", ""),

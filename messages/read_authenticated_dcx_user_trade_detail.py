@@ -78,7 +78,8 @@ def read_authenticated_dcx_user_trade_detail(
                         publication.visibility_status AS publication_visibility_status,
                         publication.publication_status,
                         trade.created_at_ts_ms,
-                        trade.updated_at_ts_ms
+                        trade.updated_at_ts_ms,
+                        trade_version.normalized_material_key
                     FROM stephen_dcx_trades trade
                     INNER JOIN stephen_dcx_trade_versions trade_version
                       ON trade_version.id = trade.current_version_id
@@ -119,7 +120,8 @@ def read_authenticated_dcx_user_trade_detail(
                             trade_version.normalized_total_price_value,
                             trade_version.normalized_origin_location,
                             trade_version.normalized_destination_location,
-                            trade_version.updated_at_ts_ms
+                            trade_version.updated_at_ts_ms,
+                            trade_version.normalized_material_key
                         FROM stephen_dcx_trade_versions trade_version
                         WHERE trade_version.trade_id = %s
                         ORDER BY trade_version.version_number DESC, trade_version.id DESC
@@ -154,6 +156,7 @@ def read_authenticated_dcx_user_trade_detail(
         "raw_counterparty_scope_text": trade_row[16],
         "normalized_trade_side": trade_row[17],
         "normalized_material_name": trade_row[18],
+        "normalized_material_key": trade_row[45] or "",
         "normalized_quantity_value": float(trade_row[19]) if trade_row[19] is not None else None,
         "normalized_quantity_unit": trade_row[20],
         "normalized_price_mode": trade_row[21],
@@ -199,6 +202,7 @@ def read_authenticated_dcx_user_trade_detail(
                 "trade_status": version_row[6],
                 "normalized_trade_side": version_row[7],
                 "normalized_material_name": version_row[8],
+                "normalized_material_key": version_row[17] or "",
                 "normalized_quantity_value": float(version_row[9]) if version_row[9] is not None else None,
                 "normalized_quantity_unit": version_row[10],
                 "normalized_price_value": float(version_row[11]) if version_row[11] is not None else None,

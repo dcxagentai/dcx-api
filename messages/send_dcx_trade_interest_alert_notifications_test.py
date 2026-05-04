@@ -30,6 +30,7 @@ def test_sends_email_alert_to_matching_interested_user(monkeypatch) -> None:
             "trade_snapshot": {
                 "normalized_trade_side": "sell",
                 "normalized_material_name": "Primary Aluminum Ingots",
+                "normalized_material_key": "aluminum",
                 "normalized_quantity_value": 1000,
                 "normalized_quantity_unit": "MT",
                 "normalized_price_value": 3525,

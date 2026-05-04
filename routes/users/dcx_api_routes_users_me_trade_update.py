@@ -35,6 +35,7 @@ class DcxUsersMeTradeUpdateRequest(BaseModel):
     trade_status: str | None = None
     normalized_trade_side: str | None = None
     normalized_material_name: str | None = None
+    normalized_material_key: str | None = None
     normalized_quantity_value: float | None = None
     normalized_quantity_unit: str | None = None
     normalized_price_mode: str | None = None

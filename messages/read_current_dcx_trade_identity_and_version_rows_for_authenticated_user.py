@@ -119,7 +119,8 @@ def read_current_dcx_trade_identity_and_version_rows_for_authenticated_user(
             trade_version.missing_required_fields_json AS missing_required_fields_json,
             trade_version.trade_metadata_json AS trade_metadata_json,
             trade_version.created_at_ts_ms AS version_created_at_ts_ms,
-            trade_version.updated_at_ts_ms AS version_updated_at_ts_ms
+            trade_version.updated_at_ts_ms AS version_updated_at_ts_ms,
+            trade_version.normalized_material_key AS normalized_material_key
         FROM stephen_dcx_trades trade
         INNER JOIN stephen_dcx_trade_versions trade_version
           ON trade_version.id = trade.current_version_id
@@ -199,6 +200,7 @@ def read_current_dcx_trade_identity_and_version_rows_for_authenticated_user(
         "trade_metadata_json": trade_metadata_json if isinstance(trade_metadata_json, dict) else {},
         "created_at_ts_ms": _read_row_value(row, "version_created_at_ts_ms", 58),
         "updated_at_ts_ms": _read_row_value(row, "version_updated_at_ts_ms", 59),
+        "normalized_material_key": _read_row_value(row, "normalized_material_key", 60) or "",
     }
     return trade_identity_row, trade_version_row
 
