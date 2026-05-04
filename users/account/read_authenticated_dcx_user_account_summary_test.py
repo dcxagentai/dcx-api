@@ -100,6 +100,7 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         "Stephen Trader",
                         "stephen_trader",
                         "handle",
+                        "email",
                     )
                 ],
                 [
@@ -146,6 +147,13 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                             "whatsapp",
                         )
                     ],
+                    [
+                        ("aluminum", "Aluminum", 10),
+                        ("wheat", "Wheat", 20),
+                    ],
+                    [
+                        ("aluminum",),
+                    ],
                 ],
             ),
         )
@@ -171,6 +179,7 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
             "public_identity_mode": "handle",
             "public_identity_label": "@stephen_trader",
         },
+        "default_interaction_channel": "email",
         "preferred_language": {
             "id": 4,
             "language_code": "de",
@@ -290,6 +299,33 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "label": "Nickname",
             },
         ],
+        "available_default_interaction_channels": [
+            {
+                "value": "app_only",
+                "label": "App only",
+            },
+            {
+                "value": "email",
+                "label": "Email",
+            },
+            {
+                "value": "whatsapp",
+                "label": "WhatsApp",
+            },
+        ],
+        "available_trade_interest_materials": [
+            {
+                "material_key": "aluminum",
+                "display_label": "Aluminum",
+                "sort_order": 10,
+            },
+            {
+                "material_key": "wheat",
+                "display_label": "Wheat",
+                "sort_order": 20,
+            },
+        ],
+        "selected_trade_interest_material_keys": ["aluminum"],
     }
 
 
@@ -339,6 +375,7 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         "",
                         "",
                         "anonymous",
+                        "app_only",
                     )
                 ],
                 [
@@ -368,6 +405,8 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         )
                     ],
                     [],
+                    [],
+                    [],
                 ],
             ),
         )
@@ -377,6 +416,9 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     assert result["primary_phone_e164"] is None
     assert result["email_contact_methods"][0]["normalized_value"] == "jill.whitney@ncmedia.ch"
     assert result["phone_contact_methods"] == []
+    assert result["default_interaction_channel"] == "app_only"
+    assert result["available_trade_interest_materials"] == []
+    assert result["selected_trade_interest_material_keys"] == []
     assert result["ux_strings"]["page_title"] == "Account"
     assert result["user_id"] == 6
     assert len(result["available_languages"]) == 2

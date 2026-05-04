@@ -18,6 +18,9 @@ from messages.create_new_dcx_trade_version_and_promote_current_trade import (
 from messages.read_current_dcx_trade_identity_and_version_rows_for_authenticated_user import (
     read_current_dcx_trade_identity_and_version_rows_for_authenticated_user,
 )
+from messages.send_dcx_trade_interest_alert_notifications import (
+    send_dcx_trade_interest_alert_notifications,
+)
 from storage.db_config import DB_CONFIG
 
 DCX_TRADE_REQUIRED_NORMALIZED_FIELDS = {
@@ -98,6 +101,7 @@ def confirm_authenticated_dcx_user_trade_candidate(
     now_ts_ms = (current_timestamp_ms_provider or _read_current_timestamp_ms)()
     connect = connect_to_database or psycopg2.connect
 
+    was_confirmed = False
     with connect(**DB_CONFIG) as connection:
         with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
             trade_identity_row, current_trade_version_row = (
@@ -142,6 +146,17 @@ def confirm_authenticated_dcx_user_trade_candidate(
                 version_source_type="user_confirm",
                 now_ts_ms=now_ts_ms,
             )
+            was_confirmed = True
+
+    if was_confirmed:
+        try:
+            send_dcx_trade_interest_alert_notifications(
+                trade_id=trade_id,
+                trigger_source="trade_confirmed",
+                connect_to_database=connect,
+            )
+        except Exception:
+            pass
 
     return {"trade_id": trade_id, "was_noop": False}
 

@@ -49,6 +49,9 @@ from typing import Any, Callable
 import psycopg2
 from psycopg2.extras import Json
 
+from messages.send_dcx_trade_interest_alert_notifications import (
+    send_dcx_trade_interest_alert_notifications,
+)
 from storage.db_config import DB_CONFIG
 
 DCX_TRADE_VISIBILITY_STATUSES = {"private", "shareable", "public"}
@@ -191,11 +194,21 @@ def set_authenticated_dcx_user_trade_visibility(
                     )
                     trade_publication_id = cursor.fetchone()[0]
 
-        return {
+        result = {
             "trade_id": trade_id,
             "visibility_status": normalized_visibility_status,
             "trade_publication_id": trade_publication_id,
         }
+        if normalized_visibility_status in {"shareable", "public"}:
+            try:
+                send_dcx_trade_interest_alert_notifications(
+                    trade_id=trade_id,
+                    trigger_source="trade_published",
+                    connect_to_database=connect,
+                )
+            except Exception:
+                pass
+        return result
     except RuntimeError:
         raise
     except Exception as exc:

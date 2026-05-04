@@ -37,6 +37,7 @@ class DcxUsersMeAccountSettingsSaveRequest(BaseModel):
     public_handle: str
     public_identity_mode: str
     default_interaction_channel: str
+    trade_interest_material_keys: list[str] = []
 
 
 @dcx_api_routes_users_me_account_settings_router.post("/me/account-settings", response_model=None)
@@ -120,6 +121,7 @@ def post_authenticated_dcx_user_account_settings(
             public_handle=account_settings_save_request.public_handle,
             public_identity_mode=account_settings_save_request.public_identity_mode,
             default_interaction_channel=account_settings_save_request.default_interaction_channel,
+            trade_interest_material_keys=account_settings_save_request.trade_interest_material_keys,
         )
         refreshed_account_summary = read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=authenticated_user_id,
@@ -147,6 +149,7 @@ def post_authenticated_dcx_user_account_settings(
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_HANDLE_TAKEN",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_DEFAULT_INTERACTION_CHANNEL_INVALID",
+            "API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID",
         }:
             return JSONResponse(
                 status_code=400,

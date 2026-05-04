@@ -44,6 +44,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     public_handle: str,
     public_identity_mode: str,
     default_interaction_channel: str,
+    trade_interest_material_keys: list[str] | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -196,6 +197,10 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     ):
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
 
+    normalized_trade_interest_material_keys = _normalize_trade_interest_material_keys(
+        trade_interest_material_keys
+    )
+
     connect = connect_to_database or psycopg2.connect
 
     try:
@@ -246,6 +251,23 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                     if cursor.fetchone() is not None:
                         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_HANDLE_TAKEN")
 
+                if normalized_trade_interest_material_keys:
+                    cursor.execute(
+                        """
+                        SELECT material_key
+                        FROM stephen_dcx_trade_interest_material_options
+                        WHERE is_active = TRUE
+                          AND material_key = ANY(%s)
+                        """,
+                        (normalized_trade_interest_material_keys,),
+                    )
+                    active_material_keys = {
+                        row[0]
+                        for row in cursor.fetchall()
+                    }
+                    if active_material_keys != set(normalized_trade_interest_material_keys):
+                        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID")
+
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_users
@@ -273,6 +295,32 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                     ),
                 )
                 saved_row = cursor.fetchone()
+                if saved_row is not None:
+                    now_ts_ms = _read_current_timestamp_ms()
+                    cursor.execute(
+                        """
+                        DELETE FROM stephen_dcx_user_trade_interest_materials
+                        WHERE user_id = %s
+                        """,
+                        (authenticated_user_id,),
+                    )
+                    for material_key in normalized_trade_interest_material_keys:
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_user_trade_interest_materials (
+                                user_id,
+                                material_key,
+                                created_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (user_id, material_key) DO NOTHING
+                            """,
+                            (
+                                authenticated_user_id,
+                                material_key,
+                                now_ts_ms,
+                            ),
+                        )
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -290,4 +338,34 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "public_handle": saved_row[5],
         "public_identity_mode": saved_row[6],
         "default_interaction_channel": saved_row[7],
+        "trade_interest_material_keys": normalized_trade_interest_material_keys,
     }
+
+
+def _normalize_trade_interest_material_keys(value: list[str] | None) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID")
+
+    normalized_keys: list[str] = []
+    seen_keys: set[str] = set()
+    for raw_material_key in value:
+        if not isinstance(raw_material_key, str):
+            raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID")
+        normalized_key = raw_material_key.strip().lower()
+        if normalized_key == "":
+            continue
+        if not re.fullmatch(r"[a-z0-9_]{2,64}", normalized_key):
+            raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID")
+        if normalized_key in seen_keys:
+            continue
+        normalized_keys.append(normalized_key)
+        seen_keys.add(normalized_key)
+    return normalized_keys
+
+
+def _read_current_timestamp_ms() -> int:
+    import time
+
+    return int(time.time() * 1000)

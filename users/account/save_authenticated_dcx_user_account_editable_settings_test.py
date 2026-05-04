@@ -4,8 +4,9 @@ from users.account.save_authenticated_dcx_user_account_editable_settings import 
 
 
 class _FakeCursor:
-    def __init__(self, fetchone_results):
+    def __init__(self, fetchone_results, fetchall_results=None):
         self._fetchone_results = list(fetchone_results)
+        self._fetchall_results = list(fetchall_results or [])
         self.executed_queries = []
 
     def __enter__(self):
@@ -22,10 +23,16 @@ class _FakeCursor:
             return None
         return self._fetchone_results.pop(0)
 
+    def fetchall(self):
+        if not self._fetchall_results:
+            return []
+        return self._fetchall_results.pop(0)
+
 
 class _FakeConnection:
-    def __init__(self, fetchone_results):
+    def __init__(self, fetchone_results, fetchall_results=None):
         self._fetchone_results = fetchone_results
+        self._fetchall_results = fetchall_results or []
 
     def __enter__(self):
         return self
@@ -34,7 +41,7 @@ class _FakeConnection:
         return False
 
     def cursor(self):
-        return _FakeCursor(self._fetchone_results)
+        return _FakeCursor(self._fetchone_results, self._fetchall_results)
 
 
 def test_saves_editable_settings_via_direct_user_row_update() -> None:
@@ -46,8 +53,16 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         public_display_name="Stephen Trader",
         public_handle="stephen_trader",
         public_identity_mode="handle",
+        default_interaction_channel="email",
+        trade_interest_material_keys=["aluminum", "wheat"],
         connect_to_database=lambda **_: _FakeConnection(
-            [(1,), (1,), None, (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle")]
+            [
+                (1,),
+                (1,),
+                None,
+                (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle", "email"),
+            ],
+            [[("aluminum",), ("wheat",)]],
         ),
     )
 
@@ -59,6 +74,8 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         "public_display_name": "Stephen Trader",
         "public_handle": "stephen_trader",
         "public_identity_mode": "handle",
+        "default_interaction_channel": "email",
+        "trade_interest_material_keys": ["aluminum", "wheat"],
     }
 
 
@@ -72,6 +89,7 @@ def test_raises_clear_error_for_invalid_email_communication_preference() -> None
             public_display_name="Stephen Trader",
             public_handle="",
             public_identity_mode="display_name",
+            default_interaction_channel="app_only",
             connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:
@@ -90,6 +108,7 @@ def test_raises_clear_error_for_missing_user_row() -> None:
             public_display_name="",
             public_handle="",
             public_identity_mode="anonymous",
+            default_interaction_channel="app_only",
             connect_to_database=lambda **_: _FakeConnection([None]),
         )
     except RuntimeError as exc:
@@ -108,9 +127,36 @@ def test_raises_clear_error_for_invalid_timezone() -> None:
             public_display_name="Stephen Trader",
             public_handle="",
             public_identity_mode="display_name",
+            default_interaction_channel="app_only",
             connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
         )
     except RuntimeError as exc:
         assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID"
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected invalid timezone to raise a stable runtime error.")
+
+
+def test_raises_clear_error_for_invalid_trade_interest_material_key() -> None:
+    try:
+        save_authenticated_dcx_user_account_editable_settings_capability(
+            authenticated_user_id=5,
+            preferred_language_id=None,
+            preferred_timezone_id=None,
+            email_communication_preference="newsletters",
+            public_display_name="Stephen Trader",
+            public_handle="",
+            public_identity_mode="display_name",
+            default_interaction_channel="app_only",
+            trade_interest_material_keys=["not_a_material"],
+            connect_to_database=lambda **_: _FakeConnection(
+                [
+                    None,
+                    (5, None, None, "newsletters", "Stephen Trader", "", "display_name", "app_only"),
+                ],
+                [[]],
+            ),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID"
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected invalid trade interest material to raise a stable runtime error.")

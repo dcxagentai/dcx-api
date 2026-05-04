@@ -295,6 +295,29 @@ def read_authenticated_dcx_user_account_summary_capability(
                     ),
                 )
                 phone_contact_method_rows = cursor.fetchall()
+                cursor.execute(
+                    """
+                    SELECT
+                        material_key,
+                        display_label,
+                        sort_order
+                    FROM stephen_dcx_trade_interest_material_options
+                    WHERE is_active = TRUE
+                    ORDER BY sort_order ASC, display_label ASC
+                    """
+                )
+                trade_interest_material_option_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT material_key
+                    FROM stephen_dcx_user_trade_interest_materials
+                    WHERE user_id = %s
+                    ORDER BY material_key ASC
+                    """,
+                    (authenticated_user_id,),
+                )
+                selected_trade_interest_material_rows = cursor.fetchall()
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -380,6 +403,19 @@ def read_authenticated_dcx_user_account_summary_capability(
             "channel": contact_method_row[13],
         }
         for contact_method_row in phone_contact_method_rows
+    ]
+    available_trade_interest_materials = [
+        {
+            "material_key": material_option_row[0],
+            "display_label": material_option_row[1],
+            "sort_order": material_option_row[2],
+        }
+        for material_option_row in trade_interest_material_option_rows
+    ]
+    selected_trade_interest_material_keys = [
+        selected_material_row[0]
+        for selected_material_row in selected_trade_interest_material_rows
+        if isinstance(selected_material_row[0], str) and selected_material_row[0].strip() != ""
     ]
 
     ux_strings = read_dcx_app_account_page_ux_strings_capability(
@@ -473,6 +509,8 @@ def read_authenticated_dcx_user_account_summary_capability(
                 "label": "WhatsApp",
             },
         ],
+        "available_trade_interest_materials": available_trade_interest_materials,
+        "selected_trade_interest_material_keys": selected_trade_interest_material_keys,
     }
 
 
