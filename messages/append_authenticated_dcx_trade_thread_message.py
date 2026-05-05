@@ -75,6 +75,7 @@ from psycopg2.extras import Json
 from apis.gemini.translate_dcx_gemini_trade_thread_message import (
     translate_dcx_gemini_trade_thread_message,
 )
+from usage.record_dcx_user_llm_usage_event import record_dcx_user_llm_usage_event
 from messages.read_authenticated_dcx_trade_thread_detail import (
     read_authenticated_dcx_trade_thread_detail,
 )
@@ -139,6 +140,9 @@ def append_authenticated_dcx_trade_thread_message(
             source_language_code=normalized_language_code,
             target_language_code=target_translation_language_code,
             now_ts_ms=now_ts_ms,
+            sender_user_id=authenticated_user_id,
+            trade_thread_id=trade_thread_id,
+            connect=connect,
         )
 
         with connect(**DB_CONFIG) as connection:
@@ -291,6 +295,9 @@ def _build_trade_thread_message_translations_json(
     source_language_code: str,
     target_language_code: str,
     now_ts_ms: int,
+    sender_user_id: int | None = None,
+    trade_thread_id: int | None = None,
+    connect: Callable[..., Any] | None = None,
 ) -> dict:
     normalized_source_language_code = source_language_code.strip().lower() if isinstance(source_language_code, str) else "en"
     normalized_target_language_code = target_language_code.strip().lower() if isinstance(target_language_code, str) else "en"
@@ -305,6 +312,12 @@ def _build_trade_thread_message_translations_json(
         )
     except RuntimeError:
         return {}
+    _record_trade_thread_translation_usage_best_effort(
+        sender_user_id=sender_user_id,
+        trade_thread_id=trade_thread_id,
+        translation_result=translation_result,
+        connect=connect,
+    )
 
     return {
         normalized_target_language_code: {
@@ -318,3 +331,35 @@ def _build_trade_thread_message_translations_json(
             "created_at_ts_ms": now_ts_ms,
         }
     }
+
+
+def _record_trade_thread_translation_usage_best_effort(
+    sender_user_id: int | None,
+    trade_thread_id: int | None,
+    translation_result: dict,
+    connect: Callable[..., Any] | None,
+) -> None:
+    if not isinstance(sender_user_id, int) or sender_user_id <= 0 or connect is None:
+        return
+
+    try:
+        record_dcx_user_llm_usage_event(
+            authenticated_user_id=sender_user_id,
+            provider_name=translation_result.get("provider_name", ""),
+            model_name=translation_result.get("model_name", ""),
+            prompt_version=translation_result.get("prompt_version", ""),
+            usage_source_kind="trade_thread_translation",
+            usage_source_id=trade_thread_id,
+            usage_metadata=(
+                translation_result.get("usage_metadata")
+                if isinstance(translation_result.get("usage_metadata"), dict)
+                else {}
+            ),
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        logger.exception(
+            "trade_thread_translation_usage_record_failed sender_user_id=%s trade_thread_id=%s",
+            sender_user_id,
+            trade_thread_id,
+        )
