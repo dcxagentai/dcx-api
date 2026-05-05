@@ -23,6 +23,9 @@ _ensure_dcx_api_repo_root_is_on_python_path()
 from content.newsletter_sends.dispatch_one_due_dcx_newsletter_send_via_resend import (
     dispatch_one_due_dcx_newsletter_send_via_resend_capability,
 )
+from content.newsletter_sends.schedule_due_dcx_email_sequence_sends import (
+    schedule_due_dcx_email_sequence_sends_capability,
+)
 
 
 def run_one_due_dcx_newsletter_resend_dispatch_pass() -> dict:
@@ -71,7 +74,12 @@ def run_one_due_dcx_newsletter_resend_dispatch_pass() -> dict:
 
     CODE:
     """
-    return dispatch_one_due_dcx_newsletter_send_via_resend_capability()
+    sequence_schedule_result = schedule_due_dcx_email_sequence_sends_capability()
+    dispatch_result = dispatch_one_due_dcx_newsletter_send_via_resend_capability()
+    return {
+        "sequence_schedule_result": sequence_schedule_result,
+        "dispatch_result": dispatch_result,
+    }
 
 
 if __name__ == "__main__":

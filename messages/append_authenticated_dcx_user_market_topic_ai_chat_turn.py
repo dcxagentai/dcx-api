@@ -87,7 +87,9 @@ from psycopg2.extras import Json
 from apis.gemini.generate_dcx_gemini_market_topic_chat_response import (
     generate_dcx_gemini_market_topic_chat_response,
 )
+from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 from storage.db_config import DB_CONFIG
+from usage.record_dcx_user_llm_usage_event import record_dcx_user_llm_usage_event
 
 DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS = 100000
 DCX_MARKET_TOPIC_CHAT_USER_TURN_MAX_CHARACTERS = 4000
@@ -154,6 +156,12 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
             prior_turns=prior_turns,
             user_turn_text=normalized_user_turn_text,
             preferred_language_code=normalized_language_code,
+        )
+        _record_market_topic_chat_usage_best_effort(
+            authenticated_user_id=authenticated_user_id,
+            market_topic_id=market_topic_id,
+            ai_response=ai_response,
+            connect=connect,
         )
 
         now_ts_ms = int(time.time() * 1000)
@@ -263,6 +271,37 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
         "assistant_turn_text": str(ai_response["assistant_turn_text"]).strip(),
         "created_at_ts_ms": now_ts_ms,
     }
+
+
+def _record_market_topic_chat_usage_best_effort(
+    authenticated_user_id: int,
+    market_topic_id: int,
+    ai_response: dict,
+    connect: Callable[..., Any],
+) -> None:
+    try:
+        record_dcx_user_llm_usage_event(
+            authenticated_user_id=authenticated_user_id,
+            provider_name=ai_response.get("provider_name", ""),
+            model_name=ai_response.get("model_name", ""),
+            prompt_version=ai_response.get("prompt_version", ""),
+            usage_source_kind="market_topic_chat",
+            usage_source_id=market_topic_id,
+            usage_metadata=ai_response.get("usage_metadata") if isinstance(ai_response.get("usage_metadata"), dict) else {},
+            connect_to_database=connect,
+        )
+        record_dcx_user_activity_event(
+            user_id=authenticated_user_id,
+            activity_kind="market_topic_chat_turn_created",
+            surface="app",
+            entity_kind="market_topic",
+            entity_id=market_topic_id,
+            activity_summary="Market topic AI chat turn created.",
+            activity_metadata={},
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        pass
 
 
 def _read_existing_market_topic_turn_pair_for_source_message(

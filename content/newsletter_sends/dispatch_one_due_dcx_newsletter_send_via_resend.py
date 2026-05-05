@@ -107,7 +107,7 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
                         email_send.id,
                         email_send.email_key_snapshot
                     FROM stephen_dcx_emails_sends AS email_send
-                    WHERE email_send.send_kind = 'newsletter'
+                    WHERE email_send.send_kind IN ('newsletter', 'sequence')
                       AND email_send.send_status = 'scheduled'
                       AND email_send.scheduled_send_at_ts_ms <= %s
                     ORDER BY email_send.scheduled_send_at_ts_ms ASC, email_send.id ASC

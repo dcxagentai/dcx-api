@@ -43,7 +43,9 @@ from messages.build_dcx_app_trade_candidate_review_url import (
 from messages.create_dcx_trade_identity_with_first_version import (
     create_dcx_trade_identity_with_first_version,
 )
+from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 from storage.db_config import DB_CONFIG
+from usage.record_dcx_user_llm_usage_event import record_dcx_user_llm_usage_event
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -197,6 +199,32 @@ def process_stored_dcx_contact_message_analysis(
         )
     except Exception as exc:
         raise RuntimeError("API_DCX_CONTACT_MESSAGE_ANALYSIS_PROCESS_FAILED") from exc
+
+    if analysis_run_status == "completed":
+        _record_best_effort_llm_usage_event(
+            user_id=message_input.get("user_id"),
+            provider_name=analysis_result.get("provider_name", ""),
+            model_name=analysis_result.get("model_name", ""),
+            prompt_version=analysis_result.get("prompt_version", PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS),
+            usage_source_kind="contact_message_analysis",
+            usage_source_id=message_id,
+            usage_metadata=analysis_result.get("usage_metadata"),
+            connect=connect,
+        )
+        _record_best_effort_activity_event(
+            user_id=message_input.get("user_id"),
+            activity_kind="message_analysis_completed",
+            surface=str(message_input.get("channel_type") or "app"),
+            entity_kind="contact_message",
+            entity_id=message_id,
+            activity_summary="Message analysis completed.",
+            activity_metadata={
+                "message_format": message_input.get("message_format"),
+                "moderation_status": analysis_result.get("moderation_status"),
+                "primary_workflow_kind": analysis_result.get("primary_workflow_kind"),
+            },
+            connect=connect,
+        )
 
     _deliver_message_workflow_outcome_notification(
         pending_notification=pending_workflow_outcome_notification,
@@ -779,11 +807,77 @@ def _build_failed_analysis_result(
         "workflow_classification_status": "failed",
         "workflow_items": [],
         "attachments": [],
+        "usage_metadata": {},
         "raw_output_json": {
             "error_code": error_code,
             "error_detail": error_detail,
         },
     }
+
+
+def _record_best_effort_llm_usage_event(
+    user_id: Any,
+    provider_name: str,
+    model_name: str,
+    prompt_version: str,
+    usage_source_kind: str,
+    usage_source_id: int | None,
+    usage_metadata: Any,
+    connect: Callable[..., Any],
+) -> None:
+    if not isinstance(user_id, int) or user_id <= 0:
+        return
+    try:
+        record_dcx_user_llm_usage_event(
+            authenticated_user_id=user_id,
+            provider_name=provider_name,
+            model_name=model_name,
+            prompt_version=prompt_version,
+            usage_source_kind=usage_source_kind,
+            usage_source_id=usage_source_id,
+            usage_metadata=usage_metadata if isinstance(usage_metadata, dict) else {},
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        logger.exception(
+            "dcx_llm_usage_record_failed user_id=%s source_kind=%s source_id=%s",
+            user_id,
+            usage_source_kind,
+            usage_source_id,
+        )
+
+
+def _record_best_effort_activity_event(
+    user_id: Any,
+    activity_kind: str,
+    surface: str,
+    entity_kind: str,
+    entity_id: int | None,
+    activity_summary: str,
+    activity_metadata: dict,
+    connect: Callable[..., Any],
+) -> None:
+    if not isinstance(user_id, int) or user_id <= 0:
+        return
+    try:
+        record_dcx_user_activity_event(
+            user_id=user_id,
+            activity_kind=activity_kind,
+            surface=surface,
+            entity_kind=entity_kind,
+            entity_id=entity_id,
+            activity_summary=activity_summary,
+            activity_metadata=activity_metadata,
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        logger.exception(
+            "dcx_activity_record_failed user_id=%s activity_kind=%s entity_kind=%s entity_id=%s",
+            user_id,
+            activity_kind,
+            entity_kind,
+            entity_id,
+        )
 
 
 def _read_best_effort_gemini_message_analysis_model_name() -> str:
@@ -984,6 +1078,16 @@ def _rebuild_message_workflow_projections(
                     workflow_item=workflow_item,
                     attachment_inputs=referenced_attachment_inputs,
                 )
+                _record_best_effort_llm_usage_event(
+                    user_id=message_input.get("user_id"),
+                    provider_name=trade_projection.get("provider_name", ""),
+                    model_name=trade_projection.get("model_name", ""),
+                    prompt_version=trade_projection.get("prompt_version", ""),
+                    usage_source_kind="trade_projection",
+                    usage_source_id=message_id,
+                    usage_metadata=trade_projection.get("usage_metadata"),
+                    connect=connect,
+                )
                 source_language_id = _read_language_id_for_code(
                     cursor=cursor,
                     language_code=analysis_result.get("message_language_code"),
@@ -1021,6 +1125,19 @@ def _rebuild_message_workflow_projections(
                         "summary": str(trade_projection.get("trade_summary_text") or workflow_item.get("item_summary") or "").strip(),
                     }
                 )
+                _record_best_effort_activity_event(
+                    user_id=message_input.get("user_id"),
+                    activity_kind="trade_candidate_created",
+                    surface=str(message_input.get("channel_type") or "app"),
+                    entity_kind="trade",
+                    entity_id=trade_id,
+                    activity_summary="Trade candidate created from a message.",
+                    activity_metadata={
+                        "source_message_id": message_id,
+                        "source_workflow_item_id": workflow_item_id,
+                    },
+                    connect=connect,
+                )
             except Exception as exc:
                 projection_errors.append(
                     {
@@ -1048,6 +1165,16 @@ def _rebuild_message_workflow_projections(
                     },
                     workflow_item=workflow_item,
                     attachment_inputs=referenced_attachment_inputs,
+                )
+                _record_best_effort_llm_usage_event(
+                    user_id=message_input.get("user_id"),
+                    provider_name=topic_seed.get("provider_name", ""),
+                    model_name=topic_seed.get("model_name", ""),
+                    prompt_version=topic_seed.get("prompt_version", ""),
+                    usage_source_kind="market_topic_seed",
+                    usage_source_id=message_id,
+                    usage_metadata=topic_seed.get("usage_metadata"),
+                    connect=connect,
                 )
                 cursor.execute(
                     """
@@ -1144,6 +1271,19 @@ def _rebuild_message_workflow_projections(
                         "summary": str(topic_seed.get("topic_summary_text") or workflow_item.get("item_summary") or "").strip(),
                         "opening_ai_response_text": str(topic_seed.get("opening_ai_response_text") or "").strip(),
                     }
+                )
+                _record_best_effort_activity_event(
+                    user_id=message_input.get("user_id"),
+                    activity_kind="market_topic_created",
+                    surface=str(message_input.get("channel_type") or "app"),
+                    entity_kind="market_topic",
+                    entity_id=market_topic_id,
+                    activity_summary="Market topic created from a message.",
+                    activity_metadata={
+                        "source_message_id": message_id,
+                        "source_workflow_item_id": workflow_item_id,
+                    },
+                    connect=connect,
                 )
             except Exception as exc:
                 projection_errors.append(

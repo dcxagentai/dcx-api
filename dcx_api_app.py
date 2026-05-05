@@ -61,6 +61,9 @@ from routes.auth.dcx_api_routes_auth_session import (
 from routes.admin.dcx_api_routes_admin_users_list import (
     dcx_api_routes_admin_users_list_router,
 )
+from routes.admin.dcx_api_routes_admin_user_detail import (
+    dcx_api_routes_admin_user_detail_router,
+)
 from routes.admin.dcx_api_routes_admin_content_ux_strings_catalog import (
     dcx_api_routes_admin_content_ux_strings_catalog_router,
 )
@@ -166,6 +169,12 @@ from routes.admin.dcx_api_routes_admin_public_site_mark_local_rebuild_complete i
 from routes.users.dcx_api_routes_users_me_account_summary import (
     dcx_api_routes_users_me_account_summary_router,
 )
+from routes.users.dcx_api_routes_users_me_activity import (
+    dcx_api_routes_users_me_activity_router,
+)
+from routes.users.dcx_api_routes_users_me_usage import (
+    dcx_api_routes_users_me_usage_router,
+)
 from routes.users.dcx_api_routes_users_me_account_settings import (
     dcx_api_routes_users_me_account_settings_router,
 )
@@ -268,6 +277,7 @@ app.include_router(dcx_api_routes_auth_password_complete_set_router)
 app.include_router(dcx_api_routes_auth_password_request_reset_router)
 app.include_router(dcx_api_routes_auth_session_router)
 app.include_router(dcx_api_routes_admin_users_list_router)
+app.include_router(dcx_api_routes_admin_user_detail_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
 app.include_router(dcx_api_routes_admin_content_ux_string_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)
@@ -303,6 +313,8 @@ app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
 app.include_router(dcx_api_routes_users_me_account_summary_router)
+app.include_router(dcx_api_routes_users_me_activity_router)
+app.include_router(dcx_api_routes_users_me_usage_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
 app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router)
 app.include_router(dcx_api_routes_users_me_account_phone_set_primary_router)

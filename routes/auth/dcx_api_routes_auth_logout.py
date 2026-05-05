@@ -17,9 +17,13 @@ from auth.logout.logout_authenticated_dcx_user import logout_authenticated_dcx_u
 from auth.session.clear_dcx_auth_session_cookie_on_response import (
     clear_dcx_auth_session_cookie_on_response,
 )
+from auth.session.read_authenticated_dcx_session_from_request import (
+    read_authenticated_dcx_session_from_request,
+)
 from auth.session.read_dcx_auth_session_cookie_settings import (
     read_dcx_auth_session_cookie_settings,
 )
+from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 
 dcx_api_routes_auth_logout_router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,8 +68,22 @@ def post_dcx_auth_logout(request: Request):
         return origin_error_response
 
     cookie_settings = read_dcx_auth_session_cookie_settings()
+    session_before_logout = read_authenticated_dcx_session_from_request(request)
     raw_session_token = request.cookies.get(cookie_settings["cookie_name"])
     logout_result = logout_authenticated_dcx_user(raw_session_token)
+    if session_before_logout is not None:
+        try:
+            record_dcx_user_activity_event(
+                user_id=session_before_logout["user_id"],
+                activity_kind="logout",
+                surface="shared_auth",
+                entity_kind="auth_session",
+                entity_id=session_before_logout["session_id"],
+                activity_summary="User signed out.",
+                activity_metadata={"session_revoked": logout_result.get("session_revoked") is True},
+            )
+        except RuntimeError:
+            pass
 
     response = JSONResponse(
         status_code=200,

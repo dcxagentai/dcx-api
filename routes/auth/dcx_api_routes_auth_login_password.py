@@ -24,6 +24,7 @@ from auth.session.set_dcx_auth_session_cookie_on_response import (
     set_dcx_auth_session_cookie_on_response,
 )
 from routes.users.dcx_api_routes_users_support import read_public_request_client_ip
+from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 
 dcx_api_routes_auth_login_password_router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -158,4 +159,19 @@ def post_dcx_auth_login_password(
         response=response,
         raw_session_token=login_result["raw_session_token"],
     )
+    try:
+        record_dcx_user_activity_event(
+            user_id=login_result["user"]["user_id"],
+            activity_kind="login",
+            surface="shared_auth",
+            entity_kind="auth_session",
+            entity_id=login_result["session_id"],
+            activity_summary="User signed in.",
+            activity_metadata={
+                "request_ip_present": read_public_request_client_ip(request) is not None,
+                "user_agent_present": request.headers.get("user-agent") is not None,
+            },
+        )
+    except RuntimeError:
+        pass
     return response

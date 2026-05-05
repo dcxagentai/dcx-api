@@ -25,6 +25,7 @@ from messages.store_dcx_contact_message_attachment_file_object import (
     prepare_dcx_contact_message_attachment_file_object_storage,
     store_dcx_contact_message_attachment_file_object,
 )
+from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 from storage.db_config import DB_CONFIG
 
 
@@ -406,6 +407,24 @@ def create_authenticated_dcx_app_contact_message(
         raise
     except Exception as exc:
         raise RuntimeError("API_AUTHENTICATED_DCX_CONTACT_MESSAGE_CREATE_FAILED") from exc
+
+    try:
+        record_dcx_user_activity_event(
+            user_id=authenticated_user_id,
+            activity_kind="message_created",
+            surface="app",
+            entity_kind="contact_message",
+            entity_id=created_message_id,
+            activity_summary="Message sent to DCX.",
+            activity_metadata={
+                "attachment_count": len(normalized_attachment_inputs),
+                "processing_status": derivation_result["processing_status"],
+                "derivation_status": derivation_result["derivation_status"],
+            },
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        pass
 
     return {
         "message_id": created_message_id,

@@ -88,7 +88,10 @@ def read_dcx_admin_user_list_capability(
                         l.language_code,
                         l.language_name_en,
                         l.language_name_native,
-                        l.is_rtl
+                        l.is_rtl,
+                        COALESCE(usage_totals.total_token_count, 0),
+                        COALESCE(usage_totals.usage_event_count, 0),
+                        COALESCE(activity_totals.activity_event_count, 0)
                     FROM stephen_dcx_users u
                     LEFT JOIN LATERAL (
                         SELECT
@@ -118,6 +121,20 @@ def read_dcx_admin_user_list_capability(
                       ON TRUE
                     LEFT JOIN stephen_dcx_languages l
                       ON l.id = u.preferred_language_id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            SUM(total_token_count) AS total_token_count,
+                            COUNT(*) AS usage_event_count
+                        FROM stephen_dcx_llm_usage_events
+                        WHERE user_id = u.id
+                    ) usage_totals
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT COUNT(*) AS activity_event_count
+                        FROM stephen_dcx_user_activity_events
+                        WHERE user_id = u.id
+                    ) activity_totals
+                      ON TRUE
                     ORDER BY
                         COALESCE(u.last_seen_at_ts_ms, u.updated_at_ts_ms, u.created_at_ts_ms) DESC,
                         u.id DESC
@@ -160,6 +177,9 @@ def read_dcx_admin_user_list_capability(
                 "created_at_ts_ms": user_row[12],
                 "updated_at_ts_ms": user_row[13],
                 "preferred_language": preferred_language,
+                "total_token_count": int(user_row[19] or 0) if len(user_row) > 19 else 0,
+                "usage_event_count": int(user_row[20] or 0) if len(user_row) > 20 else 0,
+                "activity_event_count": int(user_row[21] or 0) if len(user_row) > 21 else 0,
             }
         )
 

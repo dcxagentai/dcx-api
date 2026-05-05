@@ -72,6 +72,7 @@ from typing import Callable
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_TRADE_THREAD_TRANSLATION = "dcx_trade_thread_translation_2026_05_01_v1"
 
@@ -111,6 +112,7 @@ def translate_dcx_gemini_trade_thread_message(
     try:
         response_payload = (send_gemini_request or _send_gemini_generate_content_request)(request_context)
         translated_message_text = str(response_payload.get("output_text", "")).strip()
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_TRADE_THREAD_TRANSLATION_FAILED") from exc
 
@@ -122,6 +124,7 @@ def translate_dcx_gemini_trade_thread_message(
         "provider_name": "google_gemini",
         "model_name": model_name,
         "prompt_version": PROMPT_VERSION_DCX_TRADE_THREAD_TRANSLATION,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
         "prompt_fingerprint": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
     }
 
@@ -134,7 +137,10 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
         model=request_context["model_name"],
         contents=[request_context["prompt_text"]],
     )
-    return {"output_text": (response.text or "").strip()}
+    return {
+        "output_text": (response.text or "").strip(),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
+    }
 
 
 def _build_trade_thread_translation_prompt(

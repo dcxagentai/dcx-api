@@ -15,6 +15,7 @@ from typing import Any, Callable
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_28_v4"
 DCX_MESSAGE_TEXT_SUMMARY_WORD_COUNT_THRESHOLD = 100
@@ -125,6 +126,7 @@ def generate_dcx_gemini_structured_message_analysis(
         response_payload = (send_gemini_request or _send_gemini_generate_content_request)(request_context)
         output_text = str(response_payload.get("output_text", "")).strip()
         parsed_output = json.loads(output_text)
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_MESSAGE_ANALYSIS_FAILED") from exc
 
@@ -135,6 +137,7 @@ def generate_dcx_gemini_structured_message_analysis(
         model_name=model_name,
         provider_name="google_gemini",
         analysis_mode="gemini_generate_content",
+        usage_metadata=usage_metadata if isinstance(usage_metadata, dict) else {},
     )
 
 
@@ -160,7 +163,10 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
             response_schema=request_context["response_schema"],
         ),
     )
-    return {"output_text": (response.text or "").strip()}
+    return {
+        "output_text": (response.text or "").strip(),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
+    }
 
 
 def _build_dcx_message_analysis_prompt(message_input: dict, file_inputs: list[dict]) -> str:
@@ -410,6 +416,7 @@ def _normalize_gemini_message_analysis_output(
     model_name: str,
     provider_name: str,
     analysis_mode: str,
+    usage_metadata: dict | None = None,
 ) -> dict:
     raw_text_word_count = _count_words(message_input.get("raw_text_content", ""))
     known_file_ids = {file_input["file_object_id"] for file_input in file_inputs}
@@ -520,6 +527,7 @@ def _normalize_gemini_message_analysis_output(
         "workflow_classification_status": "completed",
         "workflow_items": normalized_workflow_items,
         "attachments": normalized_attachments,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
         "raw_output_json": parsed_output,
     }
 
@@ -565,6 +573,7 @@ def _build_fallback_message_analysis(
             }
             for file_input in file_inputs
         ],
+        "usage_metadata": {},
         "raw_output_json": {},
     }
 

@@ -22,6 +22,7 @@ from apis.gemini.format_dcx_gemini_grounding_metadata import (
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_MARKET_TOPIC_SEED = "dcx_market_topic_seed_2026_04_28_v1"
 
@@ -103,6 +104,7 @@ def generate_dcx_gemini_structured_market_topic_seed(
         response_payload = (send_gemini_request or _send_gemini_generate_content_request)(request_context)
         output_text = str(response_payload.get("output_text", "")).strip()
         parsed_output = json.loads(output_text)
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_SEED_FAILED") from exc
 
@@ -110,6 +112,7 @@ def generate_dcx_gemini_structured_market_topic_seed(
         parsed_output=parsed_output,
         model_name=model_name,
         grounding_metadata=normalize_dcx_gemini_grounding_metadata(response_payload.get("grounding_metadata")),
+        usage_metadata=usage_metadata if isinstance(usage_metadata, dict) else {},
     )
 
 
@@ -133,6 +136,7 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
     return {
         "output_text": (response.text or "").strip(),
         "grounding_metadata": read_dcx_gemini_response_grounding_metadata(response),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
     }
 
 
@@ -210,12 +214,18 @@ def _build_dcx_market_topic_seed_response_schema() -> dict:
     }
 
 
-def _normalize_market_topic_seed_output(parsed_output: dict, model_name: str, grounding_metadata: dict) -> dict:
+def _normalize_market_topic_seed_output(
+    parsed_output: dict,
+    model_name: str,
+    grounding_metadata: dict,
+    usage_metadata: dict | None = None,
+) -> dict:
     opening_ai_response_text = str(parsed_output.get("opening_ai_response_text") or "").strip()
     return {
         "model_name": model_name,
         "provider_name": "google_gemini",
         "prompt_version": PROMPT_VERSION_DCX_MARKET_TOPIC_SEED,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
         "topic_title": str(parsed_output.get("topic_title") or "").strip(),
         "topic_summary_text": str(parsed_output.get("topic_summary_text") or "").strip(),
         "topic_scope_text": str(parsed_output.get("topic_scope_text") or "").strip(),

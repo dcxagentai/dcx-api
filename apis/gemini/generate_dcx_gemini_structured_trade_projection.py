@@ -14,6 +14,7 @@ from typing import Any, Callable
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_TRADE_PROJECTION = "dcx_trade_projection_2026_04_28_v1"
 
@@ -92,12 +93,14 @@ def generate_dcx_gemini_structured_trade_projection(
         response_payload = (send_gemini_request or _send_gemini_generate_content_request)(request_context)
         output_text = str(response_payload.get("output_text", "")).strip()
         parsed_output = json.loads(output_text)
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_TRADE_PROJECTION_FAILED") from exc
 
     return _normalize_trade_projection_output(
         parsed_output=parsed_output,
         model_name=model_name,
+        usage_metadata=usage_metadata if isinstance(usage_metadata, dict) else {},
     )
 
 
@@ -114,7 +117,10 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
             response_schema=request_context["response_schema"],
         ),
     )
-    return {"output_text": (response.text or "").strip()}
+    return {
+        "output_text": (response.text or "").strip(),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
+    }
 
 
 def _build_dcx_trade_projection_prompt(
@@ -256,11 +262,16 @@ def _build_dcx_trade_projection_response_schema() -> dict:
     }
 
 
-def _normalize_trade_projection_output(parsed_output: dict, model_name: str) -> dict:
+def _normalize_trade_projection_output(
+    parsed_output: dict,
+    model_name: str,
+    usage_metadata: dict | None = None,
+) -> dict:
     return {
         "model_name": model_name,
         "provider_name": "google_gemini",
         "prompt_version": PROMPT_VERSION_DCX_TRADE_PROJECTION,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
         "raw_trade_side_text": _normalize_trade_text_field(parsed_output.get("raw_trade_side_text")),
         "raw_material_text": _normalize_trade_text_field(parsed_output.get("raw_material_text")),
         "raw_quantity_text": _normalize_trade_text_field(parsed_output.get("raw_quantity_text")),

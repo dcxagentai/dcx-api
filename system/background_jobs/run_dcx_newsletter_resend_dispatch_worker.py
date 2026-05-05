@@ -25,6 +25,9 @@ _ensure_dcx_api_repo_root_is_on_python_path()
 from content.newsletter_sends.dispatch_one_due_dcx_newsletter_send_via_resend import (
     dispatch_one_due_dcx_newsletter_send_via_resend_capability,
 )
+from content.newsletter_sends.schedule_due_dcx_email_sequence_sends import (
+    schedule_due_dcx_email_sequence_sends_capability,
+)
 
 
 def run_dcx_newsletter_resend_dispatch_worker() -> None:
@@ -69,8 +72,9 @@ def run_dcx_newsletter_resend_dispatch_worker() -> None:
 
     while True:
         try:
+            sequence_schedule_result = schedule_due_dcx_email_sequence_sends_capability()
             dispatch_result = dispatch_one_due_dcx_newsletter_send_via_resend_capability()
-            if dispatch_result["status"] == "idle":
+            if dispatch_result["status"] == "idle" and sequence_schedule_result["status"] == "idle":
                 time.sleep(poll_interval_seconds)
         except Exception:
             time.sleep(poll_interval_seconds)

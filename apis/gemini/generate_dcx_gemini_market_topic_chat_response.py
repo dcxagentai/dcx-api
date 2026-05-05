@@ -79,6 +79,7 @@ from apis.gemini.format_dcx_gemini_grounding_metadata import (
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_MARKET_TOPIC_CHAT = "dcx_market_topic_chat_2026_05_01_v1"
 
@@ -116,6 +117,7 @@ def generate_dcx_gemini_market_topic_chat_response(
     try:
         response_payload = (send_gemini_request or _send_gemini_generate_content_request)(request_context)
         assistant_turn_text = str(response_payload.get("output_text", "")).strip()
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
         raise RuntimeError("API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED") from exc
 
@@ -135,6 +137,7 @@ def generate_dcx_gemini_market_topic_chat_response(
         "prompt_version": PROMPT_VERSION_DCX_MARKET_TOPIC_CHAT,
         "google_search_enabled": google_search_enabled,
         "grounding_metadata": grounding_metadata,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
         "prompt_fingerprint": hashlib.sha256(
             json.dumps(
                 {
@@ -168,6 +171,7 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
     return {
         "output_text": (response.text or "").strip(),
         "grounding_metadata": read_dcx_gemini_response_grounding_metadata(response),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
     }
 
 
@@ -235,4 +239,3 @@ def _build_gemini_content_objects(contents: list[dict], types: Any) -> list[Any]
         if part_objects:
             content_objects.append(types.Content(role=role, parts=part_objects))
     return content_objects
-
