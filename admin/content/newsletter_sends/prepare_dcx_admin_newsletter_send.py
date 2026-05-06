@@ -36,7 +36,7 @@ def prepare_dcx_admin_newsletter_send_capability(
         - authenticated_admin_user_id identifies one current admin/dev user.
         - email_key and language_code identify one current live newsletter row.
         - scheduled_send_at_ts_ms is either null or one unix-milliseconds timestamp.
-        - send_audience_scope is one of `all`, `admins`, or `devs`.
+        - send_audience_scope is one of `all`, `admins`, `devs`, or `shareholders`.
         - The configured database is reachable.
       postconditions:
         - Creates one new row in `stephen_dcx_emails_sends`.
@@ -75,6 +75,7 @@ def prepare_dcx_admin_newsletter_send_capability(
     TESTS:
       - creates_send_row_recipient_snapshots_and_link_rows
       - filters_recipients_to_admin_scope_when_requested
+      - filters_recipients_to_shareholder_scope_when_requested
       - skips_users_when_newsletter_translation_is_missing_for_their_preferred_language
       - skips_users_when_newsletter_suppression_is_active
       - raises_clear_error_when_source_newsletter_missing
@@ -129,7 +130,7 @@ def prepare_dcx_admin_newsletter_send_capability(
         authenticated_admin_user_id <= 0
         or normalized_email_key == ""
         or normalized_language_code == ""
-        or normalized_send_audience_scope not in {"all", "admins", "devs"}
+        or normalized_send_audience_scope not in {"all", "admins", "devs", "shareholders"}
     ):
         raise RuntimeError("API_DCX_ADMIN_NEWSLETTER_SEND_INVALID")
 
@@ -268,10 +269,15 @@ def prepare_dcx_admin_newsletter_send_capability(
                         %s = 'all'
                         OR (%s = 'admins' AND user_row.user_role = 'admin')
                         OR (%s = 'devs' AND user_row.user_role = 'dev')
+                        OR (
+                            %s = 'shareholders'
+                            AND user_row.user_role IN ('shareholder', 'shareholders')
+                        )
                     )
                     ORDER BY user_row.id ASC
                     """,
                     (
+                        normalized_send_audience_scope,
                         normalized_send_audience_scope,
                         normalized_send_audience_scope,
                         normalized_send_audience_scope,

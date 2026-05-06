@@ -152,7 +152,46 @@ def test_filters_recipients_to_admin_scope_when_requested() -> None:
     assert payload["send_audience_scope"] == "admins"
     assert payload["summary"]["send_audience_scope"] == "admins"
     assert payload["summary"]["prepared_recipient_count"] == 1
-    assert fake_connection.cursor_instance.executed_queries[4][1] == ("admins", "admins", "admins")
+    assert fake_connection.cursor_instance.executed_queries[4][1] == ("admins", "admins", "admins", "admins")
+
+
+def test_filters_recipients_to_shareholder_scope_when_requested() -> None:
+    fake_connection = _FakeConnection(
+        fetchone_results=[
+            (101, "weekly-alpha", 1, "Weekly Alpha", "[CTA](https://dcxagent.ai/en/access)", "en"),
+            (505,),
+            (605,),
+        ],
+        fetchall_results=[
+            [
+                (101, 1, "Weekly Alpha", "[CTA](https://dcxagent.ai/en/access)", "en"),
+            ],
+            [
+                (12, "shareholder@example.com", True, 1, "newsletters", "confirmed", "shareholder", False),
+            ],
+        ],
+    )
+
+    payload = prepare_dcx_admin_newsletter_send_capability(
+        authenticated_admin_user_id=7,
+        email_key="weekly-alpha",
+        language_code="en",
+        scheduled_send_at_ts_ms=None,
+        send_audience_scope="shareholders",
+        connect_to_database=lambda **_: fake_connection,
+        current_timestamp_ms_provider=lambda: 1776000000000,
+        tracking_token_provider=lambda: "track-token-5",
+    )
+
+    assert payload["send_audience_scope"] == "shareholders"
+    assert payload["summary"]["send_audience_scope"] == "shareholders"
+    assert payload["summary"]["prepared_recipient_count"] == 1
+    assert fake_connection.cursor_instance.executed_queries[4][1] == (
+        "shareholders",
+        "shareholders",
+        "shareholders",
+        "shareholders",
+    )
 
 
 def test_skips_users_when_newsletter_suppression_is_active() -> None:
