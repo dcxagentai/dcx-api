@@ -142,6 +142,9 @@ from routes.admin.dcx_api_routes_admin_content_newsletter_send_prepare import (
 from routes.admin.dcx_api_routes_admin_content_newsletter_send_cancel import (
     dcx_api_routes_admin_content_newsletter_send_cancel_router,
 )
+from routes.admin.dcx_api_routes_admin_content_newsletter_send_recipients import (
+    dcx_api_routes_admin_content_newsletter_send_recipients_router,
+)
 from routes.admin.dcx_api_routes_admin_content_email_sequences_catalog import (
     dcx_api_routes_admin_content_email_sequences_catalog_router,
 )
@@ -307,6 +310,7 @@ app.include_router(dcx_api_routes_admin_content_newsletter_create_translation_ro
 app.include_router(dcx_api_routes_admin_content_newsletter_sends_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_prepare_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_send_cancel_router)
+app.include_router(dcx_api_routes_admin_content_newsletter_send_recipients_router)
 app.include_router(dcx_api_routes_admin_content_email_sequences_catalog_router)
 app.include_router(dcx_api_routes_admin_content_email_sequence_create_draft_router)
 app.include_router(dcx_api_routes_admin_content_email_sequence_detail_router)
