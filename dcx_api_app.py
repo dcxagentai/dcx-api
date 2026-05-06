@@ -157,6 +157,9 @@ from routes.admin.dcx_api_routes_admin_content_email_sequence_save import (
 from routes.admin.dcx_api_routes_admin_schedule_operations_catalog import (
     dcx_api_routes_admin_schedule_operations_catalog_router,
 )
+from routes.admin.dcx_api_routes_admin_jobs_email_cron_run import (
+    dcx_api_routes_admin_jobs_email_cron_run_router,
+)
 from routes.admin.dcx_api_routes_admin_public_site_publish_status import (
     dcx_api_routes_admin_public_site_publish_status_router,
 )
@@ -309,6 +312,7 @@ app.include_router(dcx_api_routes_admin_content_email_sequence_create_draft_rout
 app.include_router(dcx_api_routes_admin_content_email_sequence_detail_router)
 app.include_router(dcx_api_routes_admin_content_email_sequence_save_router)
 app.include_router(dcx_api_routes_admin_schedule_operations_catalog_router)
+app.include_router(dcx_api_routes_admin_jobs_email_cron_run_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
