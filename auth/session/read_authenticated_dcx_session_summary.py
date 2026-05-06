@@ -64,6 +64,7 @@ def read_authenticated_dcx_session_summary(request: Request) -> dict | None:
         "primary_email": authenticated_session["primary_email"],
         "user_role": authenticated_session["user_role"],
         "account_status": authenticated_session["account_status"],
+        "preferred_timezone": authenticated_session["preferred_timezone"],
         "allowed_surfaces": {
             "app": authenticated_session["may_access_app"],
             "admin": authenticated_session["may_access_admin"],

@@ -101,6 +101,14 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         "stephen_trader",
                         "handle",
                         "email",
+                        1,
+                        "Europe/London",
+                        "(UTC+0/+1) London",
+                        "Europe",
+                        2,
+                        "Europe/Madrid",
+                        "(UTC+1/+2) Madrid",
+                        "Europe",
                     )
                 ],
                 [
@@ -325,6 +333,21 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "sort_order": 20,
             },
         ],
+        "selected_sidebar_clock_timezone_ids": [1, 2],
+        "selected_sidebar_clock_timezones": [
+            {
+                "id": 1,
+                "iana_name": "Europe/London",
+                "display_label": "(UTC+0/+1) London",
+                "region_label": "Europe",
+            },
+            {
+                "id": 2,
+                "iana_name": "Europe/Madrid",
+                "display_label": "(UTC+1/+2) Madrid",
+                "region_label": "Europe",
+            },
+        ],
         "selected_trade_interest_material_keys": ["aluminum"],
     }
 
@@ -376,6 +399,14 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         "",
                         "anonymous",
                         "app_only",
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
                     )
                 ],
                 [
@@ -419,6 +450,8 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     assert result["default_interaction_channel"] == "app_only"
     assert result["available_trade_interest_materials"] == []
     assert result["selected_trade_interest_material_keys"] == []
+    assert result["selected_sidebar_clock_timezone_ids"] == []
+    assert result["selected_sidebar_clock_timezones"] == []
     assert result["ux_strings"]["page_title"] == "Account"
     assert result["user_id"] == 6
     assert len(result["available_languages"]) == 2

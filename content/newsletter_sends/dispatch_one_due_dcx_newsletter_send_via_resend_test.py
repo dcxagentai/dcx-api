@@ -78,12 +78,15 @@ def test_dispatches_due_newsletter_send_and_updates_recipient_rows(monkeypatch) 
             ],
         ],
     )
-    sent_drafts = []
+    sent_batches = []
 
     payload = dispatch_one_due_dcx_newsletter_send_via_resend_capability(
         connect_to_database=lambda **_: fake_connection,
         current_timestamp_ms_provider=lambda: 1778000000000,
-        send_email=lambda draft: sent_drafts.append(draft) or {"provider_message_id": f"msg-{len(sent_drafts)}"},
+        send_email_batch=lambda drafts: sent_batches.append(drafts) or [
+            {"provider_message_id": f"msg-{index + 1}"}
+            for index, _draft in enumerate(drafts)
+        ],
     )
 
     assert payload["status"] == "dispatched"
@@ -91,21 +94,22 @@ def test_dispatches_due_newsletter_send_and_updates_recipient_rows(monkeypatch) 
     assert payload["dispatched_send"]["send_status"] == "sent"
     assert payload["dispatched_send"]["summary"]["sent_recipient_count"] == 2
     assert payload["dispatched_send"]["failed_recipient_reasons"] == []
-    assert len(sent_drafts) == 2
-    assert sent_drafts[0]["subject"] == "Weekly Alpha"
-    assert "Market: https://api.example.com/public/email-links/track-1" in sent_drafts[0]["text_body"]
-    assert "Unsubscribe from promotional email: https://api.example.com/public/email-preferences/unsubscribe/promotional/" in sent_drafts[0]["text_body"]
-    assert "<a href=\"https://api.example.com/public/email-links/track-1\"" in sent_drafts[0]["html_body"]
+    assert len(sent_batches) == 1
+    assert len(sent_batches[0]) == 2
+    assert sent_batches[0][0]["subject"] == "Weekly Alpha"
+    assert "Market: https://api.example.com/public/email-links/track-1" in sent_batches[0][0]["text_body"]
+    assert "Unsubscribe from promotional email: https://api.example.com/public/email-preferences/unsubscribe/promotional/" in sent_batches[0][0]["text_body"]
+    assert "<a href=\"https://api.example.com/public/email-links/track-1\"" in sent_batches[0][0]["html_body"]
 
 
-def test_marks_parent_send_failed_when_any_recipient_send_fails() -> None:
+def test_marks_parent_send_failed_when_batch_send_fails() -> None:
     import os
 
     os.environ["DCX_AUTH_CHALLENGE_SECRET"] = "test_secret"
     fake_connection = _FakeConnection(
         fetchone_results=[
             (502, "weekly-beta"),
-            (2, 1, 1, 0, 0),
+            (2, 0, 2, 0, 0),
         ],
         fetchall_results=[
             [],
@@ -116,29 +120,29 @@ def test_marks_parent_send_failed_when_any_recipient_send_fails() -> None:
         ],
     )
 
-    send_attempt_count = {"value": 0}
-
-    def fake_send_email(draft: dict) -> dict:
-        send_attempt_count["value"] += 1
-        if send_attempt_count["value"] == 2:
-            raise RuntimeError("API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED") from ValueError(
-                "resend rejected sender"
-            )
-        return {"provider_message_id": "msg-1"}
+    def fake_send_email_batch(_drafts: list[dict]) -> list[dict]:
+        raise RuntimeError("API_DCX_RESEND_BATCH_SEND_FAILED") from ValueError(
+            "resend rejected sender"
+        )
 
     payload = dispatch_one_due_dcx_newsletter_send_via_resend_capability(
         connect_to_database=lambda **_: fake_connection,
         current_timestamp_ms_provider=lambda: 1778000000000,
-        send_email=fake_send_email,
+        send_email_batch=fake_send_email_batch,
     )
 
     assert payload["dispatched_send"]["email_send_id"] == 502
     assert payload["dispatched_send"]["send_status"] == "failed"
-    assert payload["dispatched_send"]["summary"]["failed_recipient_count"] == 1
+    assert payload["dispatched_send"]["summary"]["failed_recipient_count"] == 2
     assert payload["dispatched_send"]["failed_recipient_reasons"] == [
+        {
+            "recipient_id": 703,
+            "recipient_email": "alpha@example.com",
+            "failure_reason": "API_DCX_RESEND_BATCH_SEND_FAILED [ValueError: resend rejected sender]",
+        },
         {
             "recipient_id": 704,
             "recipient_email": "beta@example.com",
-            "failure_reason": "API_PUBLIC_EMAIL_SIGNUP_RESEND_SEND_FAILED [ValueError: resend rejected sender]",
+            "failure_reason": "API_DCX_RESEND_BATCH_SEND_FAILED [ValueError: resend rejected sender]",
         }
     ]

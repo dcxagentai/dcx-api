@@ -45,6 +45,7 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     public_identity_mode: str,
     default_interaction_channel: str,
     trade_interest_material_keys: list[str] | None = None,
+    sidebar_clock_timezone_ids: list[int] | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -200,6 +201,9 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     normalized_trade_interest_material_keys = _normalize_trade_interest_material_keys(
         trade_interest_material_keys
     )
+    normalized_sidebar_clock_timezone_ids = _normalize_sidebar_clock_timezone_ids(
+        sidebar_clock_timezone_ids
+    )
 
     connect = connect_to_database or psycopg2.connect
 
@@ -232,6 +236,23 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         (preferred_timezone_id,),
                     )
                     if cursor.fetchone() is None:
+                        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
+
+                if normalized_sidebar_clock_timezone_ids:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM stephen_dcx_timezones
+                        WHERE is_active = TRUE
+                          AND id = ANY(%s)
+                        """,
+                        (normalized_sidebar_clock_timezone_ids,),
+                    )
+                    active_sidebar_clock_timezone_ids = {
+                        row[0]
+                        for row in cursor.fetchall()
+                    }
+                    if active_sidebar_clock_timezone_ids != set(normalized_sidebar_clock_timezone_ids):
                         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
 
                 if normalized_public_handle:
@@ -279,9 +300,11 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         public_handle = %s,
                         public_identity_mode = %s,
                         default_interaction_channel = %s,
+                        sidebar_clock_timezone_id_1 = %s,
+                        sidebar_clock_timezone_id_2 = %s,
                         updated_at_ts_ms = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
                     WHERE id = %s
-                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel
+                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel, sidebar_clock_timezone_id_1, sidebar_clock_timezone_id_2
                     """,
                     (
                         preferred_language_id,
@@ -291,6 +314,12 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         normalized_public_handle,
                         normalized_public_identity_mode,
                         normalized_default_interaction_channel,
+                        normalized_sidebar_clock_timezone_ids[0]
+                        if len(normalized_sidebar_clock_timezone_ids) >= 1
+                        else None,
+                        normalized_sidebar_clock_timezone_ids[1]
+                        if len(normalized_sidebar_clock_timezone_ids) >= 2
+                        else None,
                         authenticated_user_id,
                     ),
                 )
@@ -338,6 +367,11 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "public_handle": saved_row[5],
         "public_identity_mode": saved_row[6],
         "default_interaction_channel": saved_row[7],
+        "sidebar_clock_timezone_ids": [
+            saved_timezone_id
+            for saved_timezone_id in [saved_row[8], saved_row[9]]
+            if saved_timezone_id is not None
+        ],
         "trade_interest_material_keys": normalized_trade_interest_material_keys,
     }
 
@@ -363,6 +397,28 @@ def _normalize_trade_interest_material_keys(value: list[str] | None) -> list[str
         normalized_keys.append(normalized_key)
         seen_keys.add(normalized_key)
     return normalized_keys
+
+
+def _normalize_sidebar_clock_timezone_ids(value: list[int] | None) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
+
+    normalized_timezone_ids: list[int] = []
+    seen_timezone_ids: set[int] = set()
+    for raw_timezone_id in value:
+        if not isinstance(raw_timezone_id, int) or raw_timezone_id <= 0:
+            raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
+        if raw_timezone_id in seen_timezone_ids:
+            continue
+        normalized_timezone_ids.append(raw_timezone_id)
+        seen_timezone_ids.add(raw_timezone_id)
+
+    if len(normalized_timezone_ids) > 2:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
+
+    return normalized_timezone_ids
 
 
 def _read_current_timestamp_ms() -> int:

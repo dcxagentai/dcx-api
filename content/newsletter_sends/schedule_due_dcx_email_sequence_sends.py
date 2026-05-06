@@ -98,7 +98,7 @@ def schedule_due_dcx_email_sequence_sends_capability(
                     SELECT id, sequence_key, audience_type, COALESCE(scheduled_launch_at_ts_ms, %s)
                     FROM stephen_dcx_emails_sequences
                     WHERE is_live = TRUE
-                      AND trigger_type = 'scheduled'
+                      AND trigger_type = 'scheduled_launch'
                       AND COALESCE(scheduled_launch_at_ts_ms, %s) <= %s
                     ORDER BY COALESCE(scheduled_launch_at_ts_ms, %s) ASC, id ASC
                     FOR UPDATE SKIP LOCKED
@@ -112,6 +112,7 @@ def schedule_due_dcx_email_sequence_sends_capability(
 
                 sequence_id = sequence_row[0]
                 sequence_key = sequence_row[1]
+                sequence_audience_type = sequence_row[2]
                 sequence_launch_ts_ms = sequence_row[3]
 
                 cursor.execute(
@@ -142,7 +143,7 @@ def schedule_due_dcx_email_sequence_sends_capability(
 
                 cursor.execute(
                     """
-                    SELECT user_row.id, primary_email.normalized_value
+                    SELECT user_row.id, primary_email.normalized_value, user_row.email_communication_preference, user_row.user_role
                     FROM stephen_dcx_users user_row
                     LEFT JOIN LATERAL (
                         SELECT normalized_value, is_verified
@@ -157,8 +158,20 @@ def schedule_due_dcx_email_sequence_sends_capability(
                       AND primary_email.normalized_value IS NOT NULL
                       AND primary_email.is_verified = TRUE
                       AND user_row.email_communication_preference IN ('newsletters', 'all_email')
+                      AND (
+                        %s IN ('all_email', 'newsletters')
+                        OR (%s = 'admins' AND user_row.user_role = 'admin')
+                        OR (%s = 'devs' AND user_row.user_role = 'dev')
+                        OR (%s = 'shareholders' AND user_row.user_role IN ('shareholder', 'shareholders'))
+                      )
                     ORDER BY user_row.id ASC
                     """,
+                    (
+                        sequence_audience_type,
+                        sequence_audience_type,
+                        sequence_audience_type,
+                        sequence_audience_type,
+                    ),
                 )
                 user_rows = cursor.fetchall()
 
@@ -215,7 +228,7 @@ def schedule_due_dcx_email_sequence_sends_capability(
                             scheduled_send_at_ts_ms,
                             send_summary_json
                         )
-                        VALUES (%s, %s, 'sequence', %s, %s, 'scheduled', 'sequence', %s, %s::jsonb)
+                        VALUES (%s, %s, 'sequence', %s, %s, 'scheduled', %s, %s, %s::jsonb)
                         RETURNING id
                         """,
                         (
@@ -223,8 +236,15 @@ def schedule_due_dcx_email_sequence_sends_capability(
                             step_row[5],
                             sequence_id,
                             step_row[0],
+                            sequence_audience_type,
                             scheduled_send_at_ts_ms,
-                            json.dumps({"sequence_key": sequence_key, "step_key": step_row[1]}),
+                            json.dumps(
+                                {
+                                    "sequence_key": sequence_key,
+                                    "step_key": step_row[1],
+                                    "sequence_audience_type": sequence_audience_type,
+                                }
+                            ),
                         ),
                     )
                     email_send_id = cursor.fetchone()[0]
@@ -266,9 +286,9 @@ def schedule_due_dcx_email_sequence_sends_capability(
                                 delivery_decision,
                                 delivery_status
                             )
-                            VALUES (%s, %s, %s, %s, 'newsletters', 'send', 'pending')
+                            VALUES (%s, %s, %s, %s, %s, 'send', 'pending')
                             """,
-                            (email_send_id, user_row[0], step_row[3], user_row[1]),
+                            (email_send_id, user_row[0], step_row[3], user_row[1], user_row[2]),
                         )
                         cursor.execute(
                             """

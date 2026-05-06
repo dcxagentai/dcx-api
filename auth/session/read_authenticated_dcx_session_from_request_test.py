@@ -74,6 +74,9 @@ def test_returns_session_payload_when_active_cookie_matches_database_row() -> No
                 "matbenet77@gmail.com",
                 "admin",
                 "confirmed",
+                2,
+                "Europe/Madrid",
+                "Madrid",
             )
         ),
     )
@@ -88,6 +91,11 @@ def test_returns_session_payload_when_active_cookie_matches_database_row() -> No
         "primary_email": "matbenet77@gmail.com",
         "user_role": "admin",
         "account_status": "confirmed",
+        "preferred_timezone": {
+            "id": 2,
+            "iana_name": "Europe/Madrid",
+            "display_label": "Madrid",
+        },
         "may_access_app": True,
         "may_access_admin": True,
     }

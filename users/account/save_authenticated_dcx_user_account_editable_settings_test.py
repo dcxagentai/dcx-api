@@ -55,14 +55,18 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         public_identity_mode="handle",
         default_interaction_channel="email",
         trade_interest_material_keys=["aluminum", "wheat"],
+        sidebar_clock_timezone_ids=[1, 2],
         connect_to_database=lambda **_: _FakeConnection(
             [
                 (1,),
                 (1,),
                 None,
-                (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle", "email"),
+                (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle", "email", 1, 2),
             ],
-            [[("aluminum",), ("wheat",)]],
+            [
+                [(1,), (2,)],
+                [("aluminum",), ("wheat",)],
+            ],
         ),
     )
 
@@ -75,6 +79,7 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         "public_handle": "stephen_trader",
         "public_identity_mode": "handle",
         "default_interaction_channel": "email",
+        "sidebar_clock_timezone_ids": [1, 2],
         "trade_interest_material_keys": ["aluminum", "wheat"],
     }
 
@@ -134,6 +139,26 @@ def test_raises_clear_error_for_invalid_timezone() -> None:
         assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID"
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected invalid timezone to raise a stable runtime error.")
+
+
+def test_raises_clear_error_for_too_many_sidebar_clock_timezones() -> None:
+    try:
+        save_authenticated_dcx_user_account_editable_settings_capability(
+            authenticated_user_id=5,
+            preferred_language_id=4,
+            preferred_timezone_id=2,
+            email_communication_preference="newsletters",
+            public_display_name="Stephen Trader",
+            public_handle="",
+            public_identity_mode="display_name",
+            default_interaction_channel="app_only",
+            sidebar_clock_timezone_ids=[1, 2, 3],
+            connect_to_database=lambda **_: _FakeConnection([(1,), (1,), (5, 4, 2, "newsletters")]),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID"
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected invalid sidebar clock timezone selection to raise a stable runtime error.")
 
 
 def test_raises_clear_error_for_invalid_trade_interest_material_key() -> None:

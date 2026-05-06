@@ -124,7 +124,15 @@ def read_authenticated_dcx_user_account_summary_capability(
                         u.public_display_name,
                         u.public_handle,
                         u.public_identity_mode,
-                        COALESCE(u.default_interaction_channel, 'app_only')
+                        COALESCE(u.default_interaction_channel, 'app_only'),
+                        sidebar_clock_tz_1.id,
+                        sidebar_clock_tz_1.iana_name,
+                        sidebar_clock_tz_1.display_label,
+                        sidebar_clock_tz_1.region_label,
+                        sidebar_clock_tz_2.id,
+                        sidebar_clock_tz_2.iana_name,
+                        sidebar_clock_tz_2.display_label,
+                        sidebar_clock_tz_2.region_label
                     FROM stephen_dcx_users u
                     LEFT JOIN LATERAL (
                         SELECT
@@ -173,6 +181,10 @@ def read_authenticated_dcx_user_account_summary_capability(
                       ON l.id = u.preferred_language_id
                     LEFT JOIN stephen_dcx_timezones tz
                       ON tz.id = u.preferred_timezone_id
+                    LEFT JOIN stephen_dcx_timezones sidebar_clock_tz_1
+                      ON sidebar_clock_tz_1.id = u.sidebar_clock_timezone_id_1
+                    LEFT JOIN stephen_dcx_timezones sidebar_clock_tz_2
+                      ON sidebar_clock_tz_2.id = u.sidebar_clock_timezone_id_2
                     WHERE u.id = %s
                     LIMIT 1
                     """,
@@ -365,6 +377,29 @@ def read_authenticated_dcx_user_account_summary_capability(
         }
         for available_timezone_row in available_timezone_rows
     ]
+    selected_sidebar_clock_timezones = []
+    if user_row[27] is not None:
+        selected_sidebar_clock_timezones.append(
+            {
+                "id": user_row[27],
+                "iana_name": user_row[28],
+                "display_label": user_row[29],
+                "region_label": user_row[30],
+            }
+        )
+    if user_row[31] is not None and user_row[31] != user_row[27]:
+        selected_sidebar_clock_timezones.append(
+            {
+                "id": user_row[31],
+                "iana_name": user_row[32],
+                "display_label": user_row[33],
+                "region_label": user_row[34],
+            }
+        )
+    selected_sidebar_clock_timezone_ids = [
+        selected_timezone["id"]
+        for selected_timezone in selected_sidebar_clock_timezones
+    ]
 
     email_contact_methods = [
         {
@@ -461,6 +496,8 @@ def read_authenticated_dcx_user_account_summary_capability(
         "pending_whatsapp_phone_link": pending_whatsapp_phone_link,
         "available_languages": available_languages,
         "available_timezones": available_timezones,
+        "selected_sidebar_clock_timezone_ids": selected_sidebar_clock_timezone_ids,
+        "selected_sidebar_clock_timezones": selected_sidebar_clock_timezones,
         "ux_strings": ux_strings,
         "available_email_communication_preferences": [
             {

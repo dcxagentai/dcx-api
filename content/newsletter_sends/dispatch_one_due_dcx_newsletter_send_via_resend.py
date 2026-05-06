@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 import psycopg2
 
-from apis.resend.send_email import send_email_via_resend
+from apis.resend.send_email import send_email_batch_via_resend
 from content.newsletter_sends.append_dcx_email_preferences_footer_to_newsletter_email_bodies import (
     append_dcx_email_preferences_footer_to_newsletter_email_bodies,
 )
@@ -29,6 +29,7 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
     connect_to_database: Callable[..., Any] | None = None,
     current_timestamp_ms_provider: Callable[[], int] | None = None,
     send_email: Callable[[dict], dict] | None = None,
+    send_email_batch: Callable[[list[dict]], list[dict]] | None = None,
 ) -> dict:
     """
     CONTRACT:
@@ -95,7 +96,14 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
     """
     connect = connect_to_database or psycopg2.connect
     read_current_timestamp_ms = current_timestamp_ms_provider or _read_current_timestamp_ms
-    send_newsletter_email = send_email or send_email_via_resend
+    send_newsletter_email_batch = (
+        send_email_batch
+        or (
+            (lambda drafts: [send_email(draft) for draft in drafts])
+            if send_email is not None
+            else send_email_batch_via_resend
+        )
+    )
     current_timestamp_ms = read_current_timestamp_ms()
 
     try:
@@ -183,6 +191,7 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
                 failed_recipient_count = 0
                 failed_recipient_reasons: list[dict[str, Any]] = []
 
+                recipient_delivery_drafts: list[dict[str, Any]] = []
                 for recipient_row in recipient_rows:
                     recipient_id = recipient_row[0]
                     recipient_user_id = recipient_row[1]
@@ -211,70 +220,78 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
                         ),
                     )
 
+                    recipient_delivery_drafts.append(
+                        {
+                            "recipient_id": recipient_id,
+                            "recipient_email": recipient_email,
+                            "subject": recipient_row[4],
+                            "text_body": rendered_bodies["text_body"],
+                            "html_body": rendered_bodies["html_body"],
+                        }
+                    )
+
+                for recipient_delivery_draft_chunk in _chunk_dcx_newsletter_delivery_drafts(recipient_delivery_drafts, 100):
                     try:
-                        provider_summary = send_newsletter_email(
-                            {
-                                "recipient_email": recipient_email,
-                                "subject": recipient_row[4],
-                                "text_body": rendered_bodies["text_body"],
-                                "html_body": rendered_bodies["html_body"],
-                            }
-                        )
+                        provider_summaries = send_newsletter_email_batch(recipient_delivery_draft_chunk)
+                        if len(provider_summaries) != len(recipient_delivery_draft_chunk):
+                            raise RuntimeError("API_DCX_RESEND_BATCH_RESPONSE_INVALID")
                     except RuntimeError as runtime_error:
-                        failed_recipient_count += 1
+                        failed_recipient_count += len(recipient_delivery_draft_chunk)
                         failure_reason = _build_dcx_newsletter_send_failure_reason(
                             runtime_error=runtime_error
                         )
-                        failed_recipient_reasons.append(
-                            {
-                                "recipient_id": recipient_id,
-                                "recipient_email": recipient_email,
-                                "failure_reason": failure_reason,
-                            }
-                        )
+                        for recipient_delivery_draft in recipient_delivery_draft_chunk:
+                            failed_recipient_reasons.append(
+                                {
+                                    "recipient_id": recipient_delivery_draft["recipient_id"],
+                                    "recipient_email": recipient_delivery_draft["recipient_email"],
+                                    "failure_reason": failure_reason,
+                                }
+                            )
+                            cursor.execute(
+                                """
+                                UPDATE stephen_dcx_emails_sends_recipients
+                                SET delivery_status = 'failed',
+                                    failed_at_ts_ms = %s,
+                                    failure_reason = %s,
+                                    last_provider_event_at_ts_ms = %s,
+                                    last_provider_event_type = 'failed',
+                                    updated_at_ts_ms = %s
+                                WHERE id = %s
+                                """,
+                                (
+                                    current_timestamp_ms,
+                                    failure_reason,
+                                    current_timestamp_ms,
+                                    current_timestamp_ms,
+                                    recipient_delivery_draft["recipient_id"],
+                                ),
+                            )
+                        continue
+
+                    for recipient_delivery_draft, provider_summary in zip(recipient_delivery_draft_chunk, provider_summaries):
+                        sent_recipient_count += 1
                         cursor.execute(
                             """
                             UPDATE stephen_dcx_emails_sends_recipients
-                            SET delivery_status = 'failed',
-                                failed_at_ts_ms = %s,
-                                failure_reason = %s,
+                            SET delivery_status = 'sent',
+                                provider_message_id = %s,
+                                sent_at_ts_ms = %s,
+                                failed_at_ts_ms = NULL,
+                                failure_reason = NULL,
                                 last_provider_event_at_ts_ms = %s,
-                                last_provider_event_type = 'failed',
+                                last_provider_event_type = 'sent',
                                 updated_at_ts_ms = %s
                             WHERE id = %s
                             """,
                             (
+                                provider_summary.get("provider_message_id"),
                                 current_timestamp_ms,
-                                failure_reason,
                                 current_timestamp_ms,
                                 current_timestamp_ms,
-                                recipient_id,
+                                recipient_delivery_draft["recipient_id"],
                             ),
                         )
-                        continue
-
-                    sent_recipient_count += 1
-                    cursor.execute(
-                        """
-                        UPDATE stephen_dcx_emails_sends_recipients
-                        SET delivery_status = 'sent',
-                            provider_message_id = %s,
-                            sent_at_ts_ms = %s,
-                            failed_at_ts_ms = NULL,
-                            failure_reason = NULL,
-                            last_provider_event_at_ts_ms = %s,
-                            last_provider_event_type = 'sent',
-                            updated_at_ts_ms = %s
-                        WHERE id = %s
-                        """,
-                        (
-                            provider_summary.get("provider_message_id"),
-                            current_timestamp_ms,
-                            current_timestamp_ms,
-                            current_timestamp_ms,
-                            recipient_id,
-                        ),
-                    )
 
                 cursor.execute(
                     """
@@ -378,3 +395,13 @@ def _build_dcx_email_send_tracking_redirect_url(tracking_token: str) -> str:
         else "http://localhost:8000"
     )
     return f"{default_api_base_url}/public/email-links/{quote(tracking_token)}"
+
+
+def _chunk_dcx_newsletter_delivery_drafts(
+    recipient_delivery_drafts: list[dict[str, Any]],
+    chunk_size: int,
+) -> list[list[dict[str, Any]]]:
+    return [
+        recipient_delivery_drafts[start_index : start_index + chunk_size]
+        for start_index in range(0, len(recipient_delivery_drafts), chunk_size)
+    ]

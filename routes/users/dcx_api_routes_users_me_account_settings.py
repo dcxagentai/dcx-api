@@ -38,6 +38,7 @@ class DcxUsersMeAccountSettingsSaveRequest(BaseModel):
     public_identity_mode: str
     default_interaction_channel: str
     trade_interest_material_keys: list[str] = []
+    sidebar_clock_timezone_ids: list[int] = []
 
 
 @dcx_api_routes_users_me_account_settings_router.post("/me/account-settings", response_model=None)
@@ -122,6 +123,7 @@ def post_authenticated_dcx_user_account_settings(
             public_identity_mode=account_settings_save_request.public_identity_mode,
             default_interaction_channel=account_settings_save_request.default_interaction_channel,
             trade_interest_material_keys=account_settings_save_request.trade_interest_material_keys,
+            sidebar_clock_timezone_ids=account_settings_save_request.sidebar_clock_timezone_ids,
         )
         refreshed_account_summary = read_authenticated_dcx_user_account_summary_capability(
             authenticated_user_id=authenticated_user_id,

@@ -36,7 +36,7 @@ def save_dcx_admin_email_sequence_and_steps_capability(
         - sequence_key identifies one existing sequence row.
         - sequence_name is one non-empty human-readable name.
         - sequence_type is one of `campaign` or `onboarding`.
-        - audience_type is one of `newsletters` or `all_email`.
+        - audience_type is one of `all_email`, `newsletters`, `admins`, `devs`, or `shareholders`.
         - trigger_type is one of `user_signup`, `manual_launch`, or `scheduled_launch`.
         - steps is one ordered list of step objects that reference valid live original sequence-email ids.
         - The configured database is reachable.
@@ -132,7 +132,7 @@ def save_dcx_admin_email_sequence_and_steps_capability(
         or normalized_sequence_key == ""
         or normalized_sequence_name == ""
         or normalized_sequence_type not in {"campaign", "onboarding"}
-        or normalized_audience_type not in {"newsletters", "all_email"}
+        or normalized_audience_type not in {"newsletters", "all_email", "admins", "devs", "shareholders"}
         or normalized_trigger_type not in {"user_signup", "manual_launch", "scheduled_launch"}
     ):
         raise RuntimeError("API_DCX_ADMIN_EMAIL_SEQUENCE_SAVE_INVALID")

@@ -91,10 +91,16 @@ def read_authenticated_dcx_session_from_request(
                         u.user_uuid,
                         primary_email_contact_method.normalized_value,
                         u.user_role,
-                        u.account_status
+                        u.account_status,
+                        tz.id,
+                        tz.iana_name,
+                        tz.display_label
                     FROM stephen_dcx_user_auth_sessions s
                     INNER JOIN stephen_dcx_users u
                       ON u.id = s.user_id
+                    LEFT JOIN stephen_dcx_timezones tz
+                      ON tz.id = u.preferred_timezone_id
+                     AND tz.is_active = TRUE
                     LEFT JOIN LATERAL (
                         SELECT normalized_value
                         FROM stephen_dcx_users_contact_methods
@@ -137,6 +143,15 @@ def read_authenticated_dcx_session_from_request(
         "primary_email": session_row[6],
         "user_role": user_role,
         "account_status": session_row[8],
+        "preferred_timezone": (
+            {
+                "id": session_row[9],
+                "iana_name": session_row[10],
+                "display_label": session_row[11],
+            }
+            if session_row[9] is not None
+            else None
+        ),
         "may_access_app": True,
         "may_access_admin": user_role in {"admin", "dev"},
     }

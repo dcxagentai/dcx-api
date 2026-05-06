@@ -8,6 +8,7 @@ import pytest
 
 from apis.resend.send_email import (
     DCX_RESEND_SENDER_PROFILE_MESSAGES,
+    send_email_batch_via_resend,
     send_email_via_resend,
 )
 
@@ -86,6 +87,43 @@ def test_resend_adapter_returns_provider_message_id_when_provider_accepts_send(m
         "status": "accepted",
         "provider_message_id": "email_456",
     }
+
+
+def test_resend_batch_adapter_returns_provider_message_ids_in_order(monkeypatch) -> None:
+    monkeypatch.setenv("RESEND_API_KEY", "test_key")
+    monkeypatch.setenv("RESEND_FROM_NAME", "DCX")
+    monkeypatch.setenv("RESEND_FROM_EMAIL_TRANSACTIONAL", "team@dcxagent.ai")
+
+    captured_batch_params = {}
+
+    def fake_batch_send(batch_params):
+        captured_batch_params["batch_params"] = batch_params
+        return {"data": [{"id": "email_1"}, {"id": "email_2"}]}
+
+    payload = send_email_batch_via_resend(
+        [
+            {
+                "recipient_email": "alpha@example.com",
+                "subject": "Alpha",
+                "text_body": "Hello Alpha",
+                "html_body": "<p>Hello Alpha</p>",
+            },
+            {
+                "recipient_email": "beta@example.com",
+                "subject": "Beta",
+                "text_body": "Hello Beta",
+                "html_body": "<p>Hello Beta</p>",
+            },
+        ],
+        send_batch_with_provider=fake_batch_send,
+    )
+
+    assert captured_batch_params["batch_params"][0]["to"] == ["alpha@example.com"]
+    assert captured_batch_params["batch_params"][1]["to"] == ["beta@example.com"]
+    assert payload == [
+        {"provider": "resend", "status": "accepted", "provider_message_id": "email_1"},
+        {"provider": "resend", "status": "accepted", "provider_message_id": "email_2"},
+    ]
 
 
 def test_resend_adapter_prefers_explicit_html_body_when_present(monkeypatch) -> None:
