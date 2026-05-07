@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import logging
 from typing import Any, Callable
 
 from fastapi import APIRouter, Request
@@ -20,6 +21,7 @@ dcx_api_routes_admin_jobs_email_cron_run_router = APIRouter(
 )
 
 DCX_CRON_SECRET_HEADER_NAME = "x-dcx-cron-secret"
+logger = logging.getLogger(__name__)
 
 
 @dcx_api_routes_admin_jobs_email_cron_run_router.post(
@@ -130,6 +132,7 @@ def post_dcx_admin_jobs_email_cron_run(request: Request):
     try:
         job_summary = _run_due_dcx_email_jobs()
     except Exception:
+        logger.exception("DCX email cron job failed.")
         return JSONResponse(
             status_code=500,
             content={

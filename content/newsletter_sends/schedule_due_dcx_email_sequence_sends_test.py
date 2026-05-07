@@ -82,5 +82,6 @@ def test_schedules_due_sequence_with_role_scoped_audience() -> None:
         "shareholders",
         "shareholders",
     )
-    assert fake_connection.cursor_instance.executed_queries[4][1][4] == "shareholders"
+    assert "'scheduled', 'newsletters'" in fake_connection.cursor_instance.executed_queries[4][0]
+    assert fake_connection.cursor_instance.executed_queries[4][1][4] == 1777100000000
     assert fake_connection.cursor_instance.executed_queries[5][1][4] == "all_email"

@@ -228,7 +228,7 @@ def schedule_due_dcx_email_sequence_sends_capability(
                             scheduled_send_at_ts_ms,
                             send_summary_json
                         )
-                        VALUES (%s, %s, 'sequence', %s, %s, 'scheduled', %s, %s, %s::jsonb)
+                        VALUES (%s, %s, 'sequence', %s, %s, 'scheduled', 'newsletters', %s, %s::jsonb)
                         RETURNING id
                         """,
                         (
@@ -236,7 +236,6 @@ def schedule_due_dcx_email_sequence_sends_capability(
                             step_row[5],
                             sequence_id,
                             step_row[0],
-                            sequence_audience_type,
                             scheduled_send_at_ts_ms,
                             json.dumps(
                                 {
