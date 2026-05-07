@@ -19,7 +19,7 @@ CONTRACT:
     - Creates active user enrollments.
     - Creates one scheduled send row per active sequence step.
     - Creates recipient snapshots and tracked links for each step send.
-    - Clears scheduled_launch_at_ts_ms so the sequence is not scheduled twice.
+    - Converts the consumed one-shot scheduled launch back to manual_launch so the sequence is not scheduled twice.
   side_effects:
     - writes stephen_dcx_email_sequence_enrollments
     - writes stephen_dcx_email_sequence_step_deliveries
@@ -133,7 +133,8 @@ def schedule_due_dcx_email_sequence_sends_capability(
                     cursor.execute(
                         """
                         UPDATE stephen_dcx_emails_sequences
-                        SET scheduled_launch_at_ts_ms = NULL,
+                        SET trigger_type = 'manual_launch',
+                            scheduled_launch_at_ts_ms = NULL,
                             updated_at_ts_ms = %s
                         WHERE id = %s
                         """,
@@ -310,7 +311,8 @@ def schedule_due_dcx_email_sequence_sends_capability(
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_emails_sequences
-                    SET scheduled_launch_at_ts_ms = NULL,
+                    SET trigger_type = 'manual_launch',
+                        scheduled_launch_at_ts_ms = NULL,
                         updated_at_ts_ms = %s
                     WHERE id = %s
                     """,
