@@ -17,6 +17,7 @@ from storage.db_config import DB_CONFIG
 def read_dcx_admin_live_newsletter_detail_capability(
     email_key: str,
     language_code: str,
+    send_audience_scope: str = "all",
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -24,10 +25,12 @@ def read_dcx_admin_live_newsletter_detail_capability(
       preconditions:
         - email_key is one non-empty stable newsletter identity.
         - language_code is one non-empty language code such as `en`.
+        - send_audience_scope is one of `all`, `admins`, `devs`, or `shareholders`.
         - The configured database is reachable.
       postconditions:
         - Returns the current live newsletter row for the requested key/language pair.
         - Includes translation summary metadata and recipient-language readiness metadata for admin send decisions.
+        - Readiness is calculated for the selected send audience scope.
         - Readiness excludes users whose current preference blocks newsletters or whose email address is actively suppressed for newsletter/all-email sends.
       side_effects: []
       idempotent: true
@@ -53,6 +56,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
     TESTS:
       - returns_requested_live_newsletter_detail
       - reports_translation_gaps_for_newsletter_eligible_recipients
+      - reports_translation_readiness_for_selected_audience_scope
       - raises_clear_error_when_live_newsletter_detail_missing
 
     ERRORS:
@@ -79,7 +83,12 @@ def read_dcx_admin_live_newsletter_detail_capability(
     """
     normalized_email_key = email_key.strip()
     normalized_language_code = language_code.strip().lower()
-    if normalized_email_key == "" or normalized_language_code == "":
+    normalized_send_audience_scope = send_audience_scope.strip().lower()
+    if (
+        normalized_email_key == ""
+        or normalized_language_code == ""
+        or normalized_send_audience_scope not in {"all", "admins", "devs", "shareholders"}
+    ):
         raise RuntimeError("API_DCX_ADMIN_NEWSLETTER_DETAIL_NOT_FOUND")
 
     connect = connect_to_database or psycopg2.connect
@@ -166,6 +175,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
                         primary_email_contact_method.is_verified,
                         user_row.email_communication_preference,
                         user_row.account_status,
+                        user_row.user_role,
                         EXISTS (
                             SELECT 1
                             FROM stephen_dcx_emails_suppressions AS suppression_row
@@ -186,8 +196,23 @@ def read_dcx_admin_live_newsletter_detail_capability(
                         LIMIT 1
                     ) primary_email_contact_method
                       ON TRUE
+                    WHERE (
+                        %s = 'all'
+                        OR (%s = 'admins' AND user_row.user_role = 'admin')
+                        OR (%s = 'devs' AND user_row.user_role = 'dev')
+                        OR (
+                            %s = 'shareholders'
+                            AND user_row.user_role IN ('shareholder', 'shareholders')
+                        )
+                    )
                     ORDER BY user_row.id ASC
-                    """
+                    """,
+                    (
+                        normalized_send_audience_scope,
+                        normalized_send_audience_scope,
+                        normalized_send_audience_scope,
+                        normalized_send_audience_scope,
+                    ),
                 )
                 user_rows = cursor.fetchall()
     except RuntimeError:
@@ -258,7 +283,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
         primary_email_confirmed = bool(user_row[2])
         email_communication_preference = (user_row[3] or "").strip().lower()
         account_status = (user_row[4] or "").strip().lower()
-        has_newsletter_suppression = bool(user_row[5])
+        has_newsletter_suppression = bool(user_row[6])
         if (
             recipient_email == ""
             or primary_email_confirmed is not True
@@ -328,6 +353,7 @@ def read_dcx_admin_live_newsletter_detail_capability(
             "missing_languages": missing_languages,
         },
         "language_readiness": {
+            "send_audience_scope": normalized_send_audience_scope,
             "total_evaluated_recipient_count": total_evaluated_recipient_count,
             "total_send_candidate_count": total_send_candidate_count,
             "total_blocked_missing_translation_count": total_blocked_missing_translation_count,

@@ -6,7 +6,7 @@ It exists so the admin frontend can open one stable path-based editor route for 
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from admin.content.newsletters.read_dcx_admin_live_newsletter_detail import (
@@ -30,12 +30,14 @@ def get_dcx_admin_content_newsletter_detail(
     request: Request,
     language_code: str,
     email_key: str,
+    send_audience_scope: str = Query(default="all"),
 ):
     """
     CONTRACT:
       preconditions:
         - One authenticated DCX admin/dev session cookie is present.
         - The path contains one language code and one newsletter email key.
+        - send_audience_scope optionally selects which audience readiness should be calculated against.
       postconditions:
         - Returns a canonical success wrapper containing one live newsletter detail row.
       side_effects: []
@@ -82,6 +84,7 @@ def get_dcx_admin_content_newsletter_detail(
         newsletter_detail = read_dcx_admin_live_newsletter_detail_capability(
             email_key=email_key,
             language_code=language_code,
+            send_audience_scope=send_audience_scope,
         )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
