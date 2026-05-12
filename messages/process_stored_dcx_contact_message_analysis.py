@@ -100,7 +100,8 @@ def process_stored_dcx_contact_message_analysis(
         - Larger messages can later split into file-level jobs followed by one message synthesis job.
 
     TESTS:
-      - to be added with the first implementation smoke tests
+      - process_stored_dcx_contact_message_analysis_test.py::test_rebuild_market_topic_projection_uses_supplied_database_connect_for_usage_recording
+      - process_stored_dcx_contact_message_analysis_test.py::test_builds_one_consolidated_workflow_outcome_for_mixed_email_message
 
     ERRORS:
       - API_DCX_CONTACT_MESSAGE_ANALYSIS_MESSAGE_NOT_FOUND:
@@ -569,6 +570,7 @@ def _persist_message_analysis_result(
                 analysis_result=analysis_result,
                 analysis_run_status=analysis_run_status,
                 now_ts_ms=now_ts_ms,
+                connect=connect,
             )
 
             for attachment_analysis in analysis_result.get("attachments", []):
@@ -984,6 +986,7 @@ def _rebuild_message_workflow_projections(
     analysis_result: dict,
     analysis_run_status: str,
     now_ts_ms: int,
+    connect: Callable[..., Any],
 ) -> dict:
     enriched_attachment_inputs = _build_attachment_projection_inputs(
         attachment_inputs=attachment_inputs,

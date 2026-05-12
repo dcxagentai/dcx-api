@@ -1,6 +1,104 @@
+from messages import process_stored_dcx_contact_message_analysis as module_under_test
 from messages.process_stored_dcx_contact_message_analysis import (
     _build_message_workflow_outcome_notification_payload,
 )
+
+
+class _FakeWorkflowProjectionCursor:
+    def __init__(self) -> None:
+        self.executed_statements = []
+        self.returning_rows = []
+
+    def execute(self, query: str, params=None) -> None:
+        self.executed_statements.append((query, params))
+        if "INSERT INTO stephen_dcx_message_workflow_items" in query:
+            self.returning_rows.append((701,))
+        if "INSERT INTO stephen_dcx_market_topics" in query:
+            self.returning_rows.append((55,))
+
+    def fetchone(self):
+        if not self.returning_rows:
+            raise AssertionError("No fake RETURNING row was queued for this cursor fetch.")
+        return self.returning_rows.pop(0)
+
+
+def test_rebuild_market_topic_projection_uses_supplied_database_connect_for_usage_recording(monkeypatch) -> None:
+    captured_usage_events = []
+    supplied_connect = lambda **kwargs: None
+
+    monkeypatch.setattr(
+        module_under_test,
+        "generate_dcx_gemini_structured_market_topic_seed",
+        lambda **kwargs: {
+            "provider_name": "google_gemini",
+            "model_name": "gemini-test",
+            "prompt_version": "topic-seed-test",
+            "usage_metadata": {"total_token_count": 42},
+            "topic_title": "Oil market volatility",
+            "topic_summary_text": "Oil prices remain elevated after geopolitical disruption.",
+            "topic_scope_text": "Follow oil-market impacts for traders.",
+            "topic_tags": ["oil", "shipping"],
+            "opening_ai_response_text": "Oil markets remain sensitive to supply risk.",
+            "grounding_metadata": {},
+            "raw_output_json": {"topic_title": "Oil market volatility"},
+        },
+    )
+    monkeypatch.setattr(
+        module_under_test,
+        "_record_best_effort_llm_usage_event",
+        lambda **kwargs: captured_usage_events.append(kwargs),
+    )
+    monkeypatch.setattr(
+        module_under_test,
+        "_record_best_effort_activity_event",
+        lambda **kwargs: None,
+    )
+
+    result = module_under_test._rebuild_message_workflow_projections(
+        cursor=_FakeWorkflowProjectionCursor(),
+        message_id=115,
+        message_input={
+            "message_id": 115,
+            "channel_type": "app",
+            "provider_type": "dcx_app",
+            "message_subject": "Oil market note",
+            "raw_text_content": "Global oil prices are predicted to remain high.",
+            "user_id": 8,
+            "contact_method_id": None,
+        },
+        attachment_inputs=[],
+        analysis_result={
+            "message_language_code": "en",
+            "message_summary": "Oil prices are expected to stay elevated.",
+            "message_text_synthesis": "",
+            "moderation_status": "allowed",
+            "workflow_items": [
+                {
+                    "item_kind": "market_topic",
+                    "item_title": "Oil Market Volatility",
+                    "item_summary": "Market note about global oil prices.",
+                    "source_excerpt_text": "Global oil prices are predicted to remain high.",
+                    "referenced_attachment_ids": [],
+                    "confidence_label": "high",
+                }
+            ],
+        },
+        analysis_run_status="completed",
+        now_ts_ms=1778587200000,
+        connect=supplied_connect,
+    )
+
+    assert result["projection_errors"] == []
+    assert result["market_topic_outputs"] == [
+        {
+            "market_topic_id": 55,
+            "workflow_item_id": 701,
+            "title": "Oil market volatility",
+            "summary": "Oil prices remain elevated after geopolitical disruption.",
+            "opening_ai_response_text": "Oil markets remain sensitive to supply risk.",
+        }
+    ]
+    assert captured_usage_events[0]["connect"] is supplied_connect
 
 
 def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkeypatch) -> None:
