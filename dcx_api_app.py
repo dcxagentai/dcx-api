@@ -425,7 +425,7 @@ def get_dcx_api_root_welcome_response() -> str:
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DCX API</title>
+    <title>DCX API | Service Root</title>
     <style>
       :root {
         color-scheme: light;

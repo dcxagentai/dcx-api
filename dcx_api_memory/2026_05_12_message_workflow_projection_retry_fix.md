@@ -25,7 +25,12 @@ That `NameError` was caught by the broad per-item projection exception handler a
 
 - `.\.venv\Scripts\pytest.exe messages\process_stored_dcx_contact_message_analysis_test.py`
 - `.\.venv\Scripts\python.exe -m compileall messages\process_stored_dcx_contact_message_analysis.py messages\process_stored_dcx_contact_message_analysis_test.py`
+- Live deploy was pushed and retested on 2026-05-12. The retry/workflow pass worked again: the affected message moved from orange workflow review state to completed/projected, and the corresponding market topic was created.
 
 ## Operational Note
 
 Existing partial/failed messages should be recoverable with the retry workflow after this fix is deployed, because `_claim_message_analysis_work` only no-ops when the message is ready and `workflow_classification_status` is already completed.
+
+## Client-Facing Summary
+
+The issue was not that Gemini failed to classify the message. Gemini returned successful responses, but a backend usage-accounting call added near the end of the build tried to use a database connector variable that was not available inside the workflow projection helper. The backend caught that internal error as a workflow-item projection failure, which is why API logs still showed 200 responses while the Messages screen showed an incomplete orange workflow state. The fix passes the existing database connector into that helper and adds a regression test so successful Gemini projections cannot be turned into failed workflow items by usage logging.
