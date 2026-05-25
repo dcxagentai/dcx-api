@@ -28,8 +28,8 @@ def build_dcx_database_config_from_environment() -> dict[str, str]:
         - Database environment variables are available either from the process environment or a local .env file.
       postconditions:
         - Returns a psycopg2-compatible connection config dictionary.
-        - Uses PROMPTEO_DB_URL when present.
-        - Otherwise returns a discrete-field config using the explicit PROMPTEO environment variable names.
+        - Uses DB_URL when present.
+        - Otherwise returns a discrete-field config using the explicit DB environment variable names.
         - Raises a stable runtime error when the required env contract is incomplete.
       side_effects: []
       idempotent: true
@@ -39,7 +39,7 @@ def build_dcx_database_config_from_environment() -> dict[str, str]:
     NARRATIVE:
       why: 
         - This exists to remove literal database credentials from source files and let the same backend run locally and on Render.
-        - This is an MVP project so lives in the Prompteo umbrella dev database with a xxxx_* prefixed set of project tables.
+        - This is an MVP project whose deployment owner can change without changing source code.
       when_to_use:
         - Whenever backend code needs Postgres connection settings.
         - During local development with a repo-local .env file.
@@ -48,7 +48,7 @@ def build_dcx_database_config_from_environment() -> dict[str, str]:
         - Do not hardcode database credentials in backend capabilities once this config exists.
         - Do not bypass this file with ad hoc env lookups in unrelated modules unless there is a clear reason.
       what_can_go_wrong:
-        - PROMPTEO_DB_URL may be missing or malformed.
+        - DB_URL may be missing or malformed.
         - The explicit discrete env vars may be missing required values.
         - A local .env file may contain stale values.
       what_comes_next:
@@ -61,30 +61,30 @@ def build_dcx_database_config_from_environment() -> dict[str, str]:
 
     ERRORS:
       - API_DB_CONFIG_ENV_MISSING:
-          suggested_action: Add PROMPTEO_DB_URL or the required DCX DB env vars locally or on Render.
-          suggested_action: Add PROMPTEO_DB_URL or the required PROMPTEO DB env vars locally or on Render.
+          suggested_action: Add DB_URL or the required DCX DB env vars locally or on Render.
+          suggested_action: Add DB_URL or the required DB env vars locally or on Render.
           common_causes:
             - .env file missing locally
             - Render service env vars not configured yet
             - variable names mistyped
           recovery_steps:
-            - Add or correct PROMPTEO_DB_URL, or set PROMPTEO_DB_NAME / PROMPTEO_DB_USER / PROMPTEO_DB_PASSWORD / PROMPTEO_DB_HOST / PROMPTEO_DB_PORT.
+            - Add or correct DB_URL, or set DB_NAME / DB_USER / DB_PASSWORD / DB_HOST / DB_PORT.
             - Restart the backend so it reloads environment variables.
           retry_safe: true
 
     CODE:
     """
-    database_url = os.getenv("PROMPTEO_DB_URL")
+    database_url = os.getenv("DB_URL")
 
     if database_url:
         return {"dsn": database_url}
 
-    db_name = os.getenv("PROMPTEO_DB_NAME")
-    db_user = os.getenv("PROMPTEO_DB_USER")
-    db_password = os.getenv("PROMPTEO_DB_PASSWORD")
-    db_host = os.getenv("PROMPTEO_DB_HOST")
-    db_port = os.getenv("PROMPTEO_DB_PORT")
-    db_sslmode = os.getenv("PROMPTEO_DB_SSLMODE")
+    db_name = os.getenv("DB_NAME")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT")
+    db_sslmode = os.getenv("DB_SSLMODE")
 
     config: dict[str, str] = {
         "dbname": db_name,

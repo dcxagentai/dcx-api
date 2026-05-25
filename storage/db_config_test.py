@@ -8,8 +8,8 @@ from storage.db_config import build_dcx_database_config_from_environment
 
 
 def test_returns_dsn_config_when_database_url_is_present(monkeypatch) -> None:
-    monkeypatch.setenv("PROMPTEO_DB_URL", "postgresql://user:pass@host:5432/dbname")
-    monkeypatch.delenv("PROMPTEO_DB_NAME", raising=False)
+    monkeypatch.setenv("DB_URL", "postgresql://user:pass@host:5432/dbname")
+    monkeypatch.delenv("DB_NAME", raising=False)
 
     config = build_dcx_database_config_from_environment()
 
@@ -17,12 +17,12 @@ def test_returns_dsn_config_when_database_url_is_present(monkeypatch) -> None:
 
 
 def test_returns_discrete_config_when_database_url_is_absent(monkeypatch) -> None:
-    monkeypatch.delenv("PROMPTEO_DB_URL", raising=False)
-    monkeypatch.setenv("PROMPTEO_DB_NAME", "stephen_dcx")
-    monkeypatch.setenv("PROMPTEO_DB_USER", "postgres")
-    monkeypatch.setenv("PROMPTEO_DB_PASSWORD", "1234")
-    monkeypatch.setenv("PROMPTEO_DB_HOST", "localhost")
-    monkeypatch.setenv("PROMPTEO_DB_PORT", "5432")
+    monkeypatch.delenv("DB_URL", raising=False)
+    monkeypatch.setenv("DB_NAME", "stephen_dcx")
+    monkeypatch.setenv("DB_USER", "postgres")
+    monkeypatch.setenv("DB_PASSWORD", "1234")
+    monkeypatch.setenv("DB_HOST", "localhost")
+    monkeypatch.setenv("DB_PORT", "5432")
 
     config = build_dcx_database_config_from_environment()
 
@@ -33,13 +33,13 @@ def test_returns_discrete_config_when_database_url_is_absent(monkeypatch) -> Non
     assert config["port"] == "5432"
 
 
-def test_raises_clear_error_when_required_prompteo_fields_are_missing(monkeypatch) -> None:
-    monkeypatch.delenv("PROMPTEO_DB_URL", raising=False)
-    monkeypatch.delenv("PROMPTEO_DB_NAME", raising=False)
-    monkeypatch.delenv("PROMPTEO_DB_USER", raising=False)
-    monkeypatch.delenv("PROMPTEO_DB_PASSWORD", raising=False)
-    monkeypatch.delenv("PROMPTEO_DB_HOST", raising=False)
-    monkeypatch.delenv("PROMPTEO_DB_PORT", raising=False)
+def test_raises_clear_error_when_required_db_fields_are_missing(monkeypatch) -> None:
+    monkeypatch.delenv("DB_URL", raising=False)
+    monkeypatch.delenv("DB_NAME", raising=False)
+    monkeypatch.delenv("DB_USER", raising=False)
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    monkeypatch.delenv("DB_HOST", raising=False)
+    monkeypatch.delenv("DB_PORT", raising=False)
 
     try:
         build_dcx_database_config_from_environment()
@@ -48,4 +48,4 @@ def test_raises_clear_error_when_required_prompteo_fields_are_missing(monkeypatc
         assert "dbname" in str(exc)
         assert "password" in str(exc)
     else:  # pragma: no cover - explicit falsification branch
-        raise AssertionError("Expected missing PROMPTEO env vars to raise a runtime error.")
+        raise AssertionError("Expected missing DB env vars to raise a runtime error.")
