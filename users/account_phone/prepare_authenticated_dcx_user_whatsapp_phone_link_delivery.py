@@ -27,6 +27,13 @@ from users.account_phone.dcx_whatsapp_phone_link_challenge_support import (
     hash_dcx_whatsapp_phone_link_challenge_token,
     normalize_dcx_whatsapp_phone_link_phone_e164,
 )
+from users.account_phone.dcx_channel_origin_confirmation_support import (
+    DCX_CONFIRMATION_PURPOSE_SENDER_RECONFIRMATION,
+    ensure_current_dcx_meta_whatsapp_channel_origin,
+    insert_pending_contact_method_channel_origin_confirmation,
+    read_confirmed_contact_method_channel_origin_confirmation,
+    read_dcx_contact_method_confirmation_purpose,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -35,6 +42,8 @@ def prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
     authenticated_user_id: int,
     candidate_phone_number: str,
     language_code: str | None = None,
+    confirmation_purpose: str | None = None,
+    force_send: bool = False,
     connect_to_database: Callable[..., Any] | None = None,
     current_timestamp_ms_provider: Callable[[], int] | None = None,
     raw_token_provider: Callable[[], str] | None = None,
@@ -152,6 +161,11 @@ def prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
     raw_phone_link_token = (raw_token_provider or build_dcx_whatsapp_phone_link_challenge_token)()
     phone_link_token_hash = hash_dcx_whatsapp_phone_link_challenge_token(raw_phone_link_token)
     challenge_expires_at_ts_ms = now_ts_ms + DCX_WHATSAPP_PHONE_LINK_TOKEN_LIFETIME_MS
+    normalized_confirmation_purpose = read_dcx_contact_method_confirmation_purpose(confirmation_purpose)
+    should_force_send = (
+        force_send is True
+        or normalized_confirmation_purpose == DCX_CONFIRMATION_PURPOSE_SENDER_RECONFIRMATION
+    )
     verification_link_suffix = build_dcx_whatsapp_phone_link_verification_page_suffix(
         raw_phone_link_token=raw_phone_link_token,
         language_code=language_code,
@@ -212,16 +226,30 @@ def prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
                 )
                 existing_contact_method_row = cursor.fetchone()
 
+                current_channel_origin = ensure_current_dcx_meta_whatsapp_channel_origin(
+                    cursor=cursor,
+                    now_ts_ms=now_ts_ms,
+                )
+
                 if (
                     existing_contact_method_row is not None
                     and existing_contact_method_row[1] is True
                     and existing_contact_method_row[2] is not None
                 ):
-                    return {
-                        "status": "already_confirmed",
-                        "send_required": False,
-                        "phone_e164": normalized_phone_number,
-                    }
+                    current_origin_confirmation = read_confirmed_contact_method_channel_origin_confirmation(
+                        cursor=cursor,
+                        contact_method_id=existing_contact_method_row[0],
+                        channel_origin_id=current_channel_origin["id"],
+                    )
+                    if current_origin_confirmation is not None and not should_force_send:
+                        return {
+                            "status": "already_confirmed",
+                            "send_required": False,
+                            "phone_e164": normalized_phone_number,
+                            "contact_method_id": existing_contact_method_row[0],
+                            "channel_origin": current_channel_origin,
+                            "channel_origin_confirmation": current_origin_confirmation,
+                        }
 
                 cursor.execute(
                     """
@@ -448,6 +476,17 @@ def prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
                             challenge_id,
                         ),
                     )
+
+                confirmation_id = insert_pending_contact_method_channel_origin_confirmation(
+                    cursor=cursor,
+                    user_id=authenticated_user_id,
+                    contact_method_id=contact_method_id,
+                    channel_origin_id=current_channel_origin["id"],
+                    auth_challenge_id=challenge_id,
+                    confirmation_purpose=normalized_confirmation_purpose,
+                    expires_at_ts_ms=challenge_expires_at_ts_ms,
+                    now_ts_ms=now_ts_ms,
+                )
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -463,7 +502,10 @@ def prepare_authenticated_dcx_user_whatsapp_phone_link_delivery(
         "status": "pending_verification",
         "send_required": True,
         "challenge_id": challenge_id,
+        "confirmation_id": confirmation_id,
+        "contact_method_id": contact_method_id,
         "phone_e164": normalized_phone_number,
+        "channel_origin": current_channel_origin,
         "raw_phone_link_token": raw_phone_link_token,
         "verification_link_suffix": verification_link_suffix,
         "verification_link_url": verification_link_url,

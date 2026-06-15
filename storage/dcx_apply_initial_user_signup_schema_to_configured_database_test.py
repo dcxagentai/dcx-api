@@ -48,6 +48,7 @@ def test_executes_schema_sql_against_configured_connection() -> None:
 
     assert "CREATE TABLE IF NOT EXISTS stephen_dcx_languages" in fake_connection.cursor_instance.executed_sql
     assert "ALTER TABLE stephen_dcx_user_auth_challenges" in fake_connection.cursor_instance.executed_sql
+    assert "CREATE TABLE IF NOT EXISTS public.stephen_dcx_channel_origins" in fake_connection.cursor_instance.executed_sql
 
 
 def test_returns_applied_status_payload_when_execution_succeeds() -> None:
@@ -56,7 +57,10 @@ def test_returns_applied_status_payload_when_execution_succeeds() -> None:
     )
 
     assert payload["status"] == "applied"
-    assert payload["applied_sql_file"] == "dcx_initial_user_signup_schema_2026_03_18.sql"
+    assert payload["applied_sql_file"] == (
+        "dcx_initial_user_signup_schema_2026_03_18.sql + "
+        "dcx_add_channel_origin_confirmations_2026_06_15.sql"
+    )
 
 
 def test_schema_sql_contains_signup_challenge_hardening_columns() -> None:
@@ -69,6 +73,8 @@ def test_schema_sql_contains_signup_challenge_hardening_columns() -> None:
         "stephen_dcx_users",
         "stephen_dcx_user_auth_identities",
         "stephen_dcx_user_auth_challenges",
+        "stephen_dcx_channel_origins",
+        "stephen_dcx_contact_method_channel_confirmations",
         "stephen_dcx_user_password_credentials",
         "stephen_dcx_user_auth_sessions",
         "stephen_dcx_public_route_rate_limits",

@@ -43,11 +43,13 @@ def test_prepares_new_pending_whatsapp_phone_link_for_valid_phone(monkeypatch) -
         fetchone_results=[
             (44,),
             None,
+            (3001, "whatsapp", "meta_whatsapp", "", "local:meta_whatsapp_default", "", "", "local", "active"),
             None,
             None,
             (701,),
             None,
             (901,),
+            (1001,),
         ]
     )
 
@@ -63,7 +65,20 @@ def test_prepares_new_pending_whatsapp_phone_link_for_valid_phone(monkeypatch) -
         "status": "pending_verification",
         "send_required": True,
         "challenge_id": 901,
+        "confirmation_id": 1001,
+        "contact_method_id": 701,
         "phone_e164": "+34600000001",
+        "channel_origin": {
+            "id": 3001,
+            "channel_type": "whatsapp",
+            "provider_type": "meta_whatsapp",
+            "provider_account_id": "",
+            "provider_sender_id": "local:meta_whatsapp_default",
+            "sender_display_handle": "",
+            "sender_display_name": "",
+            "environment_key": "local",
+            "origin_status": "active",
+        },
         "raw_phone_link_token": "whatsapp-phone-link-token-value-1234567890",
         "verification_link_suffix": "en/t/verify-whatsapp-phone#whatsapp_phone_link_token=whatsapp-phone-link-token-value-1234567890",
         "verification_link_url": "http://localhost:5173/en/t/verify-whatsapp-phone#whatsapp_phone_link_token=whatsapp-phone-link-token-value-1234567890",
@@ -76,6 +91,8 @@ def test_already_confirmed_whatsapp_phone_returns_without_send(monkeypatch) -> N
         fetchone_results=[
             (44,),
             (55, True, 888),
+            (3001, "whatsapp", "meta_whatsapp", "", "local:meta_whatsapp_default", "", "", "local", "active"),
+            (1001, "confirmed", 1776000000000),
         ]
     )
 
@@ -90,6 +107,23 @@ def test_already_confirmed_whatsapp_phone_returns_without_send(monkeypatch) -> N
         "status": "already_confirmed",
         "send_required": False,
         "phone_e164": "+34600000001",
+        "contact_method_id": 55,
+        "channel_origin": {
+            "id": 3001,
+            "channel_type": "whatsapp",
+            "provider_type": "meta_whatsapp",
+            "provider_account_id": "",
+            "provider_sender_id": "local:meta_whatsapp_default",
+            "sender_display_handle": "",
+            "sender_display_name": "",
+            "environment_key": "local",
+            "origin_status": "active",
+        },
+        "channel_origin_confirmation": {
+            "id": 1001,
+            "confirmation_status": "confirmed",
+            "confirmed_at_ts_ms": 1776000000000,
+        },
     }
 
 
@@ -99,6 +133,7 @@ def test_raises_when_phone_is_already_linked_to_another_user(monkeypatch) -> Non
         fetchone_results=[
             (44,),
             None,
+            (3001, "whatsapp", "meta_whatsapp", "", "local:meta_whatsapp_default", "", "", "local", "active"),
             (91,),
         ]
     )
@@ -122,6 +157,7 @@ def test_enforces_send_cooldown_for_active_delivered_challenge(monkeypatch) -> N
         fetchone_results=[
             (44,),
             None,
+            (3001, "whatsapp", "meta_whatsapp", "", "local:meta_whatsapp_default", "", "", "local", "active"),
             None,
             None,
             (701,),

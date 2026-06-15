@@ -46,6 +46,8 @@ class DcxUsersMeAccountPhoneRequestWhatsappVerificationLinkRequest(BaseModel):
 
     phone_e164: str
     language_code: str | None = None
+    confirmation_purpose: str | None = None
+    force_send: bool = False
 
 
 @dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router.post(
@@ -74,9 +76,11 @@ def post_authenticated_dcx_user_account_phone_request_whatsapp_verification_link
             authenticated_user_id=authenticated_user_id,
             candidate_phone_number=account_phone_request_whatsapp_verification_link_request.phone_e164,
             language_code=account_phone_request_whatsapp_verification_link_request.language_code,
+            confirmation_purpose=account_phone_request_whatsapp_verification_link_request.confirmation_purpose,
+            force_send=account_phone_request_whatsapp_verification_link_request.force_send,
         )
         if preparation_result["send_required"] is True:
-            send_dcx_whatsapp_verification_template_message(
+            provider_send_result = send_dcx_whatsapp_verification_template_message(
                 phone_e164=preparation_result["phone_e164"],
                 template_body_greeting_name="there",
                 template_body_verification_target=preparation_result["phone_e164"],
@@ -90,6 +94,9 @@ def post_authenticated_dcx_user_account_phone_request_whatsapp_verification_link
             mark_authenticated_dcx_user_whatsapp_phone_link_otp_delivery_sent(
                 authenticated_user_id=authenticated_user_id,
                 challenge_id=preparation_result["challenge_id"],
+                provider_message_id=provider_send_result.get("provider_message_id"),
+                template_name=provider_send_result.get("template_name"),
+                template_language_code=provider_send_result.get("template_language_code"),
             )
 
         refreshed_account_summary = read_authenticated_dcx_user_account_summary_capability(
@@ -184,6 +191,19 @@ def post_authenticated_dcx_user_account_phone_request_whatsapp_verification_link
                 },
             )
 
+        if error_code.startswith("API_DCX_CHANNEL_ORIGIN_CONFIGURATION_MISSING"):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "API_USERS_ME_ACCOUNT_PHONE_WHATSAPP_CHANNEL_ORIGIN_CONFIGURATION_MISSING",
+                        "message": "We couldn't send the verification link right now.",
+                        "suggested_action": "Please try again in a moment.",
+                    },
+                },
+            )
+
         if error_code in {
             "API_DCX_WHATSAPP_VERIFY_PROVIDER_SEND_FAILED",
             "API_AUTHENTICATED_DCX_USER_WHATSAPP_PHONE_LINK_DELIVERY_MARK_FAILED",
@@ -230,7 +250,12 @@ def post_authenticated_dcx_user_account_phone_request_whatsapp_verification_link
             "operation": (
                 "account_phone_whatsapp_already_confirmed"
                 if preparation_result["send_required"] is False
-                else "account_phone_whatsapp_link_sent"
+                else (
+                    "account_phone_whatsapp_reverification_link_sent"
+                    if account_phone_request_whatsapp_verification_link_request.force_send
+                    or account_phone_request_whatsapp_verification_link_request.confirmation_purpose == "sender_reconfirmation"
+                    else "account_phone_whatsapp_link_sent"
+                )
             ),
             "identity_resolution_mode": identity_resolution_mode,
             "local_debug_verification_link_url": (

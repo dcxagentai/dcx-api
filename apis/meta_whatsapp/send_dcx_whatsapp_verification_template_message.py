@@ -192,6 +192,9 @@ def send_dcx_whatsapp_verification_template_message(
         "provider": "meta_whatsapp",
         "status": "accepted",
         "provider_message_id": provider_message_id,
+        "provider_sender_id": meta_phone_number_id,
+        "template_name": meta_whatsapp_verify_template_name,
+        "template_language_code": meta_whatsapp_verify_template_language_code,
     }
 
 

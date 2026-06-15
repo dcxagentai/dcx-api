@@ -234,6 +234,9 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "is_active": True,
                 "last_used_at_ts_ms": 1775324300000,
                 "channel": "whatsapp",
+                "current_channel_origin": None,
+                "current_channel_confirmation": None,
+                "requires_current_channel_confirmation": True,
             }
         ],
         "pending_whatsapp_phone_link": {

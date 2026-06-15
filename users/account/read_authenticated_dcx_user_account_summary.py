@@ -8,6 +8,7 @@ to raw table queries or to future auth-provider tables.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable
 
 import psycopg2
@@ -91,6 +92,8 @@ def read_authenticated_dcx_user_account_summary_capability(
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_NOT_FOUND")
 
     connect = connect_to_database or psycopg2.connect
+    current_whatsapp_origin_provider_sender_id = _read_current_whatsapp_origin_provider_sender_id()
+    current_environment_key = _read_dcx_environment_key()
 
     try:
         with connect(**DB_CONFIG) as connection:
@@ -274,7 +277,19 @@ def read_authenticated_dcx_user_account_summary_capability(
                         cm.verification_method,
                         cm.is_active,
                         cm.last_used_at_ts_ms,
-                        linked_identity.provider_type
+                        linked_identity.provider_type,
+                        current_origin.id AS current_channel_origin_id,
+                        current_origin.provider_type AS current_channel_origin_provider_type,
+                        current_origin.provider_sender_id AS current_channel_origin_provider_sender_id,
+                        current_origin.sender_display_handle AS current_channel_origin_sender_display_handle,
+                        current_origin.sender_display_name AS current_channel_origin_sender_display_name,
+                        current_origin.environment_key AS current_channel_origin_environment_key,
+                        current_origin.origin_status AS current_channel_origin_status,
+                        latest_confirmation.id AS current_channel_confirmation_id,
+                        latest_confirmation.confirmation_status AS current_channel_confirmation_status,
+                        latest_confirmation.confirmation_purpose AS current_channel_confirmation_purpose,
+                        latest_confirmation.sent_at_ts_ms AS current_channel_confirmation_sent_at_ts_ms,
+                        latest_confirmation.confirmed_at_ts_ms AS current_channel_confirmation_confirmed_at_ts_ms
                     FROM stephen_dcx_users_contact_methods cm
                     LEFT JOIN LATERAL (
                         SELECT provider_type
@@ -292,6 +307,46 @@ def read_authenticated_dcx_user_account_summary_capability(
                         LIMIT 1
                     ) linked_identity
                       ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            id,
+                            provider_type,
+                            provider_sender_id,
+                            sender_display_handle,
+                            sender_display_name,
+                            environment_key,
+                            origin_status
+                        FROM stephen_dcx_channel_origins
+                        WHERE channel_type = %s
+                          AND provider_type = %s
+                          AND provider_sender_id = %s
+                          AND environment_key = %s
+                          AND origin_status = %s
+                        LIMIT 1
+                    ) current_origin
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            id,
+                            confirmation_status,
+                            confirmation_purpose,
+                            sent_at_ts_ms,
+                            confirmed_at_ts_ms
+                        FROM stephen_dcx_contact_method_channel_confirmations
+                        WHERE contact_method_id = cm.id
+                          AND channel_origin_id = current_origin.id
+                        ORDER BY
+                            CASE confirmation_status
+                                WHEN 'confirmed' THEN 1
+                                WHEN 'sent' THEN 2
+                                WHEN 'pending' THEN 3
+                                ELSE 4
+                            END ASC,
+                            COALESCE(confirmed_at_ts_ms, sent_at_ts_ms, updated_at_ts_ms) DESC,
+                            id DESC
+                        LIMIT 1
+                    ) latest_confirmation
+                      ON TRUE
                     WHERE cm.user_id = %s
                       AND cm.contact_type = %s
                       AND cm.is_active = TRUE
@@ -302,6 +357,11 @@ def read_authenticated_dcx_user_account_summary_capability(
                         cm.id ASC
                     """,
                     (
+                        "whatsapp",
+                        "meta_whatsapp",
+                        current_whatsapp_origin_provider_sender_id,
+                        current_environment_key,
+                        "active",
                         authenticated_user_id,
                         "phone",
                     ),
@@ -436,6 +496,39 @@ def read_authenticated_dcx_user_account_summary_capability(
             "is_active": contact_method_row[11],
             "last_used_at_ts_ms": contact_method_row[12],
             "channel": contact_method_row[13],
+            "current_channel_origin": (
+                {
+                    "id": _read_row_value(contact_method_row, 14),
+                    "channel_type": "whatsapp",
+                    "provider_type": _read_row_value(contact_method_row, 15),
+                    "provider_sender_id": _read_row_value(contact_method_row, 16),
+                    "sender_display_handle": _read_row_value(contact_method_row, 17),
+                    "sender_display_name": _read_row_value(contact_method_row, 18),
+                    "environment_key": _read_row_value(contact_method_row, 19),
+                    "origin_status": _read_row_value(contact_method_row, 20),
+                }
+                if _read_row_value(contact_method_row, 14) is not None
+                else None
+            ),
+            "current_channel_confirmation": (
+                {
+                    "id": _read_row_value(contact_method_row, 21),
+                    "confirmation_status": _read_row_value(contact_method_row, 22),
+                    "confirmation_purpose": _read_row_value(contact_method_row, 23),
+                    "sent_at_ts_ms": _read_row_value(contact_method_row, 24),
+                    "confirmed_at_ts_ms": _read_row_value(contact_method_row, 25),
+                }
+                if _read_row_value(contact_method_row, 21) is not None
+                else None
+            ),
+            "requires_current_channel_confirmation": (
+                contact_method_row[13] == "whatsapp"
+                and contact_method_row[8] is True
+                and not (
+                    _read_row_value(contact_method_row, 22) == "confirmed"
+                    and _read_row_value(contact_method_row, 25) is not None
+                )
+            ),
         }
         for contact_method_row in phone_contact_method_rows
     ]
@@ -598,3 +691,22 @@ def _read_public_identity_label(
         return f"@{normalized_handle}"
 
     return f"Trader #{user_id}"
+
+
+def _read_dcx_environment_key() -> str:
+    return os.getenv("DCX_ENVIRONMENT", "local").strip().lower() or "local"
+
+
+def _read_current_whatsapp_origin_provider_sender_id() -> str:
+    provider_sender_id = os.getenv("META_PHONE_NUMBER_ID", "").strip()
+    if provider_sender_id != "":
+        return provider_sender_id
+
+    return f"{_read_dcx_environment_key()}:meta_whatsapp_default"
+
+
+def _read_row_value(row: tuple, index: int, fallback=None):
+    if len(row) <= index:
+        return fallback
+
+    return row[index]

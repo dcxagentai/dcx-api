@@ -190,6 +190,9 @@ from routes.users.dcx_api_routes_users_me_account_phone_request_whatsapp_verific
 from routes.users.dcx_api_routes_users_me_account_phone_set_primary import (
     dcx_api_routes_users_me_account_phone_set_primary_router,
 )
+from routes.users.dcx_api_routes_users_me_account_phone_remove import (
+    dcx_api_routes_users_me_account_phone_remove_router,
+)
 from routes.users.dcx_api_routes_users_me_messages_create import (
     dcx_api_routes_users_me_messages_create_router,
 )
@@ -326,6 +329,7 @@ app.include_router(dcx_api_routes_users_me_usage_router)
 app.include_router(dcx_api_routes_users_me_account_settings_router)
 app.include_router(dcx_api_routes_users_me_account_phone_request_whatsapp_verification_link_router)
 app.include_router(dcx_api_routes_users_me_account_phone_set_primary_router)
+app.include_router(dcx_api_routes_users_me_account_phone_remove_router)
 app.include_router(dcx_api_routes_users_me_messages_inbox_router)
 app.include_router(dcx_api_routes_users_me_messages_detail_router)
 app.include_router(dcx_api_routes_users_me_messages_create_router)

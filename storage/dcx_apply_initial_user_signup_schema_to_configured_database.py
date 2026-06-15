@@ -97,12 +97,14 @@ def apply_initial_user_signup_schema_to_configured_database(
 
     return {
         "status": "applied",
-        "applied_sql_file": "dcx_initial_user_signup_schema_2026_03_18.sql",
+        "applied_sql_file": "dcx_initial_user_signup_schema_2026_03_18.sql + dcx_add_channel_origin_confirmations_2026_06_15.sql",
         "ensured_tables": [
             "stephen_dcx_languages",
             "stephen_dcx_users",
             "stephen_dcx_user_auth_identities",
             "stephen_dcx_user_auth_challenges",
+            "stephen_dcx_channel_origins",
+            "stephen_dcx_contact_method_channel_confirmations",
             "stephen_dcx_user_password_credentials",
             "stephen_dcx_user_auth_sessions",
             "stephen_dcx_public_route_rate_limits",
@@ -113,7 +115,15 @@ def apply_initial_user_signup_schema_to_configured_database(
 def _read_initial_user_signup_schema_sql() -> str:
     """Minimal contract: load the colocated user-signup schema SQL text from disk."""
     schema_path = Path(__file__).with_name("dcx_initial_user_signup_schema_2026_03_18.sql")
-    return schema_path.read_text(encoding="utf-8")
+    channel_origins_schema_path = Path(__file__).with_name(
+        "dcx_add_channel_origin_confirmations_2026_06_15.sql"
+    )
+    return "\n\n".join(
+        [
+            schema_path.read_text(encoding="utf-8"),
+            channel_origins_schema_path.read_text(encoding="utf-8"),
+        ]
+    )
 
 
 if __name__ == "__main__":

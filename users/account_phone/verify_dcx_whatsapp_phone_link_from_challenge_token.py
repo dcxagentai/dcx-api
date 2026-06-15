@@ -20,6 +20,10 @@ from users.account_phone.dcx_whatsapp_phone_link_challenge_support import (
     hash_dcx_whatsapp_phone_link_challenge_token,
     normalize_dcx_whatsapp_phone_link_challenge_token,
 )
+from users.account_phone.dcx_channel_origin_confirmation_support import (
+    mark_contact_method_channel_origin_confirmation_confirmed,
+    mark_contact_method_channel_origin_confirmation_terminal,
+)
 
 
 def verify_dcx_whatsapp_phone_link_from_challenge_token(
@@ -169,6 +173,13 @@ def verify_dcx_whatsapp_phone_link_from_challenge_token(
                             challenge_id,
                         ),
                     )
+                    mark_contact_method_channel_origin_confirmation_terminal(
+                        cursor=cursor,
+                        user_id=authenticated_user_id,
+                        auth_challenge_id=challenge_id,
+                        confirmation_status="expired",
+                        now_ts_ms=now_ts_ms,
+                    )
                     raise RuntimeError("API_DCX_WHATSAPP_PHONE_LINK_TOKEN_EXPIRED")
 
                 cursor.execute(
@@ -200,6 +211,13 @@ def verify_dcx_whatsapp_phone_link_from_challenge_token(
                             challenge_id,
                         ),
                     )
+                    mark_contact_method_channel_origin_confirmation_terminal(
+                        cursor=cursor,
+                        user_id=authenticated_user_id,
+                        auth_challenge_id=challenge_id,
+                        confirmation_status="invalidated",
+                        now_ts_ms=now_ts_ms,
+                    )
                     raise RuntimeError("API_DCX_WHATSAPP_PHONE_ALREADY_LINKED_TO_ANOTHER_USER")
 
                 cursor.execute(
@@ -229,6 +247,13 @@ def verify_dcx_whatsapp_phone_link_from_challenge_token(
                             now_ts_ms,
                             challenge_id,
                         ),
+                    )
+                    mark_contact_method_channel_origin_confirmation_terminal(
+                        cursor=cursor,
+                        user_id=authenticated_user_id,
+                        auth_challenge_id=challenge_id,
+                        confirmation_status="invalidated",
+                        now_ts_ms=now_ts_ms,
                     )
                     raise RuntimeError("API_DCX_WHATSAPP_PHONE_ALREADY_LINKED_TO_ANOTHER_USER")
 
@@ -437,6 +462,13 @@ def verify_dcx_whatsapp_phone_link_from_challenge_token(
                         now_ts_ms,
                         challenge_id,
                     ),
+                )
+                mark_contact_method_channel_origin_confirmation_confirmed(
+                    cursor=cursor,
+                    user_id=authenticated_user_id,
+                    auth_challenge_id=challenge_id,
+                    contact_method_id=phone_contact_method_id,
+                    confirmed_at_ts_ms=now_ts_ms,
                 )
     except RuntimeError:
         raise

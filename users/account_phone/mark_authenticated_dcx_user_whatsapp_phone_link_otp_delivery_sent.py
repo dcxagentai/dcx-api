@@ -15,11 +15,17 @@ from storage.db_config import DB_CONFIG
 from users.account_phone.dcx_whatsapp_phone_link_challenge_support import (
     DCX_WHATSAPP_PHONE_LINK_SEND_COOLDOWN_MS,
 )
+from users.account_phone.dcx_channel_origin_confirmation_support import (
+    mark_contact_method_channel_origin_confirmation_sent,
+)
 
 
 def mark_authenticated_dcx_user_whatsapp_phone_link_otp_delivery_sent(
     authenticated_user_id: int,
     challenge_id: int,
+    provider_message_id: str | None = None,
+    template_name: str | None = None,
+    template_language_code: str | None = None,
     connect_to_database: Callable[..., Any] | None = None,
     current_timestamp_ms_provider: Callable[[], int] | None = None,
 ) -> None:
@@ -106,6 +112,16 @@ def mark_authenticated_dcx_user_whatsapp_phone_link_otp_delivery_sent(
                     ),
                 )
                 updated_row = cursor.fetchone()
+                if updated_row is not None:
+                    mark_contact_method_channel_origin_confirmation_sent(
+                        cursor=cursor,
+                        user_id=authenticated_user_id,
+                        auth_challenge_id=challenge_id,
+                        provider_message_id=provider_message_id,
+                        template_name=template_name,
+                        template_language_code=template_language_code,
+                        sent_at_ts_ms=now_ts_ms,
+                    )
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_WHATSAPP_PHONE_LINK_DELIVERY_MARK_FAILED") from exc
 
