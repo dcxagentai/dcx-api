@@ -1,21 +1,25 @@
 ============================================================
 STEPHEN DCX ACTUAL SCHEMA FULL REPORT
 Generated on localhost:5432
-Database: stephen_dcx
+Database: dcx
 ============================================================
 
 
 TABLE LIST (\dt):
 ------------------------------
+- stephen_dcx_channel_origins
 - stephen_dcx_contact_message_analysis_runs
 - stephen_dcx_contact_message_attachments
 - stephen_dcx_contact_message_processing_jobs
 - stephen_dcx_contact_message_provider_events
 - stephen_dcx_contact_messages
+- stephen_dcx_contact_method_channel_confirmations
 - stephen_dcx_content_page_categories
 - stephen_dcx_content_pages
 - stephen_dcx_countries
 - stephen_dcx_country_calling_codes
+- stephen_dcx_email_sequence_enrollments
+- stephen_dcx_email_sequence_step_deliveries
 - stephen_dcx_emails
 - stephen_dcx_emails_sends
 - stephen_dcx_emails_sends_link_clicks
@@ -25,17 +29,61 @@ TABLE LIST (\dt):
 - stephen_dcx_emails_sequences
 - stephen_dcx_emails_suppressions
 - stephen_dcx_file_objects
+- stephen_dcx_forum_comments
+- stephen_dcx_forum_posts
 - stephen_dcx_languages
+- stephen_dcx_llm_usage_events
+- stephen_dcx_market_topic_turns
+- stephen_dcx_market_topics
+- stephen_dcx_message_workflow_items
+- stephen_dcx_outbound_interaction_routes
 - stephen_dcx_public_content_publish_state
 - stephen_dcx_public_route_rate_limits
 - stephen_dcx_timezones
+- stephen_dcx_trade_interest_alert_deliveries
+- stephen_dcx_trade_interest_material_options
+- stephen_dcx_trade_publications
+- stephen_dcx_trade_thread_messages
+- stephen_dcx_trade_thread_participant_routes
+- stephen_dcx_trade_threads
+- stephen_dcx_trade_versions
+- stephen_dcx_trades
+- stephen_dcx_user_activity_events
 - stephen_dcx_user_auth_challenges
 - stephen_dcx_user_auth_identities
 - stephen_dcx_user_auth_sessions
 - stephen_dcx_user_password_credentials
+- stephen_dcx_user_trade_interest_materials
 - stephen_dcx_users
 - stephen_dcx_users_contact_methods
 - stephen_dcx_ux_strings
+
+
+============================================================
+TABLE: stephen_dcx_channel_origins
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+channel_type                   | text                      | NO       | 
+provider_type                  | text                      | NO       | 
+provider_account_id            | text                      | NO       | ''::text
+provider_sender_id             | text                      | NO       | 
+sender_display_handle          | text                      | NO       | ''::text
+sender_display_name            | text                      | NO       | ''::text
+environment_key                | text                      | NO       | ''::text
+origin_status                  | text                      | NO       | 'active'::text
+activated_at_ts_ms             | bigint                    | YES      | 
+retired_at_ts_ms               | bigint                    | YES      | 
+origin_metadata_json           | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_channel_origins_pkey]
 
 
 ============================================================
@@ -79,8 +127,8 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 
 FOREIGN KEYS:
-- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_message_attachments_message_id_fkey]
 - file_object_id -> stephen_dcx_file_objects(id) [stephen_dcx_contact_message_attachments_file_object_id_fkey]
+- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_message_attachments_message_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_contact_message_attachments_pkey]
@@ -137,8 +185,8 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 
 FOREIGN KEYS:
-- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_message_provider_events_user_id_fkey]
 - contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_contact_message_provider_eve_contact_method_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_message_provider_events_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_contact_message_provider_events_pkey]
@@ -178,16 +226,56 @@ analysis_status                | text                      | NO       | 'not_req
 analysis_model_name            | text                      | NO       | ''::text
 analysis_metadata_json         | jsonb                     | NO       | '{}'::jsonb
 analysis_completed_at_ts_ms    | bigint                    | YES      | 
+workflow_classification_status | text                      | NO       | 'not_started'::text
+primary_workflow_kind          | text                      | YES      | 
+contains_trade_items           | boolean                   | NO       | false
+contains_market_topic_items    | boolean                   | NO       | false
+contains_other_items           | boolean                   | NO       | false
+workflow_reason_summary        | text                      | NO       | ''::text
+workflow_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+workflow_completed_at_ts_ms    | bigint                    | YES      | 
 
 FOREIGN KEYS:
-- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_messages_user_id_fkey]
 - contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_contact_messages_contact_method_id_fkey]
-- provider_event_id -> stephen_dcx_contact_message_provider_events(id) [stephen_dcx_contact_messages_provider_event_id_fkey]
 - detected_language_id -> stephen_dcx_languages(id) [stephen_dcx_contact_messages_detected_language_id_fkey]
 - in_reply_to_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_contact_messages_in_reply_to_message_id_fkey]
+- provider_event_id -> stephen_dcx_contact_message_provider_events(id) [stephen_dcx_contact_messages_provider_event_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_messages_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_contact_messages_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_contact_method_channel_confirmations
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+user_id                        | bigint                    | NO       | 
+contact_method_id              | bigint                    | NO       | 
+channel_origin_id              | bigint                    | NO       | 
+auth_challenge_id              | bigint                    | YES      | 
+confirmation_purpose           | text                      | NO       | 'contact_verification'::text
+confirmation_status            | text                      | NO       | 'pending'::text
+provider_message_id            | text                      | YES      | 
+template_name                  | text                      | NO       | ''::text
+template_language_code         | text                      | NO       | ''::text
+sent_at_ts_ms                  | bigint                    | YES      | 
+confirmed_at_ts_ms             | bigint                    | YES      | 
+expires_at_ts_ms               | bigint                    | YES      | 
+confirmation_metadata_json     | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_contact_method_channel_confirmations_user_id_fkey]
+- contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_contact_method_channel_confi_contact_method_id_fkey]
+- channel_origin_id -> stephen_dcx_channel_origins(id) [stephen_dcx_contact_method_channel_confi_channel_origin_id_fkey]
+- auth_challenge_id -> stephen_dcx_user_auth_challenges(id) [stephen_dcx_contact_method_channel_confi_auth_challenge_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_contact_method_channel_confirmations_pkey]
 
 
 ============================================================
@@ -210,8 +298,8 @@ updated_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 
 FOREIGN KEYS:
 - language_id -> stephen_dcx_languages(id) [stephen_dcx_content_page_categories_language_id_fkey]
-- version_of_id -> stephen_dcx_content_page_categories(id) [stephen_dcx_content_page_categories_version_of_id_fkey]
 - translation_of_id -> stephen_dcx_content_page_categories(id) [stephen_dcx_content_page_categories_translation_of_id_fkey]
+- version_of_id -> stephen_dcx_content_page_categories(id) [stephen_dcx_content_page_categories_version_of_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_content_page_categories_pkey]
@@ -243,8 +331,8 @@ updated_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 
 FOREIGN KEYS:
 - language_id -> stephen_dcx_languages(id) [stephen_dcx_content_pages_language_id_fkey]
-- version_of_id -> stephen_dcx_content_pages(id) [stephen_dcx_content_pages_version_of_id_fkey]
 - translation_of_id -> stephen_dcx_content_pages(id) [stephen_dcx_content_pages_translation_of_id_fkey]
+- version_of_id -> stephen_dcx_content_pages(id) [stephen_dcx_content_pages_version_of_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_content_pages_pkey]
@@ -268,8 +356,8 @@ FOREIGN KEYS:
 - None
 
 PRIMARY KEYS / UNIQUE:
-- PRIMARY KEY: id [stephen_dcx_countries_pkey]
 - UNIQUE: country_code_alpha2 [stephen_dcx_countries_country_code_alpha2_key]
+- PRIMARY KEY: id [stephen_dcx_countries_pkey]
 
 
 ============================================================
@@ -290,9 +378,62 @@ FOREIGN KEYS:
 - country_id -> stephen_dcx_countries(id) [stephen_dcx_country_calling_codes_country_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
-- PRIMARY KEY: id [stephen_dcx_country_calling_codes_pkey]
 - UNIQUE: country_id [stephen_dcx_country_calling_codes_country_id_calling_code_key]
 - UNIQUE: calling_code [stephen_dcx_country_calling_codes_country_id_calling_code_key]
+- PRIMARY KEY: id [stephen_dcx_country_calling_codes_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_email_sequence_enrollments
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_email_sequence_enrollments_id_seq'::regclass)
+sequence_id                    | bigint                    | NO       | 
+user_id                        | bigint                    | NO       | 
+enrollment_status              | text                      | NO       | 'active'::text
+current_step_order             | integer                   | NO       | 0
+started_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+completed_at_ts_ms             | bigint                    | YES      | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- sequence_id -> stephen_dcx_emails_sequences(id) [stephen_dcx_email_sequence_enrollments_sequence_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_email_sequence_enrollments_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_email_sequence_enrollments_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_email_sequence_step_deliveries
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_email_sequence_step_deliveries_id_seq'::regclass)
+enrollment_id                  | bigint                    | NO       | 
+sequence_id                    | bigint                    | NO       | 
+sequence_step_id               | bigint                    | NO       | 
+email_send_id                  | bigint                    | YES      | 
+user_id                        | bigint                    | NO       | 
+scheduled_send_at_ts_ms        | bigint                    | NO       | 
+delivery_status                | text                      | NO       | 'scheduled'::text
+provider_message_id            | text                      | YES      | 
+delivery_error                 | text                      | YES      | 
+delivery_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- sequence_step_id -> stephen_dcx_emails_sequence_steps(id) [stephen_dcx_email_sequence_step_deliverie_sequence_step_id_fkey]
+- email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_email_sequence_step_deliveries_email_send_id_fkey]
+- enrollment_id -> stephen_dcx_email_sequence_enrollments(id) [stephen_dcx_email_sequence_step_deliveries_enrollment_id_fkey]
+- sequence_id -> stephen_dcx_emails_sequences(id) [stephen_dcx_email_sequence_step_deliveries_sequence_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_email_sequence_step_deliveries_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_email_sequence_step_deliveries_pkey]
 
 
 ============================================================
@@ -315,8 +456,8 @@ updated_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 
 FOREIGN KEYS:
 - language_id -> stephen_dcx_languages(id) [stephen_dcx_emails_language_id_fkey]
-- version_of_id -> stephen_dcx_emails(id) [stephen_dcx_emails_version_of_id_fkey]
 - translation_of_id -> stephen_dcx_emails(id) [stephen_dcx_emails_translation_of_id_fkey]
+- version_of_id -> stephen_dcx_emails(id) [stephen_dcx_emails_version_of_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_pkey]
@@ -346,11 +487,11 @@ source_sequence_id             | bigint                    | YES      |
 source_sequence_step_id        | bigint                    | YES      | 
 
 FOREIGN KEYS:
-- source_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sends_source_email_id_fkey]
 - created_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_created_by_user_id_fkey]
-- updated_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_updated_by_user_id_fkey]
+- source_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sends_source_email_id_fkey]
 - source_sequence_id -> stephen_dcx_emails_sequences(id) [stephen_dcx_emails_sends_source_sequence_id_fkey]
 - source_sequence_step_id -> stephen_dcx_emails_sequence_steps(id) [stephen_dcx_emails_sends_source_sequence_step_id_fkey]
+- updated_by_user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_updated_by_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_sends_pkey]
@@ -372,8 +513,8 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 
 FOREIGN KEYS:
-- email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_emails_sends_link_clicks_email_send_id_fkey]
 - email_send_recipient_id -> stephen_dcx_emails_sends_recipients(id) [stephen_dcx_emails_sends_link_clic_email_send_recipient_id_fkey]
+- email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_emails_sends_link_clicks_email_send_id_fkey]
 - email_send_link_id -> stephen_dcx_emails_sends_links(id) [stephen_dcx_emails_sends_link_clicks_email_send_link_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
@@ -431,11 +572,11 @@ last_provider_event_at_ts_ms   | bigint                    | YES      |
 last_provider_event_type       | text                      | YES      | 
 
 FOREIGN KEYS:
-- email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_emails_sends_recipients_email_send_id_fkey]
-- user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_recipients_user_id_fkey]
-- resolved_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sends_recipients_resolved_email_id_fkey]
 - recipient_language_id_snapshot -> stephen_dcx_languages(id) [stephen_dcx_emails_sends_reci_recipient_language_id_snapsh_fkey]
 - resolved_language_id_snapshot -> stephen_dcx_languages(id) [stephen_dcx_emails_sends_reci_resolved_language_id_snapsho_fkey]
+- email_send_id -> stephen_dcx_emails_sends(id) [stephen_dcx_emails_sends_recipients_email_send_id_fkey]
+- resolved_email_id -> stephen_dcx_emails(id) [stephen_dcx_emails_sends_recipients_resolved_email_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_emails_sends_recipients_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_sends_recipients_pkey]
@@ -517,8 +658,8 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 
 FOREIGN KEYS:
-- user_id -> stephen_dcx_users(id) [stephen_dcx_emails_suppressions_user_id_fkey]
 - contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_emails_suppressions_contact_method_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_emails_suppressions_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_emails_suppressions_pkey]
@@ -544,7 +685,6 @@ file_metadata_json             | jsonb                     | NO       | '{}'::js
 is_private                     | boolean                   | NO       | true
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
-file_uuid                      | uuid                      | YES      | 
 analysis_status                | text                      | NO       | 'not_required'::text
 analysis_description_text      | text                      | NO       | ''::text
 analysis_transcription_text    | text                      | NO       | ''::text
@@ -555,14 +695,69 @@ analysis_metadata_json         | jsonb                     | NO       | '{}'::js
 analysis_completed_at_ts_ms    | bigint                    | YES      | 
 detected_language_id           | bigint                    | YES      | 
 analysis_summary_text          | text                      | NO       | ''::text
+file_uuid                      | uuid                      | YES      | 
 
 FOREIGN KEYS:
-- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_file_objects_owner_user_id_fkey]
 - detected_language_id -> stephen_dcx_languages(id) [stephen_dcx_file_objects_detected_language_id_fkey]
+- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_file_objects_owner_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
-- PRIMARY KEY: id [stephen_dcx_file_objects_pkey]
 - UNIQUE: file_uuid [stephen_dcx_file_objects_file_uuid_key]
+- PRIMARY KEY: id [stephen_dcx_file_objects_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_forum_comments
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+forum_post_id                  | bigint                    | NO       | 
+author_user_id                 | bigint                    | NO       | 
+source_contact_message_id      | bigint                    | YES      | 
+comment_text                   | text                      | NO       | ''::text
+language_code                  | text                      | NO       | 'en'::text
+comment_summary_text           | text                      | NO       | ''::text
+comment_metadata_json          | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- author_user_id -> stephen_dcx_users(id) [stephen_dcx_forum_comments_author_user_id_fkey]
+- forum_post_id -> stephen_dcx_forum_posts(id) [stephen_dcx_forum_comments_forum_post_id_fkey]
+- source_contact_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_forum_comments_source_contact_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_forum_comments_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_forum_posts
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+source_market_topic_id         | bigint                    | NO       | 
+owner_user_id                  | bigint                    | NO       | 
+source_message_id              | bigint                    | YES      | 
+visibility_status              | text                      | NO       | 'shareable'::text
+forum_post_status              | text                      | NO       | 'open'::text
+public_reference_code          | text                      | NO       | 
+share_token                    | text                      | YES      | 
+forum_title                    | text                      | NO       | ''::text
+forum_body_text                | text                      | NO       | ''::text
+forum_tags_json                | jsonb                     | NO       | '[]'::jsonb
+forum_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_forum_posts_owner_user_id_fkey]
+- source_market_topic_id -> stephen_dcx_market_topics(id) [stephen_dcx_forum_posts_source_market_topic_id_fkey]
+- source_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_forum_posts_source_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_forum_posts_pkey]
 
 
 ============================================================
@@ -584,8 +779,140 @@ FOREIGN KEYS:
 - None
 
 PRIMARY KEYS / UNIQUE:
-- PRIMARY KEY: id [stephen_dcx_languages_pkey]
 - UNIQUE: language_code [stephen_dcx_languages_language_code_key]
+- PRIMARY KEY: id [stephen_dcx_languages_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_llm_usage_events
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_llm_usage_events_id_seq'::regclass)
+user_id                        | bigint                    | NO       | 
+provider_name                  | text                      | NO       | ''::text
+model_name                     | text                      | NO       | ''::text
+prompt_version                 | text                      | NO       | ''::text
+usage_source_kind              | text                      | NO       | ''::text
+usage_source_id                | bigint                    | YES      | 
+prompt_token_count             | integer                   | NO       | 0
+candidates_token_count         | integer                   | NO       | 0
+total_token_count              | integer                   | NO       | 0
+usage_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_llm_usage_events_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_llm_usage_events_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_market_topic_turns
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_market_topic_turns_id_seq'::regclass)
+market_topic_id                | bigint                    | NO       | 
+turn_role                      | text                      | NO       | 
+source_message_id              | bigint                    | YES      | 
+turn_text                      | text                      | NO       | ''::text
+turn_metadata_json             | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+
+FOREIGN KEYS:
+- market_topic_id -> stephen_dcx_market_topics(id) [stephen_dcx_market_topic_turns_market_topic_id_fkey]
+- source_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_market_topic_turns_source_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_market_topic_turns_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_market_topics
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_market_topics_id_seq'::regclass)
+source_message_id              | bigint                    | NO       | 
+source_workflow_item_id        | bigint                    | NO       | 
+initiating_user_id             | bigint                    | YES      | 
+initiating_contact_method_id   | bigint                    | YES      | 
+topic_status                   | text                      | NO       | 'open'::text
+topic_title                    | text                      | NO       | ''::text
+topic_summary_text             | text                      | NO       | ''::text
+topic_scope_text               | text                      | NO       | ''::text
+topic_tags_json                | jsonb                     | NO       | '[]'::jsonb
+topic_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+visibility_status              | text                      | NO       | 'private'::text
+visibility_updated_at_ts_ms    | bigint                    | YES      | 
+visibility_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+
+FOREIGN KEYS:
+- initiating_contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_market_topics_initiating_contact_method_id_fkey]
+- initiating_user_id -> stephen_dcx_users(id) [stephen_dcx_market_topics_initiating_user_id_fkey]
+- source_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_market_topics_source_message_id_fkey]
+- source_workflow_item_id -> stephen_dcx_message_workflow_items(id) [stephen_dcx_market_topics_source_workflow_item_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_market_topics_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_message_workflow_items
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_message_workflow_items_id_seq'::regclass)
+message_id                     | bigint                    | NO       | 
+item_index                     | integer                   | NO       | 
+item_kind                      | text                      | NO       | 
+item_status                    | text                      | NO       | 'identified'::text
+item_title                     | text                      | NO       | ''::text
+item_summary_text              | text                      | NO       | ''::text
+source_excerpt_text            | text                      | NO       | ''::text
+referenced_attachment_ids_json | jsonb                     | NO       | '[]'::jsonb
+confidence_label               | text                      | NO       | ''::text
+workflow_item_metadata_json    | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+
+FOREIGN KEYS:
+- message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_message_workflow_items_message_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_message_workflow_items_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_outbound_interaction_routes
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+provider_type                  | text                      | NO       | 
+provider_message_id            | text                      | NO       | 
+recipient_user_id              | bigint                    | NO       | 
+route_kind                     | text                      | NO       | 
+route_id                       | bigint                    | NO       | 
+channel_type                   | text                      | NO       | 
+route_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+trade_thread_id                | bigint                    | YES      | 
+route_channel                  | text                      | YES      | 
+provider_thread_id             | text                      | YES      | 
+route_reference_code           | text                      | YES      | 
+
+FOREIGN KEYS:
+- recipient_user_id -> stephen_dcx_users(id) [stephen_dcx_outbound_interaction_routes_recipient_user_id_fkey]
+- trade_thread_id -> stephen_dcx_trade_threads(id) [stephen_dcx_outbound_interaction_routes_trade_thread_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_outbound_interaction_routes_pkey]
 
 
 ============================================================
@@ -605,8 +932,8 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 
 FOREIGN KEYS:
-- last_successful_publish_by_user_id -> stephen_dcx_users(id) [stephen_dcx_public_content_pu_last_successful_publish_by_u_fkey]
 - last_attempted_publish_by_user_id -> stephen_dcx_users(id) [stephen_dcx_public_content_pu_last_attempted_publish_by_us_fkey]
+- last_successful_publish_by_user_id -> stephen_dcx_users(id) [stephen_dcx_public_content_pu_last_successful_publish_by_u_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_public_content_publish_state_pkey]
@@ -656,6 +983,331 @@ PRIMARY KEYS / UNIQUE:
 
 
 ============================================================
+TABLE: stephen_dcx_trade_interest_alert_deliveries
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+trade_id                       | bigint                    | NO       | 
+trade_publication_id           | bigint                    | YES      | 
+recipient_user_id              | bigint                    | NO       | 
+material_key                   | text                      | NO       | 
+channel_type                   | text                      | NO       | 'app_only'::text
+delivery_status                | text                      | NO       | 'pending'::text
+provider_type                  | text                      | YES      | 
+provider_message_id            | text                      | YES      | 
+delivery_error                 | text                      | NO       | ''::text
+delivery_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- trade_publication_id -> stephen_dcx_trade_publications(id) [stephen_dcx_trade_interest_alert_deli_trade_publication_id_fkey]
+- recipient_user_id -> stephen_dcx_users(id) [stephen_dcx_trade_interest_alert_deliver_recipient_user_id_fkey]
+- material_key -> stephen_dcx_trade_interest_material_options(material_key) [stephen_dcx_trade_interest_alert_deliveries_material_key_fkey]
+- trade_id -> stephen_dcx_trades(id) [stephen_dcx_trade_interest_alert_deliveries_trade_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_interest_alert_deliveries_pkey]
+- UNIQUE: trade_id [stephen_dcx_trade_interest_alert_deliveries_unique_recipient_ma]
+- UNIQUE: recipient_user_id [stephen_dcx_trade_interest_alert_deliveries_unique_recipient_ma]
+- UNIQUE: material_key [stephen_dcx_trade_interest_alert_deliveries_unique_recipient_ma]
+
+
+============================================================
+TABLE: stephen_dcx_trade_interest_material_options
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+material_key                   | text                      | NO       | 
+display_label                  | text                      | NO       | 
+synonyms_json                  | jsonb                     | NO       | '[]'::jsonb
+sort_order                     | integer                   | NO       | 1000
+is_active                      | boolean                   | NO       | true
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- None
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: material_key [stephen_dcx_trade_interest_material_options_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_trade_publications
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+trade_id                       | bigint                    | NO       | 
+owner_user_id                  | bigint                    | NO       | 
+published_trade_version_id     | bigint                    | YES      | 
+visibility_status              | text                      | NO       | 'shareable'::text
+publication_status             | text                      | NO       | 'active'::text
+public_reference_code          | text                      | NO       | 
+share_token                    | text                      | YES      | 
+published_summary_json         | jsonb                     | NO       | '{}'::jsonb
+publication_metadata_json      | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_trade_publications_owner_user_id_fkey]
+- published_trade_version_id -> stephen_dcx_trade_versions(id) [stephen_dcx_trade_publications_published_trade_version_id_fkey]
+- trade_id -> stephen_dcx_trades(id) [stephen_dcx_trade_publications_trade_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_publications_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_trade_thread_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+thread_id                      | bigint                    | NO       | 
+source_contact_message_id      | bigint                    | YES      | 
+sender_user_id                 | bigint                    | NO       | 
+source_channel_type            | text                      | NO       | 'app'::text
+raw_message_text               | text                      | NO       | ''::text
+canonical_message_text         | text                      | NO       | ''::text
+message_summary_text           | text                      | NO       | ''::text
+language_code                  | text                      | NO       | 'en'::text
+translations_json              | jsonb                     | NO       | '{}'::jsonb
+message_metadata_json          | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- source_contact_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_trade_thread_message_source_contact_message_id_fkey]
+- sender_user_id -> stephen_dcx_users(id) [stephen_dcx_trade_thread_messages_sender_user_id_fkey]
+- thread_id -> stephen_dcx_trade_threads(id) [stephen_dcx_trade_thread_messages_thread_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_thread_messages_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_trade_thread_participant_routes
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+trade_thread_id                | bigint                    | NO       | 
+user_id                        | bigint                    | NO       | 
+current_route_channel          | text                      | NO       | 'app_only'::text
+current_route_contact_method_id | bigint                    | YES      | 
+route_source                   | text                      | NO       | 'account_default'::text
+route_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- current_route_contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_trade_thread_part_current_route_contact_method_fkey]
+- trade_thread_id -> stephen_dcx_trade_threads(id) [stephen_dcx_trade_thread_participant_route_trade_thread_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_trade_thread_participant_routes_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_thread_participant_routes_pkey]
+- UNIQUE: trade_thread_id [stephen_dcx_trade_thread_participant_routes_unique_user_thread]
+- UNIQUE: user_id [stephen_dcx_trade_thread_participant_routes_unique_user_thread]
+
+
+============================================================
+TABLE: stephen_dcx_trade_threads
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+trade_id                       | bigint                    | NO       | 
+trade_publication_id           | bigint                    | YES      | 
+owner_user_id                  | bigint                    | NO       | 
+counterparty_user_id           | bigint                    | NO       | 
+thread_status                  | text                      | NO       | 'open'::text
+thread_reference_code          | text                      | NO       | 
+thread_metadata_json           | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | 
+updated_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- counterparty_user_id -> stephen_dcx_users(id) [stephen_dcx_trade_threads_counterparty_user_id_fkey]
+- owner_user_id -> stephen_dcx_users(id) [stephen_dcx_trade_threads_owner_user_id_fkey]
+- trade_id -> stephen_dcx_trades(id) [stephen_dcx_trade_threads_trade_id_fkey]
+- trade_publication_id -> stephen_dcx_trade_publications(id) [stephen_dcx_trade_threads_trade_publication_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_threads_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_trade_versions
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_trade_versions_id_seq'::regclass)
+trade_id                       | bigint                    | NO       | 
+source_message_id              | bigint                    | NO       | 
+source_workflow_item_id        | bigint                    | NO       | 
+source_channel_type            | text                      | NO       | ''::text
+source_language_id             | bigint                    | YES      | 
+version_number                 | integer                   | NO       | 1
+is_live                        | boolean                   | NO       | true
+version_of_id                  | bigint                    | YES      | 
+version_source_type            | text                      | NO       | 'llm_projection'::text
+trade_projection_status        | text                      | NO       | 'completed'::text
+trade_confirmation_status      | text                      | NO       | 'pending_confirmation'::text
+trade_status                   | text                      | NO       | 'draft'::text
+raw_trade_side_text            | text                      | NO       | ''::text
+raw_material_text              | text                      | NO       | ''::text
+raw_quantity_text              | text                      | NO       | ''::text
+raw_price_text                 | text                      | NO       | ''::text
+raw_origin_text                | text                      | NO       | ''::text
+raw_destination_text           | text                      | NO       | ''::text
+raw_shipping_method_text       | text                      | NO       | ''::text
+raw_incoterm_text              | text                      | NO       | ''::text
+raw_delivery_window_text       | text                      | NO       | ''::text
+raw_quality_text               | text                      | NO       | ''::text
+raw_payment_terms_text         | text                      | NO       | ''::text
+raw_counterparty_scope_text    | text                      | NO       | ''::text
+normalized_trade_side          | text                      | NO       | ''::text
+normalized_material_name       | text                      | NO       | ''::text
+normalized_quantity_value      | numeric                   | YES      | 
+normalized_quantity_unit       | text                      | NO       | ''::text
+normalized_price_mode          | text                      | NO       | ''::text
+normalized_price_value         | numeric                   | YES      | 
+normalized_price_unit_basis    | text                      | NO       | ''::text
+normalized_currency_code       | text                      | NO       | ''::text
+normalized_total_price_value   | numeric                   | YES      | 
+normalized_origin_location     | text                      | NO       | ''::text
+normalized_destination_location | text                      | NO       | ''::text
+normalized_shipping_method     | text                      | NO       | ''::text
+normalized_incoterm_code       | text                      | NO       | ''::text
+normalized_delivery_window_start_text | text                      | NO       | ''::text
+normalized_delivery_window_end_text | text                      | NO       | ''::text
+normalized_quality_summary_text | text                      | NO       | ''::text
+normalized_payment_terms_summary_text | text                      | NO       | ''::text
+trade_summary_text             | text                      | NO       | ''::text
+trade_extraction_notes_text    | text                      | NO       | ''::text
+missing_required_fields_json   | jsonb                     | NO       | '[]'::jsonb
+trade_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+normalized_material_key        | text                      | NO       | ''::text
+
+FOREIGN KEYS:
+- source_language_id -> stephen_dcx_languages(id) [stephen_dcx_trade_versions_source_language_id_fkey]
+- source_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_trade_versions_source_message_id_fkey]
+- source_workflow_item_id -> stephen_dcx_message_workflow_items(id) [stephen_dcx_trade_versions_source_workflow_item_id_fkey]
+- trade_id -> stephen_dcx_trades(id) [stephen_dcx_trade_versions_trade_id_fkey]
+- version_of_id -> stephen_dcx_trade_versions(id) [stephen_dcx_trade_versions_version_of_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trade_versions_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_trades
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_trades_id_seq'::regclass)
+source_message_id              | bigint                    | NO       | 
+source_workflow_item_id        | bigint                    | NO       | 
+initiating_user_id             | bigint                    | YES      | 
+initiating_contact_method_id   | bigint                    | YES      | 
+source_channel_type            | text                      | NO       | ''::text
+source_language_id             | bigint                    | YES      | 
+trade_projection_status        | text                      | NO       | 'completed'::text
+trade_confirmation_status      | text                      | NO       | 'pending_confirmation'::text
+trade_status                   | text                      | NO       | 'draft'::text
+raw_trade_side_text            | text                      | NO       | ''::text
+raw_material_text              | text                      | NO       | ''::text
+raw_quantity_text              | text                      | NO       | ''::text
+raw_price_text                 | text                      | NO       | ''::text
+raw_origin_text                | text                      | NO       | ''::text
+raw_destination_text           | text                      | NO       | ''::text
+raw_shipping_method_text       | text                      | NO       | ''::text
+raw_incoterm_text              | text                      | NO       | ''::text
+raw_delivery_window_text       | text                      | NO       | ''::text
+raw_quality_text               | text                      | NO       | ''::text
+raw_payment_terms_text         | text                      | NO       | ''::text
+raw_counterparty_scope_text    | text                      | NO       | ''::text
+normalized_trade_side          | text                      | NO       | ''::text
+normalized_material_name       | text                      | NO       | ''::text
+normalized_quantity_value      | numeric                   | YES      | 
+normalized_quantity_unit       | text                      | NO       | ''::text
+normalized_price_mode          | text                      | NO       | ''::text
+normalized_price_value         | numeric                   | YES      | 
+normalized_price_unit_basis    | text                      | NO       | ''::text
+normalized_currency_code       | text                      | NO       | ''::text
+normalized_total_price_value   | numeric                   | YES      | 
+normalized_origin_location     | text                      | NO       | ''::text
+normalized_destination_location | text                      | NO       | ''::text
+normalized_shipping_method     | text                      | NO       | ''::text
+normalized_incoterm_code       | text                      | NO       | ''::text
+normalized_delivery_window_start_text | text                      | NO       | ''::text
+normalized_delivery_window_end_text | text                      | NO       | ''::text
+normalized_quality_summary_text | text                      | NO       | ''::text
+normalized_payment_terms_summary_text | text                      | NO       | ''::text
+trade_summary_text             | text                      | NO       | ''::text
+trade_extraction_notes_text    | text                      | NO       | ''::text
+missing_required_fields_json   | jsonb                     | NO       | '[]'::jsonb
+trade_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+updated_at_ts_ms               | bigint                    | NO       | (floor((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric)))::bigint
+trade_key                      | text                      | NO       | 
+source_message_id_initial      | bigint                    | NO       | 
+source_workflow_item_id_initial | bigint                    | NO       | 
+current_version_id             | bigint                    | YES      | 
+current_trade_projection_status | text                      | NO       | 'completed'::text
+current_trade_confirmation_status | text                      | NO       | 'pending_confirmation'::text
+current_trade_status           | text                      | NO       | 'draft'::text
+visibility_status              | text                      | NO       | 'private'::text
+visibility_updated_at_ts_ms    | bigint                    | YES      | 
+visibility_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+
+FOREIGN KEYS:
+- current_version_id -> stephen_dcx_trade_versions(id) [stephen_dcx_trades_current_version_id_fkey]
+- initiating_contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_trades_initiating_contact_method_id_fkey]
+- initiating_user_id -> stephen_dcx_users(id) [stephen_dcx_trades_initiating_user_id_fkey]
+- source_language_id -> stephen_dcx_languages(id) [stephen_dcx_trades_source_language_id_fkey]
+- source_message_id -> stephen_dcx_contact_messages(id) [stephen_dcx_trades_source_message_id_fkey]
+- source_message_id_initial -> stephen_dcx_contact_messages(id) [stephen_dcx_trades_source_message_id_initial_fkey]
+- source_workflow_item_id -> stephen_dcx_message_workflow_items(id) [stephen_dcx_trades_source_workflow_item_id_fkey]
+- source_workflow_item_id_initial -> stephen_dcx_message_workflow_items(id) [stephen_dcx_trades_source_workflow_item_id_initial_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_trades_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_user_activity_events
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | nextval('stephen_dcx_user_activity_events_id_seq'::regclass)
+user_id                        | bigint                    | NO       | 
+actor_user_id                  | bigint                    | YES      | 
+activity_kind                  | text                      | NO       | 
+surface                        | text                      | NO       | ''::text
+entity_kind                    | text                      | NO       | ''::text
+entity_id                      | bigint                    | YES      | 
+event_status                   | text                      | NO       | 'completed'::text
+activity_summary               | text                      | NO       | ''::text
+activity_metadata_json         | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- actor_user_id -> stephen_dcx_users(id) [stephen_dcx_user_activity_events_actor_user_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_activity_events_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_user_activity_events_pkey]
+
+
+============================================================
 TABLE: stephen_dcx_user_auth_challenges
 ============================================================
 COLUMN                         | TYPE                      | NULL?    | DEFAULT
@@ -689,8 +1341,8 @@ send_budget_window_started_at_ts_ms | bigint                    | YES      |
 send_budget_request_count      | integer                   | NO       | 0
 
 FOREIGN KEYS:
-- user_id -> stephen_dcx_users(id) [stephen_dcx_user_auth_challenges_user_id_fkey]
 - user_auth_identity_id -> stephen_dcx_user_auth_identities(id) [stephen_dcx_user_auth_challenges_user_auth_identity_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_auth_challenges_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_user_auth_challenges_pkey]
@@ -718,13 +1370,13 @@ updated_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 contact_method_id              | bigint                    | YES      | 
 
 FOREIGN KEYS:
-- user_id -> stephen_dcx_users(id) [stephen_dcx_user_auth_identities_user_id_fkey]
 - contact_method_id -> stephen_dcx_users_contact_methods(id) [stephen_dcx_user_auth_identities_contact_method_id_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_auth_identities_user_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
-- PRIMARY KEY: id [stephen_dcx_user_auth_identities_pkey]
 - UNIQUE: provider_type [stephen_dcx_user_auth_identit_provider_type_provider_subjec_key]
 - UNIQUE: provider_subject [stephen_dcx_user_auth_identit_provider_type_provider_subjec_key]
+- PRIMARY KEY: id [stephen_dcx_user_auth_identities_pkey]
 
 
 ============================================================
@@ -776,6 +1428,24 @@ PRIMARY KEYS / UNIQUE:
 
 
 ============================================================
+TABLE: stephen_dcx_user_trade_interest_materials
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+user_id                        | bigint                    | NO       | 
+material_key                   | text                      | NO       | 
+created_at_ts_ms               | bigint                    | NO       | 
+
+FOREIGN KEYS:
+- material_key -> stephen_dcx_trade_interest_material_options(material_key) [stephen_dcx_user_trade_interest_materials_material_key_fkey]
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_trade_interest_materials_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: user_id [stephen_dcx_user_trade_interest_materials_pkey]
+- PRIMARY KEY: material_key [stephen_dcx_user_trade_interest_materials_pkey]
+
+
+============================================================
 TABLE: stephen_dcx_users
 ============================================================
 COLUMN                         | TYPE                      | NULL?    | DEFAULT
@@ -790,10 +1460,18 @@ created_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 preferred_timezone_id          | bigint                    | YES      | 
 user_role                      | text                      | NO       | 'user'::text
+public_display_name            | text                      | NO       | ''::text
+public_handle                  | text                      | NO       | ''::text
+public_identity_mode           | text                      | NO       | 'display_name'::text
+default_interaction_channel    | text                      | NO       | 'app_only'::text
+sidebar_clock_timezone_id_1    | bigint                    | YES      | 
+sidebar_clock_timezone_id_2    | bigint                    | YES      | 
 
 FOREIGN KEYS:
 - preferred_language_id -> stephen_dcx_languages(id) [stephen_dcx_users_preferred_language_id_fkey]
 - preferred_timezone_id -> stephen_dcx_timezones(id) [stephen_dcx_users_preferred_timezone_id_fkey]
+- sidebar_clock_timezone_id_1 -> stephen_dcx_timezones(id) [stephen_dcx_users_sidebar_clock_timezone_id_1_fkey]
+- sidebar_clock_timezone_id_2 -> stephen_dcx_timezones(id) [stephen_dcx_users_sidebar_clock_timezone_id_2_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_users_pkey]
@@ -849,8 +1527,8 @@ updated_at_ts_ms               | bigint                    | NO       | ((EXTRAC
 
 FOREIGN KEYS:
 - language_id -> stephen_dcx_languages(id) [stephen_dcx_ux_strings_language_id_fkey]
-- version_of_id -> stephen_dcx_ux_strings(id) [stephen_dcx_ux_strings_version_of_id_fkey]
 - translation_of_id -> stephen_dcx_ux_strings(id) [stephen_dcx_ux_strings_translation_of_id_fkey]
+- version_of_id -> stephen_dcx_ux_strings(id) [stephen_dcx_ux_strings_version_of_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_ux_strings_pkey]

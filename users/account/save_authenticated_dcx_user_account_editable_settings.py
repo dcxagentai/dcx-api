@@ -32,6 +32,10 @@ ALLOWED_DEFAULT_INTERACTION_CHANNELS = {
     "whatsapp",
 }
 
+MAX_USER_LANGUAGE_COUNT = 5
+MAX_USER_TIMEZONE_COUNT = 3
+MAX_USER_COUNTRY_COUNT = 25
+
 PUBLIC_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 
 
@@ -46,6 +50,9 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     default_interaction_channel: str,
     trade_interest_material_keys: list[str] | None = None,
     sidebar_clock_timezone_ids: list[int] | None = None,
+    selected_language_ids: list[int] | None = None,
+    selected_timezone_ids: list[int] | None = None,
+    selected_country_ids: list[int] | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -204,56 +211,105 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     normalized_sidebar_clock_timezone_ids = _normalize_sidebar_clock_timezone_ids(
         sidebar_clock_timezone_ids
     )
+    normalized_selected_language_ids = (
+        _normalize_ordered_reference_ids(
+            selected_language_ids,
+            max_count=MAX_USER_LANGUAGE_COUNT,
+            error_code="API_AUTHENTICATED_DCX_USER_ACCOUNT_LANGUAGE_INVALID",
+        )
+        if selected_language_ids is not None
+        else ([preferred_language_id] if preferred_language_id is not None else [])
+    )
+    normalized_selected_timezone_ids = (
+        _normalize_ordered_reference_ids(
+            selected_timezone_ids,
+            max_count=MAX_USER_TIMEZONE_COUNT,
+            error_code="API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID",
+        )
+        if selected_timezone_ids is not None
+        else _normalize_ordered_reference_ids(
+            ([preferred_timezone_id] if preferred_timezone_id is not None else [])
+            + normalized_sidebar_clock_timezone_ids,
+            max_count=MAX_USER_TIMEZONE_COUNT,
+            error_code="API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID",
+        )
+    )
+    normalized_selected_country_ids = (
+        _normalize_ordered_reference_ids(
+            selected_country_ids,
+            max_count=MAX_USER_COUNTRY_COUNT,
+            error_code="API_AUTHENTICATED_DCX_USER_ACCOUNT_COUNTRY_INVALID",
+        )
+        if selected_country_ids is not None
+        else []
+    )
+    normalized_preferred_language_id = (
+        normalized_selected_language_ids[0]
+        if normalized_selected_language_ids
+        else None
+    )
+    normalized_preferred_timezone_id = (
+        normalized_selected_timezone_ids[0]
+        if normalized_selected_timezone_ids
+        else None
+    )
+    normalized_sidebar_clock_timezone_ids = normalized_selected_timezone_ids[1:3]
 
     connect = connect_to_database or psycopg2.connect
 
     try:
         with connect(**DB_CONFIG) as connection:
             with connection.cursor() as cursor:
-                if preferred_language_id is not None:
+                if normalized_selected_language_ids:
                     cursor.execute(
                         """
-                        SELECT 1
+                        SELECT id
                         FROM stephen_dcx_languages
-                        WHERE id = %s
+                        WHERE id = ANY(%s)
                           AND is_active = TRUE
-                        LIMIT 1
                         """,
-                        (preferred_language_id,),
+                        (normalized_selected_language_ids,),
                     )
-                    if cursor.fetchone() is None:
+                    active_language_ids = {
+                        row[0]
+                        for row in cursor.fetchall()
+                    }
+                    if active_language_ids != set(normalized_selected_language_ids):
                         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_LANGUAGE_INVALID")
 
-                if preferred_timezone_id is not None:
-                    cursor.execute(
-                        """
-                        SELECT 1
-                        FROM stephen_dcx_timezones
-                        WHERE id = %s
-                          AND is_active = TRUE
-                        LIMIT 1
-                        """,
-                        (preferred_timezone_id,),
-                    )
-                    if cursor.fetchone() is None:
-                        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
-
-                if normalized_sidebar_clock_timezone_ids:
+                if normalized_selected_timezone_ids:
                     cursor.execute(
                         """
                         SELECT id
                         FROM stephen_dcx_timezones
-                        WHERE is_active = TRUE
-                          AND id = ANY(%s)
+                        WHERE id = ANY(%s)
+                          AND is_active = TRUE
                         """,
-                        (normalized_sidebar_clock_timezone_ids,),
+                        (normalized_selected_timezone_ids,),
                     )
-                    active_sidebar_clock_timezone_ids = {
+                    active_timezone_ids = {
                         row[0]
                         for row in cursor.fetchall()
                     }
-                    if active_sidebar_clock_timezone_ids != set(normalized_sidebar_clock_timezone_ids):
+                    if active_timezone_ids != set(normalized_selected_timezone_ids):
                         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_TIMEZONE_INVALID")
+
+                if normalized_selected_country_ids:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM stephen_dcx_countries
+                        WHERE id = ANY(%s)
+                          AND is_active = TRUE
+                        """,
+                        (normalized_selected_country_ids,),
+                    )
+                    active_country_ids = {
+                        row[0]
+                        for row in cursor.fetchall()
+                    }
+                    if active_country_ids != set(normalized_selected_country_ids):
+                        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_COUNTRY_INVALID")
 
                 if normalized_public_handle:
                     cursor.execute(
@@ -307,8 +363,8 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                     RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel, sidebar_clock_timezone_id_1, sidebar_clock_timezone_id_2
                     """,
                     (
-                        preferred_language_id,
-                        preferred_timezone_id,
+                        normalized_preferred_language_id,
+                        normalized_preferred_timezone_id,
                         normalized_email_communication_preference,
                         normalized_public_display_name,
                         normalized_public_handle,
@@ -326,6 +382,87 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                 saved_row = cursor.fetchone()
                 if saved_row is not None:
                     now_ts_ms = _read_current_timestamp_ms()
+                    cursor.execute(
+                        """
+                        DELETE FROM stephen_dcx_user_languages
+                        WHERE user_id = %s
+                        """,
+                        (authenticated_user_id,),
+                    )
+                    for index, language_id in enumerate(normalized_selected_language_ids, start=1):
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_user_languages (
+                                user_id,
+                                language_id,
+                                sort_order,
+                                created_at_ts_ms,
+                                updated_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (
+                                authenticated_user_id,
+                                language_id,
+                                index,
+                                now_ts_ms,
+                                now_ts_ms,
+                            ),
+                        )
+                    cursor.execute(
+                        """
+                        DELETE FROM stephen_dcx_user_timezones
+                        WHERE user_id = %s
+                        """,
+                        (authenticated_user_id,),
+                    )
+                    for index, timezone_id in enumerate(normalized_selected_timezone_ids, start=1):
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_user_timezones (
+                                user_id,
+                                timezone_id,
+                                sort_order,
+                                created_at_ts_ms,
+                                updated_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (
+                                authenticated_user_id,
+                                timezone_id,
+                                index,
+                                now_ts_ms,
+                                now_ts_ms,
+                            ),
+                        )
+                    cursor.execute(
+                        """
+                        DELETE FROM stephen_dcx_user_countries
+                        WHERE user_id = %s
+                        """,
+                        (authenticated_user_id,),
+                    )
+                    for index, country_id in enumerate(normalized_selected_country_ids, start=1):
+                        cursor.execute(
+                            """
+                            INSERT INTO stephen_dcx_user_countries (
+                                user_id,
+                                country_id,
+                                sort_order,
+                                created_at_ts_ms,
+                                updated_at_ts_ms
+                            )
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (
+                                authenticated_user_id,
+                                country_id,
+                                index,
+                                now_ts_ms,
+                                now_ts_ms,
+                            ),
+                        )
                     cursor.execute(
                         """
                         DELETE FROM stephen_dcx_user_trade_interest_materials
@@ -367,6 +504,9 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "public_handle": saved_row[5],
         "public_identity_mode": saved_row[6],
         "default_interaction_channel": saved_row[7],
+        "selected_language_ids": normalized_selected_language_ids,
+        "selected_timezone_ids": normalized_selected_timezone_ids,
+        "selected_country_ids": normalized_selected_country_ids,
         "sidebar_clock_timezone_ids": [
             saved_timezone_id
             for saved_timezone_id in [saved_row[8], saved_row[9]]
@@ -397,6 +537,28 @@ def _normalize_trade_interest_material_keys(value: list[str] | None) -> list[str
         normalized_keys.append(normalized_key)
         seen_keys.add(normalized_key)
     return normalized_keys
+
+
+def _normalize_ordered_reference_ids(value: list[int] | None, max_count: int, error_code: str) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RuntimeError(error_code)
+
+    normalized_ids: list[int] = []
+    seen_ids: set[int] = set()
+    for raw_id in value:
+        if not isinstance(raw_id, int) or raw_id <= 0:
+            raise RuntimeError(error_code)
+        if raw_id in seen_ids:
+            continue
+        normalized_ids.append(raw_id)
+        seen_ids.add(raw_id)
+
+    if len(normalized_ids) > max_count:
+        raise RuntimeError(error_code)
+
+    return normalized_ids
 
 
 def _normalize_sidebar_clock_timezone_ids(value: list[int] | None) -> list[int]:

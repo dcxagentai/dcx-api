@@ -117,8 +117,22 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         (4, "de", "German", "Deutsch", False),
                     ],
                     [
-                        (1, "Europe/London", "(UTC+0/+1) London", "Europe"),
-                        (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe"),
+                        (1, "Europe/London", "(UTC+0/+1) London", "Europe", "GB", "United Kingdom", "gb"),
+                        (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe", "ES", "Spain", "es"),
+                    ],
+                    [
+                        (44, "GB", "United Kingdom", "gb"),
+                        (34, "ES", "Spain", "es"),
+                    ],
+                    [
+                        (4, "de", "German", "Deutsch", False),
+                    ],
+                    [
+                        (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe", "ES", "Spain", "es"),
+                        (1, "Europe/London", "(UTC+0/+1) London", "Europe", "GB", "United Kingdom", "gb"),
+                    ],
+                    [
+                        (34, "ES", "Spain", "es"),
                     ],
                     [
                         (
@@ -272,12 +286,63 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "iana_name": "Europe/London",
                 "display_label": "(UTC+0/+1) London",
                 "region_label": "Europe",
+                "country_code_alpha2": "GB",
+                "country_display_name": "United Kingdom",
+                "flag_asset_key": "gb",
             },
             {
                 "id": 2,
                 "iana_name": "Europe/Madrid",
                 "display_label": "(UTC+1/+2) Madrid",
                 "region_label": "Europe",
+                "country_code_alpha2": "ES",
+                "country_display_name": "Spain",
+                "flag_asset_key": "es",
+            },
+        ],
+        "available_countries": [
+            {
+                "id": 44,
+                "country_code_alpha2": "GB",
+                "default_display_name": "United Kingdom",
+                "flag_asset_key": "gb",
+            },
+            {
+                "id": 34,
+                "country_code_alpha2": "ES",
+                "default_display_name": "Spain",
+                "flag_asset_key": "es",
+            },
+        ],
+        "selected_language_ids": [4],
+        "selected_languages": [
+            {
+                "id": 4,
+                "language_code": "de",
+                "language_name_en": "German",
+                "language_name_native": "Deutsch",
+                "is_rtl": False,
+            }
+        ],
+        "selected_timezone_ids": [2, 1],
+        "selected_timezones": [
+            {
+                "id": 2,
+                "iana_name": "Europe/Madrid",
+                "display_label": "(UTC+1/+2) Madrid",
+                "region_label": "Europe",
+                "country_code_alpha2": "ES",
+                "country_display_name": "Spain",
+                "flag_asset_key": "es",
+            },
+            {
+                "id": 1,
+                "iana_name": "Europe/London",
+                "display_label": "(UTC+0/+1) London",
+                "region_label": "Europe",
+                "country_code_alpha2": "GB",
+                "country_display_name": "United Kingdom",
+                "flag_asset_key": "gb",
             },
         ],
         "ux_strings": {
@@ -336,19 +401,25 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "sort_order": 20,
             },
         ],
-        "selected_sidebar_clock_timezone_ids": [1, 2],
+        "selected_sidebar_clock_timezone_ids": [1],
         "selected_sidebar_clock_timezones": [
             {
                 "id": 1,
                 "iana_name": "Europe/London",
                 "display_label": "(UTC+0/+1) London",
                 "region_label": "Europe",
+                "country_code_alpha2": "GB",
+                "country_display_name": "United Kingdom",
+                "flag_asset_key": "gb",
             },
+        ],
+        "selected_country_ids": [34],
+        "selected_countries": [
             {
-                "id": 2,
-                "iana_name": "Europe/Madrid",
-                "display_label": "(UTC+1/+2) Madrid",
-                "region_label": "Europe",
+                "id": 34,
+                "country_code_alpha2": "ES",
+                "default_display_name": "Spain",
+                "flag_asset_key": "es",
             },
         ],
         "selected_trade_interest_material_keys": ["aluminum"],
@@ -418,9 +489,16 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         (2, "es", "Spanish", "Español", False),
                     ],
                     [
-                        (1, "Europe/London", "(UTC+0/+1) London", "Europe"),
-                        (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe"),
+                        (1, "Europe/London", "(UTC+0/+1) London", "Europe", "GB", "United Kingdom", "gb"),
+                        (2, "Europe/Madrid", "(UTC+1/+2) Madrid", "Europe", "ES", "Spain", "es"),
                     ],
+                    [
+                        (44, "GB", "United Kingdom", "gb"),
+                        (34, "ES", "Spain", "es"),
+                    ],
+                    [],
+                    [],
+                    [],
                     [
                         (
                             31,
@@ -455,6 +533,13 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     assert result["selected_trade_interest_material_keys"] == []
     assert result["selected_sidebar_clock_timezone_ids"] == []
     assert result["selected_sidebar_clock_timezones"] == []
+    assert result["selected_language_ids"] == []
+    assert result["selected_languages"] == []
+    assert result["selected_timezone_ids"] == []
+    assert result["selected_timezones"] == []
+    assert result["selected_country_ids"] == []
+    assert result["selected_countries"] == []
+    assert len(result["available_countries"]) == 2
     assert result["ux_strings"]["page_title"] == "Account"
     assert result["user_id"] == 6
     assert len(result["available_languages"]) == 2

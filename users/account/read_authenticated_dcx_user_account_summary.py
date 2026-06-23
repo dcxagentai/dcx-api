@@ -220,13 +220,92 @@ def read_authenticated_dcx_user_account_summary_capability(
                         id,
                         iana_name,
                         display_label,
-                        region_label
-                    FROM stephen_dcx_timezones
-                    WHERE is_active = TRUE
-                    ORDER BY sort_order ASC, display_label ASC
+                        region_label,
+                        country.country_code_alpha2,
+                        country.default_display_name,
+                        country.flag_asset_key
+                    FROM stephen_dcx_timezones timezone
+                    LEFT JOIN stephen_dcx_countries country
+                      ON country.id = timezone.country_id
+                    WHERE timezone.is_active = TRUE
+                    ORDER BY timezone.sort_order ASC, timezone.display_label ASC
                     """
                 )
                 available_timezone_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        country_code_alpha2,
+                        default_display_name,
+                        flag_asset_key
+                    FROM stephen_dcx_countries
+                    WHERE is_active = TRUE
+                    ORDER BY sort_order ASC, default_display_name ASC
+                    """
+                )
+                available_country_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        language.id,
+                        language.language_code,
+                        language.language_name_en,
+                        language.language_name_native,
+                        language.is_rtl
+                    FROM stephen_dcx_user_languages user_language
+                    JOIN stephen_dcx_languages language
+                      ON language.id = user_language.language_id
+                    WHERE user_language.user_id = %s
+                      AND language.is_active = TRUE
+                    ORDER BY user_language.sort_order ASC, language.language_code ASC
+                    """,
+                    (authenticated_user_id,),
+                )
+                selected_language_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        timezone.id,
+                        timezone.iana_name,
+                        timezone.display_label,
+                        timezone.region_label,
+                        country.country_code_alpha2,
+                        country.default_display_name,
+                        country.flag_asset_key
+                    FROM stephen_dcx_user_timezones user_timezone
+                    JOIN stephen_dcx_timezones timezone
+                      ON timezone.id = user_timezone.timezone_id
+                    LEFT JOIN stephen_dcx_countries country
+                      ON country.id = timezone.country_id
+                    WHERE user_timezone.user_id = %s
+                      AND timezone.is_active = TRUE
+                    ORDER BY user_timezone.sort_order ASC, timezone.display_label ASC
+                    """,
+                    (authenticated_user_id,),
+                )
+                selected_timezone_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        country.id,
+                        country.country_code_alpha2,
+                        country.default_display_name,
+                        country.flag_asset_key
+                    FROM stephen_dcx_user_countries user_country
+                    JOIN stephen_dcx_countries country
+                      ON country.id = user_country.country_id
+                    WHERE user_country.user_id = %s
+                      AND country.is_active = TRUE
+                    ORDER BY user_country.sort_order ASC, country.default_display_name ASC
+                    """,
+                    (authenticated_user_id,),
+                )
+                selected_country_rows = cursor.fetchall()
 
                 cursor.execute(
                     """
@@ -409,14 +488,18 @@ def read_authenticated_dcx_user_account_summary_capability(
         }
 
     available_languages = [
-        {
-            "id": available_language_row[0],
-            "language_code": available_language_row[1],
-            "language_name_en": available_language_row[2],
-            "language_name_native": available_language_row[3],
-            "is_rtl": available_language_row[4],
-        }
+        _read_language_payload(available_language_row)
         for available_language_row in available_language_rows
+    ]
+    selected_languages = [
+        _read_language_payload(selected_language_row)
+        for selected_language_row in selected_language_rows
+    ]
+    if not selected_languages and preferred_language is not None:
+        selected_languages = [preferred_language]
+    selected_language_ids = [
+        selected_language["id"]
+        for selected_language in selected_languages
     ]
 
     preferred_timezone = None
@@ -429,17 +512,22 @@ def read_authenticated_dcx_user_account_summary_capability(
         }
 
     available_timezones = [
-        {
-            "id": available_timezone_row[0],
-            "iana_name": available_timezone_row[1],
-            "display_label": available_timezone_row[2],
-            "region_label": available_timezone_row[3],
-        }
+        _read_timezone_payload(available_timezone_row)
         for available_timezone_row in available_timezone_rows
     ]
-    selected_sidebar_clock_timezones = []
+    available_countries = [
+        _read_country_payload(available_country_row)
+        for available_country_row in available_country_rows
+    ]
+    selected_timezones = [
+        _read_timezone_payload(selected_timezone_row)
+        for selected_timezone_row in selected_timezone_rows
+    ]
+    legacy_selected_timezones = []
+    if preferred_timezone is not None:
+        legacy_selected_timezones.append(preferred_timezone)
     if user_row[27] is not None:
-        selected_sidebar_clock_timezones.append(
+        legacy_selected_timezones.append(
             {
                 "id": user_row[27],
                 "iana_name": user_row[28],
@@ -448,7 +536,7 @@ def read_authenticated_dcx_user_account_summary_capability(
             }
         )
     if user_row[31] is not None and user_row[31] != user_row[27]:
-        selected_sidebar_clock_timezones.append(
+        legacy_selected_timezones.append(
             {
                 "id": user_row[31],
                 "iana_name": user_row[32],
@@ -456,9 +544,30 @@ def read_authenticated_dcx_user_account_summary_capability(
                 "region_label": user_row[34],
             }
         )
+    if not selected_timezones:
+        selected_timezones = []
+        seen_timezone_ids = set()
+        for selected_timezone in legacy_selected_timezones:
+            if selected_timezone["id"] in seen_timezone_ids:
+                continue
+            selected_timezones.append(selected_timezone)
+            seen_timezone_ids.add(selected_timezone["id"])
+    selected_timezone_ids = [
+        selected_timezone["id"]
+        for selected_timezone in selected_timezones
+    ]
+    selected_sidebar_clock_timezones = selected_timezones[1:3]
     selected_sidebar_clock_timezone_ids = [
         selected_timezone["id"]
         for selected_timezone in selected_sidebar_clock_timezones
+    ]
+    selected_countries = [
+        _read_country_payload(selected_country_row)
+        for selected_country_row in selected_country_rows
+    ]
+    selected_country_ids = [
+        selected_country["id"]
+        for selected_country in selected_countries
     ]
 
     email_contact_methods = [
@@ -589,8 +698,15 @@ def read_authenticated_dcx_user_account_summary_capability(
         "pending_whatsapp_phone_link": pending_whatsapp_phone_link,
         "available_languages": available_languages,
         "available_timezones": available_timezones,
+        "available_countries": available_countries,
+        "selected_language_ids": selected_language_ids,
+        "selected_languages": selected_languages,
+        "selected_timezone_ids": selected_timezone_ids,
+        "selected_timezones": selected_timezones,
         "selected_sidebar_clock_timezone_ids": selected_sidebar_clock_timezone_ids,
         "selected_sidebar_clock_timezones": selected_sidebar_clock_timezones,
+        "selected_country_ids": selected_country_ids,
+        "selected_countries": selected_countries,
         "ux_strings": ux_strings,
         "available_email_communication_preferences": [
             {
@@ -641,6 +757,37 @@ def read_authenticated_dcx_user_account_summary_capability(
         ],
         "available_trade_interest_materials": available_trade_interest_materials,
         "selected_trade_interest_material_keys": selected_trade_interest_material_keys,
+    }
+
+
+def _read_language_payload(language_row: tuple) -> dict:
+    return {
+        "id": language_row[0],
+        "language_code": language_row[1],
+        "language_name_en": language_row[2],
+        "language_name_native": language_row[3],
+        "is_rtl": language_row[4],
+    }
+
+
+def _read_timezone_payload(timezone_row: tuple) -> dict:
+    return {
+        "id": timezone_row[0],
+        "iana_name": timezone_row[1],
+        "display_label": timezone_row[2],
+        "region_label": timezone_row[3],
+        "country_code_alpha2": _read_row_value(timezone_row, 4),
+        "country_display_name": _read_row_value(timezone_row, 5),
+        "flag_asset_key": _read_row_value(timezone_row, 6),
+    }
+
+
+def _read_country_payload(country_row: tuple) -> dict:
+    return {
+        "id": country_row[0],
+        "country_code_alpha2": country_row[1],
+        "default_display_name": country_row[2],
+        "flag_asset_key": country_row[3],
     }
 
 
