@@ -217,10 +217,10 @@ def read_authenticated_dcx_user_account_summary_capability(
                 cursor.execute(
                     """
                     SELECT
-                        id,
-                        iana_name,
-                        display_label,
-                        region_label,
+                        timezone.id,
+                        timezone.iana_name,
+                        timezone.display_label,
+                        timezone.region_label,
                         country.country_code_alpha2,
                         country.default_display_name,
                         country.flag_asset_key
