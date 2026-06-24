@@ -464,7 +464,7 @@ def read_authenticated_dcx_user_account_summary_capability(
                     SELECT material_key
                     FROM stephen_dcx_user_trade_interest_materials
                     WHERE user_id = %s
-                    ORDER BY material_key ASC
+                    ORDER BY sort_order ASC, material_key ASC
                     """,
                     (authenticated_user_id,),
                 )

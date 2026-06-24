@@ -470,20 +470,22 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         """,
                         (authenticated_user_id,),
                     )
-                    for material_key in normalized_trade_interest_material_keys:
+                    for index, material_key in enumerate(normalized_trade_interest_material_keys, start=1):
                         cursor.execute(
                             """
                             INSERT INTO stephen_dcx_user_trade_interest_materials (
                                 user_id,
                                 material_key,
+                                sort_order,
                                 created_at_ts_ms
                             )
-                            VALUES (%s, %s, %s)
+                            VALUES (%s, %s, %s, %s)
                             ON CONFLICT (user_id, material_key) DO NOTHING
                             """,
                             (
                                 authenticated_user_id,
                                 material_key,
+                                index,
                                 now_ts_ms,
                             ),
                         )
