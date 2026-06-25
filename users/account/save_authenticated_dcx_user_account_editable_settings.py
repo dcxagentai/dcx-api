@@ -32,6 +32,27 @@ ALLOWED_DEFAULT_INTERACTION_CHANNELS = {
     "whatsapp",
 }
 
+ALLOWED_NETWORK_DM_ACCEPTANCE_MODES = {
+    "everyone",
+    "following",
+    "none",
+}
+
+RESERVED_PUBLIC_HANDLES = {
+    "feed",
+    "dms",
+    "settings",
+    "admin",
+    "me",
+    "new",
+    "trades",
+    "ai",
+    "login",
+    "logout",
+    "profile",
+    "profiles",
+}
+
 MAX_USER_LANGUAGE_COUNT = 5
 MAX_USER_TIMEZONE_COUNT = 3
 MAX_USER_COUNTRY_COUNT = 25
@@ -48,6 +69,8 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     public_handle: str,
     public_identity_mode: str,
     default_interaction_channel: str,
+    network_dm_acceptance_mode: str = "everyone",
+    network_profile_image_url: str = "",
     trade_interest_material_keys: list[str] | None = None,
     sidebar_clock_timezone_ids: list[int] | None = None,
     selected_language_ids: list[int] | None = None,
@@ -179,8 +202,15 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     if len(normalized_public_display_name) > 80:
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
 
-    normalized_public_handle = public_handle.strip().removeprefix("@") if isinstance(public_handle, str) else ""
-    if normalized_public_handle and PUBLIC_HANDLE_PATTERN.fullmatch(normalized_public_handle) is None:
+    normalized_public_handle = (
+        public_handle.strip().lower().removeprefix("@")
+        if isinstance(public_handle, str)
+        else ""
+    )
+    if normalized_public_handle and (
+        PUBLIC_HANDLE_PATTERN.fullmatch(normalized_public_handle) is None
+        or normalized_public_handle in RESERVED_PUBLIC_HANDLES
+    ):
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID")
 
     normalized_public_identity_mode = public_identity_mode.strip().lower() if isinstance(public_identity_mode, str) else ""
@@ -194,6 +224,27 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
     )
     if normalized_default_interaction_channel not in ALLOWED_DEFAULT_INTERACTION_CHANNELS:
         raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_DEFAULT_INTERACTION_CHANNEL_INVALID")
+
+    normalized_network_dm_acceptance_mode = (
+        network_dm_acceptance_mode.strip().lower()
+        if isinstance(network_dm_acceptance_mode, str)
+        else ""
+    )
+    if normalized_network_dm_acceptance_mode not in ALLOWED_NETWORK_DM_ACCEPTANCE_MODES:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_NETWORK_PROFILE_INVALID")
+
+    normalized_network_profile_image_url = (
+        network_profile_image_url.strip()
+        if isinstance(network_profile_image_url, str)
+        else ""
+    )
+    if len(normalized_network_profile_image_url) > 2048:
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_NETWORK_PROFILE_INVALID")
+    if normalized_network_profile_image_url and not (
+        normalized_network_profile_image_url.startswith("https://")
+        or normalized_network_profile_image_url.startswith("http://")
+    ):
+        raise RuntimeError("API_AUTHENTICATED_DCX_USER_ACCOUNT_NETWORK_PROFILE_INVALID")
 
     if preferred_language_id is not None and (
         not isinstance(preferred_language_id, int) or preferred_language_id <= 0
@@ -356,11 +407,13 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         public_handle = %s,
                         public_identity_mode = %s,
                         default_interaction_channel = %s,
+                        network_dm_acceptance_mode = %s,
+                        network_profile_image_url = %s,
                         sidebar_clock_timezone_id_1 = %s,
                         sidebar_clock_timezone_id_2 = %s,
                         updated_at_ts_ms = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::BIGINT
                     WHERE id = %s
-                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel, sidebar_clock_timezone_id_1, sidebar_clock_timezone_id_2
+                    RETURNING id, preferred_language_id, preferred_timezone_id, email_communication_preference, public_display_name, public_handle, public_identity_mode, default_interaction_channel, sidebar_clock_timezone_id_1, sidebar_clock_timezone_id_2, network_dm_acceptance_mode, network_profile_image_url
                     """,
                     (
                         normalized_preferred_language_id,
@@ -370,6 +423,8 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
                         normalized_public_handle,
                         normalized_public_identity_mode,
                         normalized_default_interaction_channel,
+                        normalized_network_dm_acceptance_mode,
+                        normalized_network_profile_image_url,
                         normalized_sidebar_clock_timezone_ids[0]
                         if len(normalized_sidebar_clock_timezone_ids) >= 1
                         else None,
@@ -506,6 +561,8 @@ def save_authenticated_dcx_user_account_editable_settings_capability(
         "public_handle": saved_row[5],
         "public_identity_mode": saved_row[6],
         "default_interaction_channel": saved_row[7],
+        "network_dm_acceptance_mode": saved_row[10],
+        "network_profile_image_url": saved_row[11],
         "selected_language_ids": normalized_selected_language_ids,
         "selected_timezone_ids": normalized_selected_timezone_ids,
         "selected_country_ids": normalized_selected_country_ids,

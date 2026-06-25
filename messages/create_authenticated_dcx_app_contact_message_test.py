@@ -53,22 +53,50 @@ class _ConnectFactory:
         return self._connections.pop(0)
 
 
-def test_creates_ready_message_job_and_analysis_run_when_derivation_succeeds() -> None:
+def test_creates_ready_message_job_and_analysis_run_when_derivation_succeeds(monkeypatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     first_connection = _FakeConnection(_FakeCursor([(77,), (7001,)]))
     second_connection = _FakeConnection(_FakeCursor([]))
     third_connection = _FakeConnection(
         _FakeCursor(
-            [(7001, "app", "dcx_app", "text", "", "Hola, vendo trigo.", "queued", "pending", "pending"), None, (9001,)],
+            [
+                (
+                    7001,
+                    "app",
+                    "dcx_app",
+                    "text",
+                    "",
+                    "Hola, vendo trigo.",
+                    77,
+                    None,
+                    "queued",
+                    "pending",
+                    "pending",
+                    {},
+                    "pending",
+                    "",
+                    False,
+                    False,
+                    False,
+                    "",
+                    {},
+                    "",
+                ),
+                None,
+                (9001,),
+            ],
             [[]],
         )
     )
     fourth_connection = _FakeConnection(_FakeCursor([(4,)]))
+    fifth_connection = _FakeConnection(_FakeCursor([(5, 1777000000000)]))
+    sixth_connection = _FakeConnection(_FakeCursor([(6, 1777000000000)]))
 
     result = create_authenticated_dcx_app_contact_message(
         authenticated_user_id=77,
         message_text="Hola, vendo trigo.",
         connect_to_database=_ConnectFactory(
-            [first_connection, second_connection, third_connection, fourth_connection]
+            [first_connection, second_connection, third_connection, fourth_connection, fifth_connection, sixth_connection]
         ),
         current_timestamp_ms_provider=lambda: 1777000000000,
         derive_message_with_llm=lambda _text: {
@@ -96,16 +124,44 @@ def test_creates_ready_message_job_and_analysis_run_when_derivation_succeeds() -
     )
 
 
-def test_creates_mixed_message_after_preparing_attachment_when_file_is_present() -> None:
+def test_creates_mixed_message_after_preparing_attachment_when_file_is_present(monkeypatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     first_connection = _FakeConnection(_FakeCursor([(77,)]))
     second_connection = _FakeConnection(_FakeCursor([(77,), (7001,)]))
     third_connection = _FakeConnection(
         _FakeCursor(
-            [(7001, "app", "dcx_app", "mixed", "", "See attached offer.", "queued", "pending", "pending"), None, (9001,)],
+            [
+                (
+                    7001,
+                    "app",
+                    "dcx_app",
+                    "mixed",
+                    "",
+                    "See attached offer.",
+                    77,
+                    None,
+                    "queued",
+                    "pending",
+                    "pending",
+                    {},
+                    "pending",
+                    "",
+                    False,
+                    False,
+                    False,
+                    "",
+                    {},
+                    "",
+                ),
+                None,
+                (9001,),
+            ],
             [[]],
         )
     )
     fourth_connection = _FakeConnection(_FakeCursor([None]))
+    fifth_connection = _FakeConnection(_FakeCursor([(5, 1777000000000)]))
+    sixth_connection = _FakeConnection(_FakeCursor([(6, 1777000000000)]))
     event_order: list[str] = []
     prepared_attachment_calls: list[dict] = []
 
@@ -120,7 +176,7 @@ def test_creates_mixed_message_after_preparing_attachment_when_file_is_present()
             }
         ],
         connect_to_database=_ConnectFactory(
-            [first_connection, second_connection, third_connection, fourth_connection]
+            [first_connection, second_connection, third_connection, fourth_connection, fifth_connection, sixth_connection]
         ),
         current_timestamp_ms_provider=lambda: 1777000000000,
         derive_message_with_llm=lambda _text: {

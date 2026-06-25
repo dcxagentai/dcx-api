@@ -135,7 +135,9 @@ def read_authenticated_dcx_user_account_summary_capability(
                         sidebar_clock_tz_2.id,
                         sidebar_clock_tz_2.iana_name,
                         sidebar_clock_tz_2.display_label,
-                        sidebar_clock_tz_2.region_label
+                        sidebar_clock_tz_2.region_label,
+                        COALESCE(u.network_dm_acceptance_mode, 'everyone'),
+                        COALESCE(u.network_profile_image_url, '')
                     FROM stephen_dcx_users u
                     LEFT JOIN LATERAL (
                         SELECT
@@ -690,6 +692,10 @@ def read_authenticated_dcx_user_account_summary_capability(
                 public_identity_mode=user_row[25],
             ),
         },
+        "network_profile": {
+            "dm_acceptance_mode": _read_row_value(user_row, 35, "everyone"),
+            "profile_image_url": _read_row_value(user_row, 36, ""),
+        },
         "default_interaction_channel": user_row[26],
         "preferred_language": preferred_language,
         "preferred_timezone": preferred_timezone,
@@ -753,6 +759,20 @@ def read_authenticated_dcx_user_account_summary_capability(
             {
                 "value": "whatsapp",
                 "label": "WhatsApp",
+            },
+        ],
+        "available_network_dm_acceptance_modes": [
+            {
+                "value": "everyone",
+                "label": "Everyone",
+            },
+            {
+                "value": "following",
+                "label": "People I follow",
+            },
+            {
+                "value": "none",
+                "label": "No DMs",
             },
         ],
         "available_trade_interest_materials": available_trade_interest_materials,

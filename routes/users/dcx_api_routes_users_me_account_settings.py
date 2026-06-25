@@ -37,6 +37,8 @@ class DcxUsersMeAccountSettingsSaveRequest(BaseModel):
     public_handle: str
     public_identity_mode: str
     default_interaction_channel: str
+    network_dm_acceptance_mode: str = "everyone"
+    network_profile_image_url: str = ""
     trade_interest_material_keys: list[str] = []
     sidebar_clock_timezone_ids: list[int] = []
     selected_language_ids: list[int] | None = None
@@ -125,6 +127,8 @@ def post_authenticated_dcx_user_account_settings(
             public_handle=account_settings_save_request.public_handle,
             public_identity_mode=account_settings_save_request.public_identity_mode,
             default_interaction_channel=account_settings_save_request.default_interaction_channel,
+            network_dm_acceptance_mode=account_settings_save_request.network_dm_acceptance_mode,
+            network_profile_image_url=account_settings_save_request.network_profile_image_url,
             trade_interest_material_keys=account_settings_save_request.trade_interest_material_keys,
             sidebar_clock_timezone_ids=account_settings_save_request.sidebar_clock_timezone_ids,
             selected_language_ids=account_settings_save_request.selected_language_ids,
@@ -157,6 +161,7 @@ def post_authenticated_dcx_user_account_settings(
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_IDENTITY_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_PUBLIC_HANDLE_TAKEN",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_DEFAULT_INTERACTION_CHANNEL_INVALID",
+            "API_AUTHENTICATED_DCX_USER_ACCOUNT_NETWORK_PROFILE_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_TRADE_INTERESTS_INVALID",
             "API_AUTHENTICATED_DCX_USER_ACCOUNT_COUNTRY_INVALID",
         }:

@@ -109,6 +109,8 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                         "Europe/Madrid",
                         "(UTC+1/+2) Madrid",
                         "Europe",
+                        "following",
+                        "https://cdn.example.com/stephen.jpg",
                     )
                 ],
                 [
@@ -200,6 +202,10 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
             "public_handle": "stephen_trader",
             "public_identity_mode": "handle",
             "public_identity_label": "@stephen_trader",
+        },
+        "network_profile": {
+            "dm_acceptance_mode": "following",
+            "profile_image_url": "https://cdn.example.com/stephen.jpg",
         },
         "default_interaction_channel": "email",
         "preferred_language": {
@@ -389,6 +395,20 @@ def test_returns_account_summary_with_preferred_language_and_timezone_details() 
                 "label": "WhatsApp",
             },
         ],
+        "available_network_dm_acceptance_modes": [
+            {
+                "value": "everyone",
+                "label": "Everyone",
+            },
+            {
+                "value": "following",
+                "label": "People I follow",
+            },
+            {
+                "value": "none",
+                "label": "No DMs",
+            },
+        ],
         "available_trade_interest_materials": [
             {
                 "material_key": "aluminum",
@@ -481,6 +501,8 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
                         None,
                         None,
                         None,
+                        "everyone",
+                        "",
                     )
                 ],
                 [
@@ -529,6 +551,11 @@ def test_returns_account_summary_when_preferred_language_and_timezone_are_null()
     assert result["email_contact_methods"][0]["normalized_value"] == "jill.whitney@ncmedia.ch"
     assert result["phone_contact_methods"] == []
     assert result["default_interaction_channel"] == "app_only"
+    assert result["network_profile"] == {
+        "dm_acceptance_mode": "everyone",
+        "profile_image_url": "",
+    }
+    assert len(result["available_network_dm_acceptance_modes"]) == 3
     assert result["available_trade_interest_materials"] == []
     assert result["selected_trade_interest_material_keys"] == []
     assert result["selected_sidebar_clock_timezone_ids"] == []

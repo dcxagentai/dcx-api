@@ -59,7 +59,20 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         connect_to_database=lambda **_: _FakeConnection(
             [
                 None,
-                (5, 4, 2, "newsletters", "Stephen Trader", "stephen_trader", "handle", "email", 1, None),
+                (
+                    5,
+                    4,
+                    2,
+                    "newsletters",
+                    "Stephen Trader",
+                    "stephen_trader",
+                    "handle",
+                    "email",
+                    1,
+                    None,
+                    "everyone",
+                    "",
+                ),
             ],
             [
                 [(4,)],
@@ -78,6 +91,8 @@ def test_saves_editable_settings_via_direct_user_row_update() -> None:
         "public_handle": "stephen_trader",
         "public_identity_mode": "handle",
         "default_interaction_channel": "email",
+        "network_dm_acceptance_mode": "everyone",
+        "network_profile_image_url": "",
         "selected_language_ids": [4],
         "selected_timezone_ids": [2, 1],
         "selected_country_ids": [],

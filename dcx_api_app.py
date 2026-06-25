@@ -241,6 +241,15 @@ from routes.users.dcx_api_routes_users_me_trade_threads import (
 from routes.users.dcx_api_routes_users_me_market_forum import (
     dcx_api_routes_users_me_market_forum_router,
 )
+from routes.users.dcx_api_routes_network_profiles import (
+    dcx_api_routes_network_profiles_router,
+)
+from routes.users.dcx_api_routes_network_feed import (
+    dcx_api_routes_network_feed_router,
+)
+from routes.users.dcx_api_routes_network_dms import (
+    dcx_api_routes_network_dms_router,
+)
 from routes.users.dcx_api_routes_users_me_message_attachment_file import (
     dcx_api_routes_users_me_message_attachment_file_router,
 )
@@ -346,6 +355,9 @@ app.include_router(dcx_api_routes_users_me_market_topic_visibility_router)
 app.include_router(dcx_api_routes_users_me_market_trades_router)
 app.include_router(dcx_api_routes_users_me_trade_threads_router)
 app.include_router(dcx_api_routes_users_me_market_forum_router)
+app.include_router(dcx_api_routes_network_profiles_router)
+app.include_router(dcx_api_routes_network_feed_router)
+app.include_router(dcx_api_routes_network_dms_router)
 app.include_router(dcx_api_routes_users_me_file_object_router)
 app.include_router(dcx_api_routes_users_me_message_attachment_file_router)
 app.include_router(dcx_api_routes_users_account_phone_verify_whatsapp_link_router)
