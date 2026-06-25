@@ -6,8 +6,8 @@ The feed is app-private, short-form, and intentionally one reply level deep.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 
 from auth.authorization.read_allowed_dcx_frontend_origin_or_error_response import (
@@ -20,16 +20,10 @@ from network.dcx_network_capabilities import (
     append_authenticated_dcx_network_feed_reply,
     create_authenticated_dcx_network_feed_post,
     read_authenticated_dcx_network_feed,
+    read_authenticated_dcx_network_feed_post_attachment_stream,
 )
 
 dcx_api_routes_network_feed_router = APIRouter(prefix="/network", tags=["network"])
-
-
-class DcxNetworkFeedPostRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    post_text: str
-    language_code: str | None = "en"
 
 
 class DcxNetworkFeedReplyRequest(BaseModel):
@@ -81,9 +75,11 @@ def get_authenticated_dcx_network_feed(request: Request, scope: str = "following
 
 
 @dcx_api_routes_network_feed_router.post("/feed/posts", response_model=None)
-def post_authenticated_dcx_network_feed_post(
+async def post_authenticated_dcx_network_feed_post(
     request: Request,
-    feed_post_request: DcxNetworkFeedPostRequest,
+    post_text: str = Form(""),
+    language_code: str = Form("en"),
+    post_file: UploadFile | None = File(None),
 ):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -95,11 +91,23 @@ def post_authenticated_dcx_network_feed_post(
     if error_response is not None:
         return error_response
 
+    attachment_input = None
+    if post_file is not None and post_file.filename:
+        content_type = (post_file.content_type or "").strip().lower()
+        if not (content_type.startswith("image/") or content_type.startswith("audio/")):
+            return _read_network_feed_mutation_error_response("API_DCX_NETWORK_FEED_ATTACHMENT_INVALID")
+        attachment_input = {
+            "original_filename": post_file.filename,
+            "content_type": content_type,
+            "file_bytes": await post_file.read(),
+        }
+
     try:
         feed_post_payload = create_authenticated_dcx_network_feed_post(
             authenticated_user_id=authenticated_user_id,
-            post_text=feed_post_request.post_text,
-            language_code=feed_post_request.language_code or "en",
+            post_text=post_text,
+            language_code=language_code or "en",
+            attachment_input=attachment_input,
         )
     except RuntimeError as runtime_error:
         return _read_network_feed_mutation_error_response(str(runtime_error))
@@ -114,6 +122,61 @@ def post_authenticated_dcx_network_feed_post(
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
+
+
+@dcx_api_routes_network_feed_router.get("/feed/posts/{feed_post_id}/attachment/file", response_model=None)
+def get_authenticated_dcx_network_feed_post_attachment_file(
+    request: Request,
+    feed_post_id: int,
+):
+    authenticated_user_id, _identity_resolution_mode, error_response = (
+        read_authenticated_dcx_user_id_or_error_response(request=request)
+    )
+    if error_response is not None:
+        return error_response
+
+    try:
+        attachment_stream = read_authenticated_dcx_network_feed_post_attachment_stream(
+            authenticated_user_id=authenticated_user_id,
+            feed_post_id=feed_post_id,
+        )
+    except RuntimeError:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error": {
+                    "code": "API_DCX_NETWORK_FEED_ATTACHMENT_READ_FAILED",
+                    "message": "We could not load that network attachment right now.",
+                    "suggested_action": "Retry in a moment after storage is healthy.",
+                },
+            },
+        )
+
+    if attachment_stream is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "ok": False,
+                "error": {
+                    "code": "API_DCX_NETWORK_FEED_ATTACHMENT_NOT_FOUND",
+                    "message": "That network attachment is not available.",
+                    "suggested_action": "Refresh the feed and retry with a current post.",
+                },
+            },
+        )
+
+    return Response(
+        content=attachment_stream["content_bytes"],
+        media_type=attachment_stream["content_type"],
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'inline; filename="{attachment_stream["original_filename"]}"',
+            "Content-Length": str(len(attachment_stream["content_bytes"])),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @dcx_api_routes_network_feed_router.post("/feed/posts/{feed_post_id}/replies", response_model=None)
@@ -161,6 +224,7 @@ def _read_network_feed_mutation_error_response(error_code: str) -> JSONResponse:
         "API_DCX_NETWORK_FEED_POST_NOT_FOUND",
         "API_DCX_NETWORK_NICKNAME_REQUIRED",
         "API_DCX_NETWORK_CONTENT_PROHIBITED",
+        "API_DCX_NETWORK_FEED_ATTACHMENT_INVALID",
     }:
         return JSONResponse(
             status_code=400,

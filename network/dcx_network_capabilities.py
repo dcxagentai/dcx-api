@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any, Callable
 
+from botocore.exceptions import ClientError
 import psycopg2
 from psycopg2.extras import Json
 
@@ -18,6 +19,12 @@ from apis.gemini.generate_dcx_gemini_user_content_policy_check import (
 )
 from apis.gemini.translate_dcx_gemini_trade_thread_message import (
     translate_dcx_gemini_trade_thread_message,
+)
+from files.build_dcx_r2_s3_client import build_dcx_r2_s3_client
+from files.read_dcx_r2_bucket_name_for_alias import read_dcx_r2_bucket_name_for_alias
+from messages.store_dcx_contact_message_attachment_file_object import (
+    delete_prepared_dcx_contact_message_attachment_file_object_from_r2,
+    prepare_dcx_contact_message_attachment_file_object_storage,
 )
 from storage.db_config import DB_CONFIG
 
@@ -37,7 +44,9 @@ NETWORK_RESERVED_HANDLES = {
     "profiles",
 }
 NETWORK_FEED_SCOPES = {"following", "all"}
+NETWORK_CONTACT_SCOPES = {"all", "following", "followers", "mutual"}
 NETWORK_TEXT_LANGUAGE_PATTERN = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})?$")
+NETWORK_FEED_ATTACHMENT_FILE_KINDS = {"image", "audio"}
 
 
 def read_authenticated_dcx_network_profile(
@@ -248,6 +257,83 @@ def set_authenticated_dcx_network_follow(
         raise RuntimeError("API_DCX_NETWORK_FOLLOW_SAVE_FAILED") from exc
 
 
+def read_authenticated_dcx_network_contacts(
+    authenticated_user_id: int,
+    contact_scope: str = "all",
+    search_query: str = "",
+    connect_to_database: Callable[..., Any] | None = None,
+) -> dict:
+    """
+    CONTRACT:
+      preconditions:
+        - authenticated_user_id is one signed-in DCX user id.
+        - contact_scope is all, following, followers, or mutual.
+      postconditions:
+        - Returns searchable app-private network contacts with relationship state.
+        - Includes every user with a public handle; relationship filters narrow that list.
+      side_effects: []
+      idempotent: true
+      retry_safe: true
+      async: false
+
+    NARRATIVE:
+      WHY this exists:
+        - The network needs a directory where traders can discover people to follow or DM without
+          making "users" feel like an internal admin concept.
+      WHEN TO USE it:
+        - Use it for `/network/contacts` list/search/filter surfaces.
+      WHEN NOT TO USE it:
+        - Do not use it for admin CRM searches or newsletter recipient exports.
+      WHAT CAN GO WRONG:
+        - The network migration may not be applied.
+      WHAT COMES NEXT:
+        - Add commodity/country/language filters once the base directory is useful.
+
+    TESTS:
+      - No dedicated network tests exist yet; route smoke and TypeScript compile cover this first slice.
+
+    ERRORS:
+      - API_DCX_NETWORK_CONTACTS_READ_FAILED:
+          suggested_action: Retry after confirming database health.
+          retry_safe: true
+
+    CODE:
+    """
+    normalized_scope = contact_scope.strip().lower() if isinstance(contact_scope, str) else "all"
+    if normalized_scope not in NETWORK_CONTACT_SCOPES:
+        normalized_scope = "all"
+
+    normalized_search_query = search_query.strip().lower() if isinstance(search_query, str) else ""
+    search_pattern = f"%{normalized_search_query}%"
+
+    connect = connect_to_database or psycopg2.connect
+    try:
+        with connect(**DB_CONFIG) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    _build_network_contacts_query(normalized_scope),
+                    (
+                        authenticated_user_id,
+                        authenticated_user_id,
+                        authenticated_user_id,
+                        normalized_search_query == "",
+                        search_pattern,
+                    ),
+                )
+                contact_rows = cursor.fetchall()
+                return {
+                    "scope": normalized_scope,
+                    "search_query": normalized_search_query,
+                    "contacts": [
+                        _read_network_contact_payload(contact_row)
+                        for contact_row in contact_rows
+                    ],
+                    "total_contact_count": len(contact_rows),
+                }
+    except Exception as exc:  # pragma: no cover - integration path
+        raise RuntimeError("API_DCX_NETWORK_CONTACTS_READ_FAILED") from exc
+
+
 def read_authenticated_dcx_network_feed(
     authenticated_user_id: int,
     feed_scope: str = "following",
@@ -334,6 +420,7 @@ def create_authenticated_dcx_network_feed_post(
     authenticated_user_id: int,
     post_text: str,
     language_code: str = "en",
+    attachment_input: dict | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -412,6 +499,28 @@ def create_authenticated_dcx_network_feed_post(
     if policy_check.get("moderation_status") == "prohibited":
         raise RuntimeError("API_DCX_NETWORK_CONTENT_PROHIBITED")
 
+    prepared_attachment = None
+    if attachment_input is not None:
+        try:
+            prepared_attachment = prepare_dcx_contact_message_attachment_file_object_storage(
+                owner_user_id=authenticated_user_id,
+                source_channel_type="app",
+                source_provider_type="dcx_app_network",
+                original_filename=attachment_input.get("original_filename"),
+                file_bytes=attachment_input.get("file_bytes") or b"",
+                content_type=attachment_input.get("content_type"),
+            )
+        except RuntimeError as runtime_error:
+            if str(runtime_error).startswith("API_DCX_CONTACT_MESSAGE_ATTACHMENT_"):
+                raise RuntimeError("API_DCX_NETWORK_FEED_ATTACHMENT_INVALID") from runtime_error
+            raise
+
+        if prepared_attachment.get("file_kind") not in NETWORK_FEED_ATTACHMENT_FILE_KINDS:
+            delete_prepared_dcx_contact_message_attachment_file_object_from_r2(
+                prepared_attachment=prepared_attachment,
+            )
+            raise RuntimeError("API_DCX_NETWORK_FEED_ATTACHMENT_INVALID")
+
     connect = connect_to_database or psycopg2.connect
     try:
         with connect(**DB_CONFIG) as connection:
@@ -420,6 +529,21 @@ def create_authenticated_dcx_network_feed_post(
                 if author_row is None or not _read_public_handle(author_row[2]):
                     raise RuntimeError("API_DCX_NETWORK_NICKNAME_REQUIRED")
 
+                attachment_file_object_id = None
+                attachment_kind = ""
+                attachment_metadata = {}
+                if prepared_attachment is not None:
+                    attachment_file_object_id = _persist_network_feed_attachment_file_object_row(
+                        cursor=cursor,
+                        prepared_attachment=prepared_attachment,
+                    )
+                    attachment_kind = str(prepared_attachment.get("file_kind") or "")
+                    attachment_metadata = {
+                        "original_filename": prepared_attachment.get("original_filename") or "",
+                        "content_type": prepared_attachment.get("content_type") or "",
+                        "file_size_bytes": prepared_attachment.get("file_size_bytes") or 0,
+                    }
+
                 cursor.execute(
                     """
                     INSERT INTO public.stephen_dcx_network_feed_posts (
@@ -427,9 +551,12 @@ def create_authenticated_dcx_network_feed_post(
                         post_text,
                         language_code,
                         moderation_metadata_json,
-                        post_metadata_json
+                        post_metadata_json,
+                        attachment_file_object_id,
+                        attachment_kind,
+                        attachment_metadata_json
                     )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -438,6 +565,9 @@ def create_authenticated_dcx_network_feed_post(
                         normalized_language_code,
                         Json(policy_check),
                         Json({"translation_status": "not_started"}),
+                        attachment_file_object_id,
+                        attachment_kind,
+                        Json(attachment_metadata),
                     ),
                 )
                 post_id = cursor.fetchone()[0]
@@ -447,9 +577,106 @@ def create_authenticated_dcx_network_feed_post(
                     viewer_user_id=authenticated_user_id,
                 )
     except RuntimeError:
+        if prepared_attachment is not None:
+            delete_prepared_dcx_contact_message_attachment_file_object_from_r2(
+                prepared_attachment=prepared_attachment,
+            )
         raise
     except Exception as exc:  # pragma: no cover - integration path
+        if prepared_attachment is not None:
+            delete_prepared_dcx_contact_message_attachment_file_object_from_r2(
+                prepared_attachment=prepared_attachment,
+            )
         raise RuntimeError("API_DCX_NETWORK_FEED_POST_CREATE_FAILED") from exc
+
+
+def read_authenticated_dcx_network_feed_post_attachment_stream(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    connect_to_database: Callable[..., Any] | None = None,
+    build_r2_client: Callable[[], Any] | None = None,
+) -> dict | None:
+    """
+    CONTRACT:
+      preconditions:
+        - authenticated_user_id is one signed-in DCX user id.
+        - feed_post_id identifies one app-public network post with an image/audio attachment.
+      postconditions:
+        - Returns the attachment bytes when the post is visible inside the app.
+        - Returns null when the post has no visible attachment.
+      side_effects:
+        - performs one R2 read when the file exists
+      idempotent: true
+      retry_safe: true
+      async: false
+
+    NARRATIVE:
+      WHY this exists:
+        - Feed attachments should be visible to signed-in network participants, not only to the
+          uploader's private `/users/me/files` route.
+      WHEN TO USE it:
+        - Use it from authenticated image/audio previews in the app-private network feed.
+      WHEN NOT TO USE it:
+        - Do not use it for unauthenticated public profile projections.
+
+    ERRORS:
+      - API_DCX_NETWORK_FEED_ATTACHMENT_READ_FAILED:
+          suggested_action: Retry after confirming storage health.
+          retry_safe: true
+
+    CODE:
+    """
+    if not isinstance(authenticated_user_id, int) or authenticated_user_id <= 0:
+        return None
+    if not isinstance(feed_post_id, int) or feed_post_id <= 0:
+        return None
+
+    connect = connect_to_database or psycopg2.connect
+    try:
+        with connect(**DB_CONFIG) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        file_object.bucket_alias,
+                        file_object.object_key,
+                        file_object.content_type,
+                        file_object.original_filename,
+                        file_object.file_kind
+                    FROM public.stephen_dcx_network_feed_posts post
+                    JOIN public.stephen_dcx_file_objects file_object
+                      ON file_object.id = post.attachment_file_object_id
+                    WHERE post.id = %s
+                      AND post.post_status = 'active'
+                      AND post.visibility_status = 'app_public'
+                      AND post.attachment_kind IN ('image', 'audio')
+                    LIMIT 1
+                    """,
+                    (feed_post_id,),
+                )
+                file_object_row = cursor.fetchone()
+    except Exception as exc:  # pragma: no cover - integration path
+        raise RuntimeError("API_DCX_NETWORK_FEED_ATTACHMENT_READ_FAILED") from exc
+
+    if file_object_row is None:
+        return None
+
+    try:
+        r2_object_response = (build_r2_client or build_dcx_r2_s3_client)().get_object(
+            Bucket=read_dcx_r2_bucket_name_for_alias(file_object_row[0]),
+            Key=file_object_row[1],
+        )
+    except ClientError as exc:
+        raise RuntimeError("API_DCX_NETWORK_FEED_ATTACHMENT_READ_FAILED") from exc
+    except Exception as exc:
+        raise RuntimeError("API_DCX_NETWORK_FEED_ATTACHMENT_READ_FAILED") from exc
+
+    return {
+        "content_bytes": r2_object_response["Body"].read(),
+        "content_type": file_object_row[2] or "application/octet-stream",
+        "original_filename": file_object_row[3] or "attachment",
+        "file_kind": file_object_row[4] or "other",
+    }
 
 
 def append_authenticated_dcx_network_feed_reply(
@@ -1269,6 +1496,149 @@ def _read_network_badges_for_user(cursor, user_id: int) -> dict:
     }
 
 
+def _build_network_contacts_query(contact_scope: str) -> str:
+    scope_clause = "TRUE"
+    if contact_scope == "following":
+        scope_clause = "viewer_follows_target IS TRUE"
+    elif contact_scope == "followers":
+        scope_clause = "target_follows_viewer IS TRUE"
+    elif contact_scope == "mutual":
+        scope_clause = "viewer_follows_target IS TRUE AND target_follows_viewer IS TRUE"
+
+    return f"""
+    WITH contact_rows AS (
+        SELECT
+            target_user.id,
+            target_user.public_display_name,
+            target_user.public_handle,
+            target_user.public_identity_mode,
+            COALESCE(target_user.network_profile_image_url, ''),
+            COALESCE(target_user.network_dm_acceptance_mode, 'everyone'),
+            target_user.created_at_ts_ms,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_follows follower_count
+                WHERE follower_count.followed_user_id = target_user.id
+                  AND follower_count.follow_status = 'active'
+            ) AS follower_count,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_follows following_count
+                WHERE following_count.follower_user_id = target_user.id
+                  AND following_count.follow_status = 'active'
+            ) AS following_count,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_follows viewer_follow
+                WHERE viewer_follow.follower_user_id = %s
+                  AND viewer_follow.followed_user_id = target_user.id
+                  AND viewer_follow.follow_status = 'active'
+            ) AS viewer_follows_target,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_follows target_follow
+                WHERE target_follow.follower_user_id = target_user.id
+                  AND target_follow.followed_user_id = %s
+                  AND target_follow.follow_status = 'active'
+            ) AS target_follows_viewer,
+            (
+                SELECT MAX(post.created_at_ts_ms)
+                FROM public.stephen_dcx_network_feed_posts post
+                WHERE post.author_user_id = target_user.id
+                  AND post.post_status = 'active'
+                  AND post.visibility_status = 'app_public'
+            ) AS latest_post_at_ts_ms,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_posts post_count
+                WHERE post_count.author_user_id = target_user.id
+                  AND post_count.post_status = 'active'
+                  AND post_count.visibility_status = 'app_public'
+            ) AS post_count
+        FROM public.stephen_dcx_users target_user
+        WHERE btrim(target_user.public_handle) <> ''
+          AND target_user.id <> %s
+          AND (
+              %s
+              OR lower(concat_ws(' ', target_user.public_display_name, target_user.public_handle)) LIKE %s
+          )
+    )
+    SELECT *
+    FROM contact_rows
+    WHERE {scope_clause}
+    ORDER BY
+        COALESCE(latest_post_at_ts_ms, created_at_ts_ms) DESC,
+        lower(public_display_name) ASC,
+        lower(public_handle) ASC
+    LIMIT 250
+    """
+
+
+def _read_network_contact_payload(contact_row: tuple) -> dict:
+    contact_payload = {
+        "user_id": contact_row[0],
+        "public_display_name": contact_row[1] or "",
+        "public_handle": _read_public_handle(contact_row[2]),
+        "public_identity_mode": contact_row[3] or "display_name",
+        "profile_image_url": contact_row[4] or "",
+        "dm_acceptance_mode": contact_row[5] or "everyone",
+        "created_at_ts_ms": contact_row[6],
+        "follower_count": int(contact_row[7] or 0),
+        "following_count": int(contact_row[8] or 0),
+        "is_followed_by_authenticated_user": contact_row[9] is True,
+        "is_following_authenticated_user": contact_row[10] is True,
+        "latest_post_at_ts_ms": contact_row[11],
+        "post_count": int(contact_row[12] or 0),
+    }
+    contact_payload["public_identity_label"] = _read_network_public_identity_label(
+        user_id=contact_payload["user_id"],
+        public_display_name=contact_payload["public_display_name"],
+        public_handle=contact_payload["public_handle"],
+        public_identity_mode=contact_payload["public_identity_mode"],
+    )
+    return contact_payload
+
+
+def _persist_network_feed_attachment_file_object_row(cursor, prepared_attachment: dict) -> int:
+    cursor.execute(
+        """
+        INSERT INTO public.stephen_dcx_file_objects (
+            file_uuid,
+            owner_user_id,
+            storage_provider,
+            bucket_alias,
+            object_key,
+            content_type,
+            file_size_bytes,
+            original_filename,
+            file_kind,
+            source_channel_type,
+            source_provider_type,
+            file_metadata_json,
+            is_private
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+        RETURNING id
+        """,
+        (
+            prepared_attachment["file_uuid"],
+            prepared_attachment["owner_user_id"],
+            "cloudflare_r2",
+            prepared_attachment["bucket_alias"],
+            prepared_attachment["object_key"],
+            prepared_attachment["content_type"],
+            prepared_attachment["file_size_bytes"],
+            prepared_attachment["original_filename"],
+            prepared_attachment["file_kind"],
+            prepared_attachment["source_channel_type"],
+            prepared_attachment["source_provider_type"],
+            '{"attachment_origin":"network_feed_post"}',
+            True,
+        ),
+    )
+    return int(cursor.fetchone()[0])
+
+
 def _build_network_feed_posts_query(feed_scope: str) -> str:
     following_clause = ""
     if feed_scope == "following":
@@ -1320,11 +1690,21 @@ SELECT
         WHERE follow_state.follower_user_id = viewer.user_id
           AND follow_state.followed_user_id = post.author_user_id
           AND follow_state.follow_status = 'active'
-    ) AS viewer_follows_author
+    ) AS viewer_follows_author,
+    post.attachment_file_object_id,
+    post.attachment_kind,
+    post.attachment_metadata_json,
+    file_object.file_uuid,
+    file_object.content_type,
+    file_object.file_size_bytes,
+    file_object.original_filename,
+    file_object.file_kind
 FROM public.stephen_dcx_network_feed_posts post
 Cross JOIN viewer
 JOIN public.stephen_dcx_users author
   ON author.id = post.author_user_id
+LEFT JOIN public.stephen_dcx_file_objects file_object
+  ON file_object.id = post.attachment_file_object_id
 WHERE post.post_status = 'active'
   AND post.visibility_status = 'app_public'
 /* following_clause */
@@ -1360,10 +1740,20 @@ def _read_network_recent_posts_for_profile(cursor, authenticated_user_id: int, p
                 WHERE follow_state.follower_user_id = %s
                   AND follow_state.followed_user_id = post.author_user_id
                   AND follow_state.follow_status = 'active'
-            ) AS viewer_follows_author
+            ) AS viewer_follows_author,
+            post.attachment_file_object_id,
+            post.attachment_kind,
+            post.attachment_metadata_json,
+            file_object.file_uuid,
+            file_object.content_type,
+            file_object.file_size_bytes,
+            file_object.original_filename,
+            file_object.file_kind
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
+        LEFT JOIN public.stephen_dcx_file_objects file_object
+          ON file_object.id = post.attachment_file_object_id
         WHERE post.author_user_id = %s
           AND post.post_status = 'active'
           AND post.visibility_status = 'app_public'
@@ -1448,10 +1838,20 @@ def _read_network_feed_post_by_id(cursor, post_id: int, viewer_user_id: int) -> 
                 WHERE follow_state.follower_user_id = %s
                   AND follow_state.followed_user_id = post.author_user_id
                   AND follow_state.follow_status = 'active'
-            ) AS viewer_follows_author
+            ) AS viewer_follows_author,
+            post.attachment_file_object_id,
+            post.attachment_kind,
+            post.attachment_metadata_json,
+            file_object.file_uuid,
+            file_object.content_type,
+            file_object.file_size_bytes,
+            file_object.original_filename,
+            file_object.file_kind
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
+        LEFT JOIN public.stephen_dcx_file_objects file_object
+          ON file_object.id = post.attachment_file_object_id
         WHERE post.id = %s
         LIMIT 1
         """,
@@ -1485,10 +1885,31 @@ def _read_network_feed_post_payload(post_row: tuple, reply_rows: list[tuple], vi
         "reply_count": int(post_row[11] or 0),
         "viewer_follows_author": post_row[12] is True or int(post_row[1]) == viewer_user_id,
         "is_owned_by_authenticated_user": int(post_row[1]) == viewer_user_id,
+        "attachment": _read_network_feed_post_attachment_payload(post_row),
         "replies": [
             _read_network_feed_reply_payload(reply_row, viewer_user_id)
             for reply_row in reply_rows
         ],
+    }
+
+
+def _read_network_feed_post_attachment_payload(post_row: tuple) -> dict | None:
+    if len(post_row) < 21 or post_row[13] is None:
+        return None
+    attachment_kind = str(post_row[14] or "").strip().lower()
+    if attachment_kind not in NETWORK_FEED_ATTACHMENT_FILE_KINDS:
+        return None
+    file_uuid = str(post_row[16]) if post_row[16] is not None else ""
+    return {
+        "file_object_id": post_row[13],
+        "attachment_kind": attachment_kind,
+        "attachment_metadata_json": post_row[15] if isinstance(post_row[15], dict) else {},
+        "file_uuid": file_uuid,
+        "content_type": post_row[17] or "",
+        "file_size_bytes": post_row[18] or 0,
+        "original_filename": post_row[19] or "",
+        "file_kind": post_row[20] or attachment_kind,
+        "attachment_url_path": f"/network/feed/posts/{post_row[0]}/attachment/file",
     }
 
 
