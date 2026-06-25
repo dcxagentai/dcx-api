@@ -143,7 +143,7 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
         "message_text": (
             "Trade candidates:\n"
             "Offer for 200 MT urea CFR Tema for June.\n"
-            "Review: https://app.dcxagent.ai/me/trades/12\n\n"
+            "Review: https://app.dcxagent.ai/trades/objects/12\n\n"
             "#T7 Sanctions impact on fertilizer shipping to Ghana\n"
             "https://app.dcxagent.ai/me/topics/7\n\n"
             "EU sanctions may tighten vessel availability and raise risk premiums."

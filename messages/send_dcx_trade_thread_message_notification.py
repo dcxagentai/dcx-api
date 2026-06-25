@@ -382,7 +382,7 @@ def _read_whatsapp_notification_contact_row(cursor: Any, recipient_user_id: int,
 
 
 def _build_trade_thread_notification_text(notification_context: dict, message_text: str) -> str:
-    app_thread_url = f"{read_dcx_app_base_url().rstrip('/')}/me/trade-threads/{notification_context['trade_thread_id']}"
+    app_thread_url = f"{read_dcx_app_base_url().rstrip('/')}/trades/chats/{notification_context['trade_thread_id']}"
     preview_text = message_text if len(message_text) <= 500 else f"{message_text[:497]}..."
     return "\n\n".join(
         [

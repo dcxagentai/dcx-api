@@ -1,6 +1,6 @@
 """
 CONTEXT:
-This file owns authenticated app routes for Market > Deals.
+This file owns authenticated app routes for the Trade Board.
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ from messages.start_authenticated_dcx_trade_thread_from_market_trade import (
     start_authenticated_dcx_trade_thread_from_market_trade,
 )
 
-dcx_api_routes_users_me_market_trades_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_market_trades_router = APIRouter(tags=["trades"])
 
 
-@dcx_api_routes_users_me_market_trades_router.get("/me/market/trades", response_model=None)
+@dcx_api_routes_users_me_market_trades_router.get("/trades/board", response_model=None)
 def get_authenticated_dcx_market_trades_catalog(request: Request):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -50,7 +50,7 @@ def get_authenticated_dcx_market_trades_catalog(request: Request):
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TRADES_READ_FAILED",
-                    "message": "We could not load Market deals right now.",
+                    "message": "We could not load the Trade Board right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -61,13 +61,13 @@ def get_authenticated_dcx_market_trades_catalog(request: Request):
         "data": catalog_payload,
         "context": {
             "surface": "app",
-            "view": "market_trades_catalog",
+            "view": "trade_board_catalog",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
 
 
-@dcx_api_routes_users_me_market_trades_router.get("/me/market/trades/{trade_publication_id}", response_model=None)
+@dcx_api_routes_users_me_market_trades_router.get("/trades/board/{trade_publication_id}", response_model=None)
 def get_authenticated_dcx_market_trade_detail(request: Request, trade_publication_id: int):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -91,7 +91,7 @@ def get_authenticated_dcx_market_trade_detail(request: Request, trade_publicatio
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TRADE_READ_FAILED",
-                    "message": "We could not load that Market deal right now.",
+                    "message": "We could not load that Trade Board item right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -104,8 +104,8 @@ def get_authenticated_dcx_market_trade_detail(request: Request, trade_publicatio
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TRADE_NOT_FOUND",
-                    "message": "That Market deal is not available.",
-                    "suggested_action": "Refresh Market deals and retry with a current row.",
+                    "message": "That Trade Board item is not available.",
+                    "suggested_action": "Refresh the Trade Board and retry with a current row.",
                 },
             },
         )
@@ -115,14 +115,14 @@ def get_authenticated_dcx_market_trade_detail(request: Request, trade_publicatio
         "data": detail_payload,
         "context": {
             "surface": "app",
-            "view": "market_trade_detail",
+            "view": "trade_board_detail",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
 
 
 @dcx_api_routes_users_me_market_trades_router.post(
-    "/me/market/trades/{trade_publication_id}/threads",
+    "/trades/board/{trade_publication_id}/chats",
     response_model=None,
 )
 def post_authenticated_dcx_market_trade_thread(request: Request, trade_publication_id: int):
@@ -150,7 +150,7 @@ def post_authenticated_dcx_market_trade_thread(request: Request, trade_publicati
                     "error": {
                         "code": "API_USERS_ME_MARKET_TRADE_THREAD_SELF_NOT_ALLOWED",
                         "message": "This is your own trade.",
-                        "suggested_action": "Use the private Trades view to edit it.",
+                        "suggested_action": "Use Trade Objects to edit it.",
                     },
                 },
             )
@@ -160,7 +160,7 @@ def post_authenticated_dcx_market_trade_thread(request: Request, trade_publicati
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TRADE_THREAD_START_FAILED",
-                    "message": "We could not start that trade conversation right now.",
+                    "message": "We could not start that Trade Chat right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -173,8 +173,8 @@ def post_authenticated_dcx_market_trade_thread(request: Request, trade_publicati
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TRADE_NOT_FOUND",
-                    "message": "That Market deal is not available.",
-                    "suggested_action": "Refresh Market deals and retry with a current row.",
+                    "message": "That Trade Board item is not available.",
+                    "suggested_action": "Refresh the Trade Board and retry with a current row.",
                 },
             },
         )
@@ -184,7 +184,7 @@ def post_authenticated_dcx_market_trade_thread(request: Request, trade_publicati
         "data": thread_payload,
         "context": {
             "surface": "app",
-            "view": "trade_thread",
+            "view": "trade_chat",
             "operation": "trade_thread_started",
             "identity_resolution_mode": identity_resolution_mode,
         },

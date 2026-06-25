@@ -22,10 +22,10 @@ from messages.read_authenticated_dcx_user_trade_detail import (
     read_authenticated_dcx_user_trade_detail,
 )
 
-dcx_api_routes_users_me_trade_confirm_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_trade_confirm_router = APIRouter(tags=["trades"])
 
 
-@dcx_api_routes_users_me_trade_confirm_router.post("/me/trades/{trade_id}/confirm", response_model=None)
+@dcx_api_routes_users_me_trade_confirm_router.post("/trades/objects/{trade_id}/confirm", response_model=None)
 def post_authenticated_dcx_user_trade_confirm(
     request: Request,
     trade_id: int,
@@ -54,7 +54,7 @@ def post_authenticated_dcx_user_trade_confirm(
                     "ok": False,
                     "error": {
                         "code": "API_USERS_ME_TRADE_CONFIRMATION_FIELDS_MISSING",
-                        "message": "This trade still needs more detail before it can be confirmed.",
+                        "message": "This Trade Object still needs more detail before it can be confirmed.",
                         "suggested_action": "Fill the missing fields, then confirm again.",
                     },
                 },
@@ -77,7 +77,7 @@ def post_authenticated_dcx_user_trade_confirm(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_CONFIRMATION_FAILED",
-                    "message": "We could not confirm that trade right now.",
+                    "message": "We could not confirm that Trade Object right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -90,8 +90,8 @@ def post_authenticated_dcx_user_trade_confirm(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_NOT_FOUND",
-                    "message": "That trade does not exist for this account.",
-                    "suggested_action": "Refresh the Trades view and retry with one current row.",
+                    "message": "That Trade Object does not exist for this account.",
+                    "suggested_action": "Refresh Trade Objects and retry with one current row.",
                 },
             },
         )
@@ -106,7 +106,7 @@ def post_authenticated_dcx_user_trade_confirm(
         "data": trade_detail,
         "context": {
             "surface": "app",
-            "view": "trade_detail",
+            "view": "trade_object_detail",
             "operation": "trade_confirmed",
             "identity_resolution_mode": identity_resolution_mode,
         },

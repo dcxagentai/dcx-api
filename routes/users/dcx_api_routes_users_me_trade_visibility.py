@@ -22,7 +22,7 @@ from messages.set_authenticated_dcx_user_trade_visibility import (
     set_authenticated_dcx_user_trade_visibility,
 )
 
-dcx_api_routes_users_me_trade_visibility_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_trade_visibility_router = APIRouter(tags=["trades"])
 
 
 class DcxUsersMeTradeVisibilityRequest(BaseModel):
@@ -31,7 +31,7 @@ class DcxUsersMeTradeVisibilityRequest(BaseModel):
     visibility_status: str
 
 
-@dcx_api_routes_users_me_trade_visibility_router.patch("/me/trades/{trade_id}/visibility", response_model=None)
+@dcx_api_routes_users_me_trade_visibility_router.patch("/trades/objects/{trade_id}/visibility", response_model=None)
 def patch_authenticated_dcx_user_trade_visibility(
     request: Request,
     trade_id: int,
@@ -73,7 +73,7 @@ def patch_authenticated_dcx_user_trade_visibility(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_VISIBILITY_FAILED",
-                    "message": "We could not change that trade visibility right now.",
+                    "message": "We could not change that Trade Object visibility right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -86,8 +86,8 @@ def patch_authenticated_dcx_user_trade_visibility(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_NOT_FOUND",
-                    "message": "That trade does not exist for this account.",
-                    "suggested_action": "Refresh Trades and retry with a current trade.",
+                    "message": "That Trade Object does not exist for this account.",
+                    "suggested_action": "Refresh Trade Objects and retry with a current row.",
                 },
             },
         )
@@ -102,7 +102,7 @@ def patch_authenticated_dcx_user_trade_visibility(
         "data": trade_detail,
         "context": {
             "surface": "app",
-            "view": "trade_detail",
+            "view": "trade_object_detail",
             "operation": "trade_visibility_updated",
             "identity_resolution_mode": identity_resolution_mode,
         },

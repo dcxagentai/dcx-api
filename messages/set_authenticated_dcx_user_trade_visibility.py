@@ -32,7 +32,7 @@ WHAT CAN GO WRONG: missing SQL migration, invalid visibility, or a trade owned b
 WHAT COMES NEXT: public catalog views and trade conversation threads can attach to publications.
 
 TESTS:
-- No dedicated unit test exists yet. Smoke with PATCH /users/me/trades/{id}/visibility.
+- No dedicated unit test exists yet. Smoke with PATCH /trades/objects/{id}/visibility.
 
 ERRORS:
 - API_DCX_TRADE_VISIBILITY_INVALID: retry with private, shareable, or public.

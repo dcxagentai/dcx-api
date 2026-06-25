@@ -71,7 +71,7 @@ def test_strips_reference_and_footer_lines_from_routed_message_text() -> None:
     routed_text = strip_dcx_cross_surface_reference_from_message_text(
         message_text=(
             "#C2 Yes, that works for us.\n"
-            "Open in DCX: https://app.dcxagent.ai/me/trade-threads/2\n"
+            "Open in DCX: https://app.dcxagent.ai/trades/chats/2\n"
             "Reply with #C2 followed by your message."
         ),
         reference_code="C2",

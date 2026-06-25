@@ -23,7 +23,7 @@ from messages.reject_authenticated_dcx_user_trade_candidate import (
     reject_authenticated_dcx_user_trade_candidate,
 )
 
-dcx_api_routes_users_me_trade_reject_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_trade_reject_router = APIRouter(tags=["trades"])
 
 
 class DcxUsersMeTradeRejectRequest(BaseModel):
@@ -32,7 +32,7 @@ class DcxUsersMeTradeRejectRequest(BaseModel):
     rejection_reason_text: str | None = None
 
 
-@dcx_api_routes_users_me_trade_reject_router.post("/me/trades/{trade_id}/reject", response_model=None)
+@dcx_api_routes_users_me_trade_reject_router.post("/trades/objects/{trade_id}/reject", response_model=None)
 def post_authenticated_dcx_user_trade_reject(
     request: Request,
     trade_id: int,
@@ -61,7 +61,7 @@ def post_authenticated_dcx_user_trade_reject(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_REJECTION_FAILED",
-                    "message": "We could not reject that trade right now.",
+                    "message": "We could not reject that Trade Object right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -74,8 +74,8 @@ def post_authenticated_dcx_user_trade_reject(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_NOT_FOUND",
-                    "message": "That trade does not exist for this account.",
-                    "suggested_action": "Refresh the Trades view and retry with one current row.",
+                    "message": "That Trade Object does not exist for this account.",
+                    "suggested_action": "Refresh Trade Objects and retry with one current row.",
                 },
             },
         )
@@ -90,7 +90,7 @@ def post_authenticated_dcx_user_trade_reject(
         "data": trade_detail,
         "context": {
             "surface": "app",
-            "view": "trade_detail",
+            "view": "trade_object_detail",
             "operation": "trade_rejected",
             "identity_resolution_mode": identity_resolution_mode,
         },

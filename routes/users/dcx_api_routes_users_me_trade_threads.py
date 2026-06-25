@@ -25,7 +25,7 @@ from messages.read_authenticated_dcx_trade_threads_catalog import (
     read_authenticated_dcx_trade_threads_catalog,
 )
 
-dcx_api_routes_users_me_trade_threads_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_trade_threads_router = APIRouter(tags=["trades"])
 
 
 class DcxAuthenticatedUserTradeThreadMessageAppendPayload(BaseModel):
@@ -33,7 +33,7 @@ class DcxAuthenticatedUserTradeThreadMessageAppendPayload(BaseModel):
     language_code: str = "en"
 
 
-@dcx_api_routes_users_me_trade_threads_router.get("/me/trade-threads", response_model=None)
+@dcx_api_routes_users_me_trade_threads_router.get("/trades/chats", response_model=None)
 def get_authenticated_dcx_trade_threads_catalog(request: Request):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -56,7 +56,7 @@ def get_authenticated_dcx_trade_threads_catalog(request: Request):
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_THREADS_READ_FAILED",
-                    "message": "We could not load your trade conversations right now.",
+                    "message": "We could not load Trade Chats right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -67,13 +67,13 @@ def get_authenticated_dcx_trade_threads_catalog(request: Request):
         "data": catalog_payload,
         "context": {
             "surface": "app",
-            "view": "trade_threads_catalog",
+            "view": "trade_chats_catalog",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
 
 
-@dcx_api_routes_users_me_trade_threads_router.get("/me/trade-threads/{trade_thread_id}", response_model=None)
+@dcx_api_routes_users_me_trade_threads_router.get("/trades/chats/{trade_thread_id}", response_model=None)
 def get_authenticated_dcx_trade_thread_detail(request: Request, trade_thread_id: int):
     _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
     if origin_error_response is not None:
@@ -97,7 +97,7 @@ def get_authenticated_dcx_trade_thread_detail(request: Request, trade_thread_id:
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_THREAD_READ_FAILED",
-                    "message": "We could not load that trade conversation right now.",
+                    "message": "We could not load that Trade Chat right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -110,7 +110,7 @@ def get_authenticated_dcx_trade_thread_detail(request: Request, trade_thread_id:
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_THREAD_NOT_FOUND",
-                    "message": "That trade conversation is not available.",
+                    "message": "That Trade Chat is not available.",
                     "suggested_action": "Refresh Trade Chats and choose a current conversation.",
                 },
             },
@@ -121,14 +121,14 @@ def get_authenticated_dcx_trade_thread_detail(request: Request, trade_thread_id:
         "data": detail_payload,
         "context": {
             "surface": "app",
-            "view": "trade_thread_detail",
+            "view": "trade_chat_detail",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
 
 
 @dcx_api_routes_users_me_trade_threads_router.post(
-    "/me/trade-threads/{trade_thread_id}/messages",
+    "/trades/chats/{trade_thread_id}/messages",
     response_model=None,
 )
 def post_authenticated_dcx_trade_thread_message(
@@ -174,7 +174,7 @@ def post_authenticated_dcx_trade_thread_message(
                     "ok": False,
                     "error": {
                         "code": "API_USERS_ME_TRADE_THREAD_NOT_OPEN",
-                        "message": "That trade conversation is not open.",
+                        "message": "That Trade Chat is not open.",
                         "suggested_action": "Choose another open conversation.",
                     },
                 },
@@ -198,7 +198,7 @@ def post_authenticated_dcx_trade_thread_message(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_TRADE_THREAD_NOT_FOUND",
-                    "message": "That trade conversation is not available.",
+                    "message": "That Trade Chat is not available.",
                     "suggested_action": "Refresh Trade Chats and choose a current conversation.",
                 },
             },
@@ -209,7 +209,7 @@ def post_authenticated_dcx_trade_thread_message(
         "data": detail_payload,
         "context": {
             "surface": "app",
-            "view": "trade_thread_detail",
+            "view": "trade_chat_detail",
             "operation": "message_appended",
             "identity_resolution_mode": identity_resolution_mode,
         },

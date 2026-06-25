@@ -55,7 +55,7 @@ def build_dcx_trade_interest_alert_notification_text(
     price_basis = str(trade_snapshot.get("normalized_price_unit_basis") or "").strip()
     destination = str(trade_snapshot.get("normalized_destination_location") or "").strip()
     origin = str(trade_snapshot.get("normalized_origin_location") or "").strip()
-    app_trade_url = f"{read_dcx_app_base_url().rstrip('/')}/me/market/deals/{trade_publication_id}"
+    app_trade_url = f"{read_dcx_app_base_url().rstrip('/')}/trades/board/{trade_publication_id}"
 
     terms: list[str] = []
     if trade_side:

@@ -55,4 +55,4 @@ def build_dcx_app_trade_candidate_review_url(trade_id: int) -> str:
     if not isinstance(trade_id, int) or trade_id <= 0:
         raise RuntimeError("API_DCX_TRADE_REVIEW_URL_INVALID_TRADE_ID")
 
-    return f"{read_dcx_app_base_url().rstrip('/')}/me/trades/{trade_id}"
+    return f"{read_dcx_app_base_url().rstrip('/')}/trades/objects/{trade_id}"
