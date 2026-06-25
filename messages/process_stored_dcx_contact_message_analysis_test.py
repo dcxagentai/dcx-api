@@ -186,6 +186,46 @@ def test_builds_policy_blocked_workflow_outcome_for_prohibited_whatsapp_message(
     }
 
 
+def test_policy_check_result_overrides_message_analysis_moderation() -> None:
+    analysis_result = module_under_test._apply_content_policy_check_to_analysis_result(
+        analysis_result={
+            "moderation_status": "allowed",
+            "moderation_reason_summary": "",
+            "matched_prohibited_categories": [],
+            "primary_workflow_kind": "trade",
+            "workflow_reason_summary": "Trade found.",
+            "workflow_items": [
+                {
+                    "item_kind": "trade",
+                    "item_title": "Synthetic trade",
+                    "item_summary": "Synthetic trade summary.",
+                    "source_excerpt_text": "Synthetic trade.",
+                    "referenced_attachment_ids": [],
+                    "confidence_label": "high",
+                }
+            ],
+        },
+        policy_check_result={
+            "provider_name": "google_gemini",
+            "model_name": "gemini-test",
+            "prompt_version": "policy-test",
+            "analysis_mode": "gemini_generate_content",
+            "policy_check_status": "completed",
+            "moderation_status": "prohibited",
+            "moderation_reason_summary": "Blocked by standalone policy check.",
+            "matched_prohibited_categories": ["prohibited_fraud"],
+            "should_redact_original": True,
+        },
+    )
+
+    assert analysis_result["moderation_status"] == "prohibited"
+    assert analysis_result["moderation_reason_summary"] == "Blocked by standalone policy check."
+    assert analysis_result["matched_prohibited_categories"] == ["prohibited_fraud"]
+    assert analysis_result["primary_workflow_kind"] == ""
+    assert analysis_result["workflow_items"] == []
+    assert analysis_result["policy_check_metadata_json"]["prompt_version"] == "policy-test"
+
+
 def test_builds_topic_only_email_subject_from_topic_title(monkeypatch) -> None:
     monkeypatch.setenv("DCX_APP_BASE_URL", "https://app.dcxagent.ai")
 

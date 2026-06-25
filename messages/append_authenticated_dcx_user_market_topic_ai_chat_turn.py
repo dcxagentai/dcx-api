@@ -87,6 +87,9 @@ from psycopg2.extras import Json
 from apis.gemini.generate_dcx_gemini_market_topic_chat_response import (
     generate_dcx_gemini_market_topic_chat_response,
 )
+from apis.gemini.generate_dcx_gemini_user_content_policy_check import (
+    generate_dcx_gemini_user_content_policy_check,
+)
 from activity.record_dcx_user_activity_event import record_dcx_user_activity_event
 from storage.db_config import DB_CONFIG
 from usage.record_dcx_user_llm_usage_event import record_dcx_user_llm_usage_event
@@ -107,6 +110,7 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
     source_surface: str = "app",
     connect_to_database: Callable[..., Any] | None = None,
     generate_ai_response: Callable[..., dict] | None = None,
+    check_content_policy: Callable[..., dict] | None = None,
 ) -> dict | None:
     normalized_user_turn_text = (user_turn_text or "").strip()
     if normalized_user_turn_text == "":
@@ -150,6 +154,28 @@ def append_authenticated_dcx_user_market_topic_ai_chat_turn(
             DCX_MARKET_TOPIC_CHAT_CONTEXT_MAX_CHARACTERS
         ):
             raise RuntimeError("API_DCX_MARKET_TOPIC_CHAT_CONTEXT_LIMIT_REACHED")
+
+        policy_check_result = (check_content_policy or generate_dcx_gemini_user_content_policy_check)(
+            content_input={
+                "content_id": market_topic_id,
+                "content_kind": "ai_chat_turn",
+                "surface": normalized_source_surface,
+                "channel_type": normalized_source_channel_type,
+                "provider_type": "dcx_app" if normalized_source_channel_type == "app" else normalized_source_channel_type,
+                "message_format": "text",
+                "message_subject": topic_context.get("topic_title") or "",
+                "raw_text_content": normalized_user_turn_text,
+            },
+            file_inputs=[],
+        )
+        _record_market_topic_policy_check_usage_best_effort(
+            authenticated_user_id=authenticated_user_id,
+            market_topic_id=market_topic_id,
+            policy_check_result=policy_check_result,
+            connect=connect,
+        )
+        if _read_policy_check_moderation_status(policy_check_result) == "prohibited":
+            raise RuntimeError("API_DCX_MARKET_TOPIC_CHAT_PROHIBITED")
 
         ai_response = (generate_ai_response or generate_dcx_gemini_market_topic_chat_response)(
             topic_context=topic_context,
@@ -302,6 +328,36 @@ def _record_market_topic_chat_usage_best_effort(
         )
     except RuntimeError:
         pass
+
+
+def _record_market_topic_policy_check_usage_best_effort(
+    authenticated_user_id: int,
+    market_topic_id: int,
+    policy_check_result: dict,
+    connect: Callable[..., Any],
+) -> None:
+    if policy_check_result.get("policy_check_status") != "completed":
+        return
+    try:
+        record_dcx_user_llm_usage_event(
+            authenticated_user_id=authenticated_user_id,
+            provider_name=str(policy_check_result.get("provider_name") or ""),
+            model_name=str(policy_check_result.get("model_name") or ""),
+            prompt_version=str(policy_check_result.get("prompt_version") or ""),
+            usage_source_kind="content_policy_check",
+            usage_source_id=market_topic_id,
+            usage_metadata=policy_check_result.get("usage_metadata") if isinstance(policy_check_result.get("usage_metadata"), dict) else {},
+            connect_to_database=connect,
+        )
+    except RuntimeError:
+        pass
+
+
+def _read_policy_check_moderation_status(policy_check_result: dict) -> str:
+    normalized_status = str(policy_check_result.get("moderation_status") or "").strip().lower()
+    if normalized_status in {"allowed", "prohibited", "not_reviewed"}:
+        return normalized_status
+    return "not_reviewed"
 
 
 def _read_existing_market_topic_turn_pair_for_source_message(

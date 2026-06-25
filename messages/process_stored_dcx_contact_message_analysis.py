@@ -23,6 +23,9 @@ from apis.gemini.generate_dcx_gemini_structured_market_topic_seed import (
 from apis.gemini.generate_dcx_gemini_structured_trade_projection import (
     generate_dcx_gemini_structured_trade_projection,
 )
+from apis.gemini.generate_dcx_gemini_user_content_policy_check import (
+    generate_dcx_gemini_user_content_policy_check,
+)
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
@@ -56,6 +59,7 @@ def process_stored_dcx_contact_message_analysis(
     current_timestamp_ms_provider: Callable[[], int] | None = None,
     build_r2_client: Callable[[], Any] | None = None,
     analyze_message_content: Callable[[dict, list[dict]], dict] | None = None,
+    check_content_policy: Callable[..., dict] | None = None,
 ) -> dict:
     """
     CONTRACT:
@@ -164,8 +168,29 @@ def process_stored_dcx_contact_message_analysis(
             attachment_inputs=attachment_inputs,
             build_r2_client=build_r2_client,
         )
-        analysis_callable = analyze_message_content or generate_dcx_gemini_structured_message_analysis
-        analysis_result = analysis_callable(message_input, file_inputs)
+        policy_check_result = (check_content_policy or generate_dcx_gemini_user_content_policy_check)(
+            content_input=message_input,
+            file_inputs=file_inputs,
+        )
+        _record_best_effort_content_policy_usage_event(
+            user_id=message_input.get("user_id"),
+            usage_source_id=message_id,
+            policy_check_result=policy_check_result,
+            connect=connect,
+        )
+        if _read_policy_check_moderation_status(policy_check_result) == "prohibited":
+            analysis_result = _build_policy_blocked_analysis_result(
+                message_input=message_input,
+                file_inputs=file_inputs,
+                policy_check_result=policy_check_result,
+            )
+        else:
+            analysis_callable = analyze_message_content or generate_dcx_gemini_structured_message_analysis
+            analysis_result = analysis_callable(message_input, file_inputs)
+            analysis_result = _apply_content_policy_check_to_analysis_result(
+                analysis_result=analysis_result,
+                policy_check_result=policy_check_result,
+            )
         analysis_run_status = "completed"
         analysis_error_code = None
     except RuntimeError as runtime_error:
@@ -495,6 +520,7 @@ def _persist_message_analysis_result(
         "moderation_status": message_moderation_status,
         "moderation_reason_codes": analysis_result.get("matched_prohibited_categories", []),
         "moderation_reason_summary": analysis_result.get("moderation_reason_summary", ""),
+        "content_policy_check": analysis_result.get("policy_check_metadata_json", {}),
     }
     workflow_projection_state = _build_message_workflow_projection_state(
         analysis_result=analysis_result,
@@ -815,6 +841,117 @@ def _build_failed_analysis_result(
             "error_detail": error_detail,
         },
     }
+
+
+def _build_policy_blocked_analysis_result(
+    message_input: dict,
+    file_inputs: list[dict],
+    policy_check_result: dict,
+) -> dict:
+    return {
+        "provider_name": policy_check_result.get("provider_name", "google_gemini"),
+        "model_name": policy_check_result.get("model_name", ""),
+        "prompt_version": policy_check_result.get("prompt_version", ""),
+        "analysis_mode": "policy_blocked",
+        "message_language_code": None,
+        "message_summary": "",
+        "message_text_synthesis": "",
+        "message_analysis_status": "completed",
+        "moderation_status": "prohibited",
+        "moderation_reason_summary": str(policy_check_result.get("moderation_reason_summary") or "").strip(),
+        "matched_prohibited_categories": policy_check_result.get("matched_prohibited_categories", []),
+        "primary_workflow_kind": "",
+        "workflow_reason_summary": "",
+        "workflow_classification_status": "completed",
+        "workflow_items": [],
+        "attachments": [
+            {
+                "attachment_id": file_input["attachment_id"],
+                "file_object_id": file_input["file_object_id"],
+                "filename": file_input["original_filename"],
+                "file_kind": file_input["file_kind"],
+                "language_code": None,
+                "summary": "",
+                "description": "",
+                "transcription": "",
+                "synthesis": "",
+                "context_within_message": "",
+                "analysis_status": "skipped",
+            }
+            for file_input in file_inputs
+        ],
+        "usage_metadata": {},
+        "policy_check_metadata_json": _build_content_policy_metadata(policy_check_result),
+        "raw_output_json": {
+            "policy_check_result": policy_check_result.get("raw_output_json", {}),
+            "message_id": message_input.get("message_id"),
+        },
+    }
+
+
+def _apply_content_policy_check_to_analysis_result(
+    analysis_result: dict,
+    policy_check_result: dict,
+) -> dict:
+    normalized_result = {**analysis_result}
+    normalized_result["policy_check_metadata_json"] = _build_content_policy_metadata(policy_check_result)
+    policy_moderation_status = _read_policy_check_moderation_status(policy_check_result)
+    if policy_moderation_status not in {"allowed", "prohibited"}:
+        return normalized_result
+
+    normalized_result["moderation_status"] = policy_moderation_status
+    normalized_result["moderation_reason_summary"] = str(
+        policy_check_result.get("moderation_reason_summary") or ""
+    ).strip()
+    normalized_result["matched_prohibited_categories"] = policy_check_result.get(
+        "matched_prohibited_categories",
+        [],
+    )
+    if policy_moderation_status == "prohibited":
+        normalized_result["primary_workflow_kind"] = ""
+        normalized_result["workflow_reason_summary"] = ""
+        normalized_result["workflow_items"] = []
+    return normalized_result
+
+
+def _build_content_policy_metadata(policy_check_result: dict) -> dict:
+    return {
+        "provider_name": policy_check_result.get("provider_name", ""),
+        "model_name": policy_check_result.get("model_name", ""),
+        "prompt_version": policy_check_result.get("prompt_version", ""),
+        "analysis_mode": policy_check_result.get("analysis_mode", ""),
+        "policy_check_status": policy_check_result.get("policy_check_status", ""),
+        "moderation_status": policy_check_result.get("moderation_status", ""),
+        "matched_prohibited_categories": policy_check_result.get("matched_prohibited_categories", []),
+        "should_redact_original": policy_check_result.get("should_redact_original") is True,
+    }
+
+
+def _read_policy_check_moderation_status(policy_check_result: dict) -> str:
+    normalized_status = str(policy_check_result.get("moderation_status") or "").strip().lower()
+    if normalized_status in {"allowed", "prohibited", "not_reviewed"}:
+        return normalized_status
+    return "not_reviewed"
+
+
+def _record_best_effort_content_policy_usage_event(
+    user_id: Any,
+    usage_source_id: int | None,
+    policy_check_result: dict,
+    connect: Callable[..., Any],
+) -> None:
+    if policy_check_result.get("policy_check_status") != "completed":
+        return
+    _record_best_effort_llm_usage_event(
+        user_id=user_id,
+        provider_name=str(policy_check_result.get("provider_name") or ""),
+        model_name=str(policy_check_result.get("model_name") or ""),
+        prompt_version=str(policy_check_result.get("prompt_version") or ""),
+        usage_source_kind="content_policy_check",
+        usage_source_id=usage_source_id,
+        usage_metadata=policy_check_result.get("usage_metadata"),
+        connect=connect,
+    )
 
 
 def _record_best_effort_llm_usage_event(

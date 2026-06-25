@@ -16,24 +16,16 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
     read_dcx_gemini_message_analysis_model_name,
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
+from apis.gemini.generate_dcx_gemini_user_content_policy_check import (
+    DCX_USER_CONTENT_POLICY_REASON_CODES,
+)
 
 PROMPT_VERSION_DCX_CONTACT_MESSAGE_ANALYSIS = "dcx_contact_message_analysis_2026_04_28_v4"
 DCX_MESSAGE_TEXT_SUMMARY_WORD_COUNT_THRESHOLD = 100
 DCX_MESSAGE_TEXT_SYNTHESIS_WORD_COUNT_THRESHOLD = 500
 DCX_WORKFLOW_ITEM_KINDS = ("trade", "market_topic", "other")
 DCX_WORKFLOW_ITEM_CONFIDENCE_LABELS = ("high", "medium", "low")
-DCX_PROHIBITED_MESSAGE_REASON_CODES = (
-    "prohibited_children",
-    "prohibited_sexually_explicit",
-    "prohibited_exploitation_or_trafficking",
-    "prohibited_drugs",
-    "prohibited_weapons_explosives_conventional",
-    "prohibited_weapons_nuclear_chemical",
-    "prohibited_extremism_terrorism",
-    "prohibited_organised_crime",
-    "prohibited_fraud",
-    "prohibited_sanctions",
-)
+DCX_PROHIBITED_MESSAGE_REASON_CODES = DCX_USER_CONTENT_POLICY_REASON_CODES
 
 
 def generate_dcx_gemini_structured_message_analysis(
@@ -210,7 +202,10 @@ Return JSON only. Do not wrap JSON in markdown.
 - Identify the language the message is written in. Return the ISO language code.
 {message_summary_instruction}
 {text_synthesis_instruction}
-- After evaluating moderation, identify one or more workflow items from the message.
+- Content policy is checked by a separate DCX policy step before this workflow analysis.
+- Do not independently perform prohibited-content classification in this workflow analysis.
+- Set moderation_status = "allowed", moderation_reason_summary = "", and matched_prohibited_categories = [].
+- Identify one or more workflow items from the message.
 - Workflow routing must consider the whole message context, not only the main text body.
 - If the raw text is empty, very short, ambiguous, or purely incidental, use the attachment content and
   the attachment-level description/transcription/summary/synthesis/context to decide workflow routing.
@@ -220,11 +215,6 @@ Return JSON only. Do not wrap JSON in markdown.
     - multiple trade items;
     - multiple market-topic items;
     - a mix of trade items, market-topic items, and other items.
-- If the message is prohibited, moderation overrides workflow routing. In that case:
-    - set moderation_status = "prohibited";
-    - set primary_workflow_kind = "";
-    - return workflow_items = [].
-
 - All attachments require:
     - a 1-3 sentence summary;
     - a contextual note describing how the attachment contributes to the message;
@@ -254,13 +244,6 @@ Return JSON only. Do not wrap JSON in markdown.
 
 - Describe each attachment's role within or contribution to the overall context of the message;
 - Use empty strings for fields that do not apply.
-- Return one moderation decision for the whole message:
-    - moderation_status = "allowed" when no prohibited content is found;
-    - moderation_status = "prohibited" when any part of the message or any attachment matches one or more prohibited categories.
-- If moderation_status = "prohibited":
-    - include every matching prohibited category code in matched_prohibited_categories;
-    - include a short moderation_reason_summary explaining what triggered the block;
-    - do not soften or omit categories just because the message is commercial or framed as a trade.
 </analysis_rules>
 
 <workflow_taxonomy>
@@ -288,25 +271,7 @@ Return JSON only. Do not wrap JSON in markdown.
       - general chatter unrelated to trading
       - irrelevant media with no business context
 
-- prohibited override:
-    Discussion about sanctions, controlled goods, or prohibited material as market context can still be allowed
-    as a market_topic.
-    Attempts to buy, sell, move, source, route, or evade controls around prohibited materials or sanctions
-    are prohibited.
 </workflow_taxonomy>
-
-<prohibited_categories>
-- prohibited_children
-- prohibited_sexually_explicit
-- prohibited_exploitation_or_trafficking
-- prohibited_drugs
-- prohibited_weapons_explosives_conventional
-- prohibited_weapons_nuclear_chemical
-- prohibited_extremism_terrorism
-- prohibited_organised_crime
-- prohibited_fraud
-- prohibited_sanctions
-</prohibited_categories>
 
 <message>
   <message_id>{message_input['message_id']}</message_id>

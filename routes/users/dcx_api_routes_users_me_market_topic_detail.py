@@ -142,6 +142,18 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
                     },
                 },
             )
+        if error_code == "API_DCX_MARKET_TOPIC_CHAT_PROHIBITED":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "API_USERS_ME_MARKET_TOPIC_CHAT_PROHIBITED",
+                        "message": "That chat message was blocked by DCX content policy.",
+                        "suggested_action": "Use AI Chats for legitimate market, trade, logistics, business, compliance, or general discussion.",
+                    },
+                },
+            )
         return JSONResponse(
             status_code=500,
             content={
