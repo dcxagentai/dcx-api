@@ -51,7 +51,7 @@ def test_builds_same_channel_ai_response_with_topic_reference_instruction(monkey
 
     assert message_text == (
         "#T2 Aluminum premiums\n"
-        "https://app.dcxagent.ai/me/topics/2\n\n"
+        "https://app.dcxagent.ai/ai/chats/2\n\n"
         "The main drivers are Chinese restocking and freight volatility."
     )
 

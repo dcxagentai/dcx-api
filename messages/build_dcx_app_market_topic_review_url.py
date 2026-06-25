@@ -54,4 +54,4 @@ def build_dcx_app_market_topic_review_url(market_topic_id: int) -> str:
     if not isinstance(market_topic_id, int) or market_topic_id <= 0:
         raise RuntimeError("API_DCX_MARKET_TOPIC_REVIEW_URL_INVALID_TOPIC_ID")
 
-    return f"{read_dcx_app_base_url().rstrip('/')}/me/topics/{market_topic_id}"
+    return f"{read_dcx_app_base_url().rstrip('/')}/ai/chats/{market_topic_id}"

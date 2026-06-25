@@ -46,7 +46,7 @@ NARRATIVE:
     - Later versions can add context compaction and stronger idempotency keys.
 
 TESTS:
-  - No dedicated unit test exists yet; smoke through POST /users/me/market-topics/{id}/turns.
+  - No dedicated unit test exists yet; smoke through POST /ai/chats/{id}/turns.
 
 ERRORS:
   - API_DCX_MARKET_TOPIC_CHAT_EMPTY:

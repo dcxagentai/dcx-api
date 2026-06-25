@@ -43,7 +43,7 @@ NARRATIVE:
     - Later slices can add compaction, provider choice, stricter moderation, and translated response variants.
 
 TESTS:
-  - No dedicated unit test exists yet; smoke through POST /users/me/market-topics/{id}/turns.
+  - No dedicated unit test exists yet; smoke through POST /ai/chats/{id}/turns.
 
 ERRORS:
   - API_DCX_GEMINI_MARKET_TOPIC_CHAT_FAILED:

@@ -18,7 +18,7 @@ CONTRACT:
   postconditions:
     - Returns compact text in the shape:
       `#T18 Topic title`
-      `https://app.../me/topics/18`
+      `https://app.../ai/chats/18`
       blank line
       message text
   side_effects: []
@@ -66,7 +66,7 @@ def build_dcx_market_topic_cross_surface_notification_text(
     normalized_message_text = message_text.strip() if isinstance(message_text, str) else ""
     if include_source_links is False:
         normalized_message_text = read_dcx_market_topic_text_without_source_links(normalized_message_text)
-    app_topic_url = f"{read_dcx_app_base_url().rstrip('/')}/me/topics/{market_topic_id}"
+    app_topic_url = f"{read_dcx_app_base_url().rstrip('/')}/ai/chats/{market_topic_id}"
     reference_line = f"#{normalized_reference_code}"
     if normalized_topic_title:
         reference_line = f"{reference_line} {normalized_topic_title}"

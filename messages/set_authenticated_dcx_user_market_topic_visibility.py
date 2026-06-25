@@ -30,7 +30,7 @@ WHAT CAN GO WRONG: invalid status, missing topic, or missing migration tables.
 WHAT COMES NEXT: forum catalog/comment surfaces read from forum posts.
 
 TESTS:
-- No dedicated unit test exists yet. Smoke with PATCH /users/me/market-topics/{id}/visibility.
+- No dedicated unit test exists yet. Smoke with PATCH /ai/chats/{id}/visibility.
 
 ERRORS:
 - API_DCX_MARKET_TOPIC_VISIBILITY_INVALID: retry with private, shareable, or public.

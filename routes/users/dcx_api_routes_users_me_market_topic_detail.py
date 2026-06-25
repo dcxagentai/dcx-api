@@ -1,7 +1,7 @@
 """
 CONTEXT:
-This file owns the authenticated DCX app HTTP boundary for reading one Topic detail payload.
-It exists so Slice 1 can render the first AI-seeded topic detail view.
+This file owns the authenticated DCX app HTTP boundary for reading one AI Chat detail payload.
+It exists so the app can render an AI-seeded market-topic chat detail view.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from messages.read_authenticated_dcx_user_market_topic_detail import (
     read_authenticated_dcx_user_market_topic_detail,
 )
 
-dcx_api_routes_users_me_market_topic_detail_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_market_topic_detail_router = APIRouter(tags=["ai"])
 
 
 class DcxUsersMeMarketTopicAiTurnRequest(BaseModel):
@@ -33,7 +33,7 @@ class DcxUsersMeMarketTopicAiTurnRequest(BaseModel):
     language_code: str | None = "en"
 
 
-@dcx_api_routes_users_me_market_topic_detail_router.get("/me/market-topics/{market_topic_id}", response_model=None)
+@dcx_api_routes_users_me_market_topic_detail_router.get("/ai/chats/{market_topic_id}", response_model=None)
 def get_authenticated_dcx_user_market_topic_detail(
     request: Request,
     market_topic_id: int,
@@ -60,7 +60,7 @@ def get_authenticated_dcx_user_market_topic_detail(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_DETAIL_READ_FAILED",
-                    "message": "We could not load that topic right now.",
+                    "message": "We could not load that AI chat right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -73,8 +73,8 @@ def get_authenticated_dcx_user_market_topic_detail(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_NOT_FOUND",
-                    "message": "That topic does not exist for this account.",
-                    "suggested_action": "Refresh the Topics view and retry with one current row.",
+                    "message": "That AI chat does not exist for this account.",
+                    "suggested_action": "Refresh AI Chats and retry with one current row.",
                 },
             },
         )
@@ -84,14 +84,14 @@ def get_authenticated_dcx_user_market_topic_detail(
         "data": market_topic_detail,
         "context": {
             "surface": "app",
-            "view": "market_topic_detail",
+            "view": "ai_chat_detail",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
 
 
 @dcx_api_routes_users_me_market_topic_detail_router.post(
-    "/me/market-topics/{market_topic_id}/turns",
+    "/ai/chats/{market_topic_id}/turns",
     response_model=None,
 )
 def post_authenticated_dcx_user_market_topic_ai_turn(
@@ -126,7 +126,7 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
                     "error": {
                         "code": "API_USERS_ME_MARKET_TOPIC_CHAT_EMPTY",
                         "message": "That chat message is empty.",
-                        "suggested_action": "Add a market-topic question or instruction and retry.",
+                        "suggested_action": "Add an AI chat question or instruction and retry.",
                     },
                 },
             )
@@ -137,8 +137,8 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
                     "ok": False,
                     "error": {
                         "code": "API_USERS_ME_MARKET_TOPIC_CHAT_CONTEXT_LIMIT_REACHED",
-                        "message": "This MVP topic chat has reached its context limit.",
-                        "suggested_action": "Start a new topic with the latest question.",
+                        "message": "This MVP AI chat has reached its context limit.",
+                        "suggested_action": "Start a new AI chat with the latest question.",
                     },
                 },
             )
@@ -160,7 +160,7 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_CHAT_FAILED",
-                    "message": "We could not continue that topic chat right now.",
+                    "message": "We could not continue that AI chat right now.",
                     "suggested_action": "Retry in a moment after the backend and Gemini provider are healthy.",
                 },
             },
@@ -173,8 +173,8 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_NOT_FOUND",
-                    "message": "That topic does not exist for this account.",
-                    "suggested_action": "Refresh the Topics view and retry with one current row.",
+                    "message": "That AI chat does not exist for this account.",
+                    "suggested_action": "Refresh AI Chats and retry with one current row.",
                 },
             },
         )
@@ -189,7 +189,7 @@ def post_authenticated_dcx_user_market_topic_ai_turn(
         "data": market_topic_detail,
         "context": {
             "surface": "app",
-            "view": "market_topic_detail",
+            "view": "ai_chat_detail",
             "operation": "market_topic_ai_turn_added",
             "identity_resolution_mode": identity_resolution_mode,
         },

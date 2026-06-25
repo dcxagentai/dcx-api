@@ -1,6 +1,6 @@
 """
 CONTEXT:
-This file owns the authenticated DCX app HTTP boundary for changing topic visibility.
+This file owns the authenticated DCX app HTTP boundary for changing AI chat visibility.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from messages.set_authenticated_dcx_user_market_topic_visibility import (
     set_authenticated_dcx_user_market_topic_visibility,
 )
 
-dcx_api_routes_users_me_market_topic_visibility_router = APIRouter(prefix="/users", tags=["users"])
+dcx_api_routes_users_me_market_topic_visibility_router = APIRouter(tags=["ai"])
 
 
 class DcxUsersMeMarketTopicVisibilityRequest(BaseModel):
@@ -32,7 +32,7 @@ class DcxUsersMeMarketTopicVisibilityRequest(BaseModel):
 
 
 @dcx_api_routes_users_me_market_topic_visibility_router.patch(
-    "/me/market-topics/{market_topic_id}/visibility",
+    "/ai/chats/{market_topic_id}/visibility",
     response_model=None,
 )
 def patch_authenticated_dcx_user_market_topic_visibility(
@@ -65,7 +65,7 @@ def patch_authenticated_dcx_user_market_topic_visibility(
                     "ok": False,
                     "error": {
                         "code": "API_USERS_ME_MARKET_TOPIC_VISIBILITY_INVALID",
-                        "message": "We could not use that topic visibility.",
+                        "message": "We could not use that AI chat visibility.",
                         "suggested_action": "Retry with private, shareable, or public.",
                     },
                 },
@@ -76,7 +76,7 @@ def patch_authenticated_dcx_user_market_topic_visibility(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_VISIBILITY_FAILED",
-                    "message": "We could not change that topic visibility right now.",
+                    "message": "We could not change that AI chat visibility right now.",
                     "suggested_action": "Retry in a moment after the backend is healthy.",
                 },
             },
@@ -89,8 +89,8 @@ def patch_authenticated_dcx_user_market_topic_visibility(
                 "ok": False,
                 "error": {
                     "code": "API_USERS_ME_MARKET_TOPIC_NOT_FOUND",
-                    "message": "That topic does not exist for this account.",
-                    "suggested_action": "Refresh Topics and retry with a current topic.",
+                    "message": "That AI chat does not exist for this account.",
+                    "suggested_action": "Refresh AI Chats and retry with a current chat.",
                 },
             },
         )
@@ -105,7 +105,7 @@ def patch_authenticated_dcx_user_market_topic_visibility(
         "data": topic_detail,
         "context": {
             "surface": "app",
-            "view": "market_topic_detail",
+            "view": "ai_chat_detail",
             "operation": "market_topic_visibility_updated",
             "identity_resolution_mode": identity_resolution_mode,
         },
