@@ -1295,7 +1295,7 @@ def _rebuild_message_workflow_projections(
                     """,
                     (now_ts_ms, workflow_item_id),
                 )
-        elif item_kind == "market_topic":
+        elif item_kind in {"market_topic", "other"}:
             try:
                 topic_seed = generate_dcx_gemini_structured_market_topic_seed(
                     message_input={

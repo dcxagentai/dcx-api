@@ -257,19 +257,21 @@ Return JSON only. Do not wrap JSON in markdown.
       - "Buyer confirms interest in 2 containers if payment terms hold."
 
 - market_topic:
-    Use this when the message contains trader-relevant market, business, commodity, policy, sanctions,
-    logistics, or commercial discussion that is not itself an actionable structured trade item.
+    Use this when the message is not itself an actionable structured trade item and is not prohibited.
+    This includes trader-relevant market, business, commodity, policy, sanctions, logistics, or
+    commercial discussion, but can also include general questions or personal AI-chat prompts.
     Examples:
       - "How do new cocoa export taxes affect availability next quarter?"
       - "What are traders saying about sanctions on Russian diesel?"
       - "Attached article about port congestion in Lagos."
+      - "Explain this concept to me."
+      - "Help me think through an idea."
 
 - other:
-    Use this when the message contains content that is not a trade item and not a trader-relevant market topic.
+    Use this only for empty, accidental, or unusable content that cannot reasonably become an AI chat.
     Examples:
-      - personal or accidental messages
-      - general chatter unrelated to trading
-      - irrelevant media with no business context
+      - empty accidental messages
+      - corrupted or meaningless media with no understandable content
 
 </workflow_taxonomy>
 
@@ -621,6 +623,8 @@ def _normalize_workflow_items(value: Any, file_inputs: list[dict]) -> list[dict]
         item_kind = str(item.get("item_kind") or "").strip().lower()
         if item_kind not in DCX_WORKFLOW_ITEM_KINDS:
             continue
+        if item_kind == "other":
+            item_kind = "market_topic"
         referenced_attachment_ids = []
         for referenced_attachment_id in item.get("referenced_attachment_ids") or []:
             attachment_id = _coerce_positive_int(referenced_attachment_id)
@@ -673,7 +677,7 @@ def _build_fallback_workflow_items_from_message_context(
 
     return [
         {
-            "item_kind": "other",
+            "item_kind": "market_topic",
             "item_title": "Attachment-led message",
             "item_summary": fallback_summary_text[:4000],
             "source_excerpt_text": fallback_summary_text[:4000],
@@ -691,6 +695,8 @@ def _normalize_primary_workflow_kind(
     if moderation_status == "prohibited":
         return ""
     normalized_value = str(value or "").strip().lower()
+    if normalized_value == "other" and any(item["item_kind"] == "market_topic" for item in normalized_workflow_items):
+        return "market_topic"
     if normalized_value in DCX_WORKFLOW_ITEM_KINDS:
         return normalized_value
     if any(item["item_kind"] == "trade" for item in normalized_workflow_items):
