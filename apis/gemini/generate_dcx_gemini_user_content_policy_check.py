@@ -9,7 +9,9 @@ classification prompts.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from typing import Any, Callable
 
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
@@ -18,6 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
 PROMPT_VERSION_DCX_USER_CONTENT_POLICY_CHECK = "dcx_user_content_policy_check_2026_06_25_v1"
+LOGGER = logging.getLogger(__name__)
 DCX_USER_CONTENT_POLICY_REASON_CODES = (
     "prohibited_children",
     "prohibited_sexually_explicit",
@@ -88,6 +91,7 @@ def generate_dcx_gemini_user_content_policy_check(
         parsed_output = json.loads(output_text)
         usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
     except Exception as exc:
+        LOGGER.exception("Gemini user-content policy check failed.")
         raise RuntimeError("API_DCX_GEMINI_USER_CONTENT_POLICY_CHECK_FAILED") from exc
 
     return _normalize_policy_check_output(
@@ -113,18 +117,47 @@ def _send_gemini_generate_content_request(request_context: dict) -> dict:
             )
         )
 
-    response = client.models.generate_content(
-        model=request_context["model_name"],
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=request_context["response_schema"],
-        ),
+    response = _generate_content_with_brief_retries(
+        generate_content=lambda: client.models.generate_content(
+            model=request_context["model_name"],
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=request_context["response_schema"],
+            ),
+        )
     )
     return {
         "output_text": (response.text or "").strip(),
         "usage_metadata": read_dcx_gemini_usage_metadata(response),
     }
+
+
+def _generate_content_with_brief_retries(generate_content: Callable[[], Any]) -> Any:
+    last_exception: Exception | None = None
+    for attempt_index in range(3):
+        try:
+            return generate_content()
+        except Exception as exc:
+            last_exception = exc
+            if attempt_index >= 2 or not _is_retryable_gemini_exception(exc):
+                raise
+            time.sleep(0.75 * (attempt_index + 1))
+    raise last_exception or RuntimeError("API_DCX_GEMINI_USER_CONTENT_POLICY_CHECK_FAILED")
+
+
+def _is_retryable_gemini_exception(exc: Exception) -> bool:
+    normalized_message = str(exc).lower()
+    return any(
+        retryable_fragment in normalized_message
+        for retryable_fragment in (
+            "429",
+            "503",
+            "too many requests",
+            "resource_exhausted",
+            "unavailable",
+        )
+    )
 
 
 def _build_dcx_user_content_policy_check_prompt(content_input: dict, file_inputs: list[dict]) -> str:
