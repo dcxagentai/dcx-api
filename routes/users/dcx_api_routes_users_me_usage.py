@@ -19,6 +19,15 @@ dcx_api_routes_users_me_usage_router = APIRouter(prefix="/users", tags=["users"]
 
 @dcx_api_routes_users_me_usage_router.get("/me/usage", response_model=None)
 def get_authenticated_dcx_user_usage(request: Request):
+    return _read_authenticated_dcx_user_usage_response(request=request, days=30)
+
+
+@dcx_api_routes_users_me_usage_router.get("/me/usage/days/{days}", response_model=None)
+def get_authenticated_dcx_user_usage_for_days(request: Request, days: int):
+    return _read_authenticated_dcx_user_usage_response(request=request, days=days)
+
+
+def _read_authenticated_dcx_user_usage_response(request: Request, days: int):
     """
     CONTRACT:
       preconditions:
@@ -71,8 +80,12 @@ def get_authenticated_dcx_user_usage(request: Request):
     if error_response is not None:
         return error_response
 
+    normalized_days = max(1, min(int(days or 30), 365))
     try:
-        usage_summary = read_dcx_user_usage_summary(user_id=authenticated_user_id)
+        usage_summary = read_dcx_user_usage_summary(
+            user_id=authenticated_user_id,
+            daily_window_days=normalized_days,
+        )
     except RuntimeError:
         return JSONResponse(
             status_code=500,

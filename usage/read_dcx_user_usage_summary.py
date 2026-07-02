@@ -49,6 +49,7 @@ CODE:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import psycopg2
@@ -58,9 +59,15 @@ from storage.db_config import DB_CONFIG
 
 def read_dcx_user_usage_summary(
     user_id: int,
+    daily_window_days: int = 30,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     connect = connect_to_database or psycopg2.connect
+    normalized_daily_window_days = max(1, min(int(daily_window_days or 30), 365))
+    now_utc_date = datetime.now(timezone.utc).date()
+    first_usage_date = now_utc_date - timedelta(days=normalized_daily_window_days - 1)
+    first_usage_ts_ms = int(datetime.combine(first_usage_date, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000)
+
     try:
         with connect(**DB_CONFIG) as connection:
             with connection.cursor() as cursor:
@@ -102,26 +109,57 @@ def read_dcx_user_usage_summary(
                 cursor.execute(
                     """
                     SELECT
-                        to_char(to_timestamp(created_at_ts_ms / 1000.0), 'YYYY-MM-DD') AS usage_day,
+                        to_char((to_timestamp(created_at_ts_ms / 1000.0) AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS usage_day,
+                        COALESCE(SUM(prompt_token_count), 0) AS prompt_tokens,
+                        COALESCE(SUM(candidates_token_count), 0) AS candidate_tokens,
                         COALESCE(SUM(total_token_count), 0) AS total_tokens,
                         COUNT(*) AS event_count
                     FROM stephen_dcx_llm_usage_events
-                    WHERE user_id = %s
+                      WHERE user_id = %s
+                      AND created_at_ts_ms >= %s
                     GROUP BY usage_day
-                    ORDER BY usage_day DESC
-                    LIMIT 30
+                    ORDER BY usage_day ASC
                     """,
-                    (user_id,),
+                    (user_id, first_usage_ts_ms),
                 )
                 daily_rows = cursor.fetchall()
     except Exception as exc:
         raise RuntimeError("API_DCX_USER_USAGE_READ_FAILED") from exc
+
+    daily_totals_by_day = {
+        row[0]: {
+            "usage_day": row[0],
+            "prompt_token_count": int(row[1] or 0),
+            "candidates_token_count": int(row[2] or 0),
+            "total_token_count": int(row[3] or 0),
+            "event_count": int(row[4] or 0),
+        }
+        for row in daily_rows
+    }
+
+    daily_totals = []
+    for day_offset in range(normalized_daily_window_days):
+        usage_date = first_usage_date + timedelta(days=day_offset)
+        usage_day = usage_date.isoformat()
+        daily_totals.append(
+            daily_totals_by_day.get(
+                usage_day,
+                {
+                    "usage_day": usage_day,
+                    "prompt_token_count": 0,
+                    "candidates_token_count": 0,
+                    "total_token_count": 0,
+                    "event_count": 0,
+                },
+            )
+        )
 
     return {
         "total_prompt_tokens": int(totals_row[0] or 0),
         "total_candidates_tokens": int(totals_row[1] or 0),
         "total_tokens": int(totals_row[2] or 0),
         "total_events": int(totals_row[3] or 0),
+        "daily_window_days": normalized_daily_window_days,
         "recent_events": [
             {
                 "provider_name": row[0],
@@ -136,12 +174,5 @@ def read_dcx_user_usage_summary(
             }
             for row in event_rows
         ],
-        "daily_totals": [
-            {
-                "usage_day": row[0],
-                "total_token_count": int(row[1] or 0),
-                "event_count": int(row[2] or 0),
-            }
-            for row in daily_rows
-        ],
+        "daily_totals": daily_totals,
     }
