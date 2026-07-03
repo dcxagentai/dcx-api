@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS stephen_dcx_trade_publications (
     published_summary_json jsonb NOT NULL DEFAULT '{}'::jsonb,
     publication_metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at_ts_ms bigint NOT NULL,
-    updated_at_ts_ms bigint NOT NULL
+    updated_at_ts_ms bigint NOT NULL DEFAULT ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS stephen_dcx_trade_publications_public_reference_code_key
@@ -216,7 +216,8 @@ CREATE TABLE IF NOT EXISTS stephen_dcx_outbound_interaction_routes (
     route_id bigint NOT NULL,
     channel_type text NOT NULL,
     route_metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
-    created_at_ts_ms bigint NOT NULL
+    created_at_ts_ms bigint NOT NULL,
+    updated_at_ts_ms bigint NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS stephen_dcx_outbound_interaction_routes_provider_message_key

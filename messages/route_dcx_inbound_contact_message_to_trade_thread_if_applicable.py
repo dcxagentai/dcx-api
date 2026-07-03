@@ -11,7 +11,7 @@ CONTRACT:
   - the sender has already been resolved to a DCX user/contact method when possible.
 - postconditions:
   - Returns None when the message does not contain a valid participant-owned thread reference.
-  - Appends exactly one trade-thread message when the message includes a valid #C-style reference.
+  - Appends exactly one trade-thread message when the message includes a valid #TC-style reference.
   - Marks the contact message as ready/completed with workflow metadata showing the routed thread.
 - side_effects:
   - may insert into stephen_dcx_trade_thread_messages.
@@ -29,7 +29,7 @@ NARRATIVE:
 WHY this exists:
   The MVP now has private trade conversations on the web app, but traders naturally reply from
   email and WhatsApp. Provider messages should become chat turns when the trader supplies the
-  explicit conversation reference, for example #C12.
+  explicit conversation reference, for example #TC12.
 WHEN TO USE it:
   Use it after the provider message has been persisted and attachments stored, before normal
   classification/routing.
@@ -39,13 +39,13 @@ WHEN NOT TO USE it:
 WHAT CAN GO WRONG:
   Traders can omit the reference, use a stale/closed thread, or send from an unlinked address/phone.
 WHAT COMES NEXT:
-  Provider reply-id correlation can complement #C references later; the explicit reference remains
+  Provider reply-id correlation can complement #TC references later; the explicit reference remains
   a useful fallback and support/debug handle.
 
 TESTS:
-- Manual MVP smoke: email reply "#C1 yes, interested" appears in Trade Chats and does not create a new trade.
-- Manual MVP smoke: WhatsApp reply "#C1 price?" appears in Trade Chats and notifies the other participant.
-- Manual MVP smoke: non-participant message with "#C1" falls through to normal classification.
+- Manual MVP smoke: email reply "#TC1 yes, interested" appears in Trade Chats and does not create a new trade.
+- Manual MVP smoke: WhatsApp reply "#TC1 price?" appears in Trade Chats and notifies the other participant.
+- Manual MVP smoke: non-participant message with "#TC1" is blocked as an invalid reference.
 
 ERRORS:
 - API_DCX_INBOUND_TRADE_THREAD_ROUTE_FAILED:
@@ -238,7 +238,7 @@ def _read_inbound_contact_message_trade_thread_route_context(
 
 
 def _extract_trade_thread_reference_code(text: str) -> str | None:
-    return extract_dcx_cross_surface_reference_code(text=text, reference_prefix="C")
+    return extract_dcx_cross_surface_reference_code(text=text, reference_prefix="TC")
 
 
 def _read_referenced_trade_thread_for_participant(
@@ -314,7 +314,7 @@ def _mark_contact_message_as_trade_thread_routed(
                     contains_market_topic_items = FALSE,
                     contains_other_items = FALSE,
                     workflow_reason_summary = %s,
-                    workflow_metadata_json = workflow_metadata_json || %s::jsonb,
+                    workflow_metadata_json = COALESCE(workflow_metadata_json, '{}'::jsonb) || %s::jsonb,
                     analysis_completed_at_ts_ms = %s,
                     updated_at_ts_ms = %s
                 WHERE id = %s

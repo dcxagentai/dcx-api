@@ -2,13 +2,13 @@
 CONTEXT:
 This file sends one same-channel response for a market-topic AI chat turn that arrived from email
 or WhatsApp.
-It exists so a trader can continue a private DCX AI topic with `#T` references without opening the
+It exists so a trader can continue a private DCX AI chat with `#AI` references without opening the
 web app after every turn.
 
 CONTRACT:
 - preconditions:
   - market_topic_id identifies one market topic that the caller has already authorized.
-  - route_reference_code is the visible topic reference such as `T2`.
+  - route_reference_code is the visible chat reference such as `AI2`.
   - channel_type is `email` or `whatsapp`.
   - recipient_handle is the normalized verified address/phone that sent the inbound turn.
   - assistant_turn_text is non-empty.
@@ -24,7 +24,7 @@ CONTRACT:
 
 NARRATIVE:
 WHY this exists:
-  Market topics are private trader-to-AI workspaces. When a trader asks the next topic question
+  AI chats are private trader-to-AI workspaces. When a trader asks the next chat question
   from WhatsApp or email, the useful response should return to that same surface.
 WHEN TO USE it:
   Use it after the canonical topic user turn and assistant turn have been saved.

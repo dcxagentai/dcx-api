@@ -2,7 +2,7 @@
 CONTEXT:
 This file decides whether one already-stored inbound email/WhatsApp message is a continuation of
 an existing private DCX market-topic AI conversation.
-It exists so traders can use `#T` references from email or WhatsApp to keep chatting with DCX AI
+It exists so traders can use `#AI` references from email or WhatsApp to keep chatting with DCX AI
 about a previously opened market topic.
 
 CONTRACT:
@@ -12,7 +12,7 @@ CONTRACT:
 - postconditions:
   - Returns None when the message does not contain a valid owner-owned topic reference.
   - Appends one user market-topic turn and one assistant turn when the message includes a valid
-    #T-style reference.
+    #AI-style reference.
   - Marks the contact message as ready/completed with workflow metadata showing the routed topic.
   - Attempts to send the assistant response back on the same channel.
 - side_effects:
@@ -30,7 +30,7 @@ CONTRACT:
 
 NARRATIVE:
 WHY this exists:
-  Market topics are now private AI workspaces. A trader should be able to receive `#T2` and then
+  Market topics are now private AI workspaces. A trader should be able to receive `#AI2` and then
   ask follow-up questions from the same real-world channels they use for trade chats.
 WHEN TO USE it:
   Use it after the provider message has been persisted and attachments stored, before normal
@@ -108,7 +108,7 @@ def route_dcx_inbound_contact_message_to_market_topic_if_applicable(
             return None
         market_topic_id = read_dcx_cross_surface_reference_id(
             reference_code=topic_reference_code,
-            reference_prefix="T",
+            reference_prefix="AI",
         )
         if market_topic_id is None:
             return None
@@ -242,7 +242,7 @@ def _read_inbound_contact_message_market_topic_route_context(
 
 
 def _extract_market_topic_reference_code(text: str) -> str | None:
-    return extract_dcx_cross_surface_reference_code(text=text, reference_prefix="T")
+    return extract_dcx_cross_surface_reference_code(text=text, reference_prefix="AI")
 
 
 def _read_referenced_market_topic_for_owner(
@@ -299,14 +299,14 @@ def _mark_contact_message_as_market_topic_routed(
                     contains_market_topic_items = FALSE,
                     contains_other_items = FALSE,
                     workflow_reason_summary = %s,
-                    workflow_metadata_json = workflow_metadata_json || %s::jsonb,
+                    workflow_metadata_json = COALESCE(workflow_metadata_json, '{}'::jsonb) || %s::jsonb,
                     analysis_completed_at_ts_ms = %s,
                     updated_at_ts_ms = %s
                 WHERE id = %s
                 """,
                 (
-                    f"Routed to private market topic AI conversation {topic_reference_code}.",
-                    f"Routed to private market topic AI conversation {topic_reference_code}.",
+                    f"Routed to private AI chat {topic_reference_code}.",
+                    f"Routed to private AI chat {topic_reference_code}.",
                     Json(
                         {
                             "market_topic_routing": {

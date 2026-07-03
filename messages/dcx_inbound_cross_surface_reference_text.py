@@ -7,8 +7,8 @@ portable reference codes and remove mail-client plumbing before messages become 
 
 CONTRACT:
 - preconditions:
-  - reference_prefix is one short alphabetic routing namespace such as `C` or `T`.
-  - reference_code is one concrete reference such as `C2` or `T2`.
+  - reference_prefix is one short alphabetic routing namespace such as `AI`, `TC`, `T`, `DM`, or `P`.
+  - reference_code is one concrete reference such as `AI2`, `TC7`, `T3`, `DM4`, or `P9`.
   - message_subject and message_text may contain email/WhatsApp reply noise.
 - postconditions:
   - Extracts exact namespace references without accepting arbitrary embedded words.
@@ -55,21 +55,102 @@ EMAIL_REPLY_QUOTE_BOUNDARY_PATTERNS = [
     re.compile(r"^(from|to|cc|bcc|date|sent|subject):\s*.+", re.IGNORECASE),
 ]
 
+DCX_CROSS_SURFACE_REFERENCE_PREFIX_BY_KIND = {
+    "ai_chat": "AI",
+    "trade_chat": "TC",
+    "trade": "T",
+    "dm": "DM",
+    "feed_post": "P",
+}
+
+
+def extract_dcx_cross_surface_routing_reference(text: str) -> dict | None:
+    normalized_text = _read_dcx_cross_surface_reference_detection_text(text)
+    reference_matches = []
+    for reference_kind, reference_prefix in sorted(
+        DCX_CROSS_SURFACE_REFERENCE_PREFIX_BY_KIND.items(),
+        key=lambda item: len(item[1]),
+        reverse=True,
+    ):
+        reference_match = _read_dcx_cross_surface_reference_match(
+            normalized_text=normalized_text,
+            reference_prefix=reference_prefix,
+        )
+        if reference_match is None:
+            continue
+        reference_id = read_dcx_cross_surface_reference_id(
+            reference_code=reference_match["reference_code"],
+            reference_prefix=reference_prefix,
+        )
+        if reference_id is None:
+            continue
+        reference_matches.append(
+            {
+                "reference_kind": reference_kind,
+                "reference_prefix": reference_prefix,
+                "reference_code": reference_match["reference_code"],
+                "reference_id": reference_id,
+                "match_start": reference_match["match_start"],
+            }
+        )
+    if not reference_matches:
+        return None
+
+    earliest_reference = sorted(
+        reference_matches,
+        key=lambda item: (item["match_start"], -len(item["reference_prefix"])),
+    )[0]
+    return {
+        "reference_kind": earliest_reference["reference_kind"],
+        "reference_prefix": earliest_reference["reference_prefix"],
+        "reference_code": earliest_reference["reference_code"],
+        "reference_id": earliest_reference["reference_id"],
+    }
+
 
 def extract_dcx_cross_surface_reference_code(text: str, reference_prefix: str) -> str | None:
-    normalized_text = text if isinstance(text, str) else ""
+    normalized_text = _read_dcx_cross_surface_reference_detection_text(text)
+    reference_match = _read_dcx_cross_surface_reference_match(
+        normalized_text=normalized_text,
+        reference_prefix=reference_prefix,
+    )
+    return None if reference_match is None else reference_match["reference_code"]
+
+
+def _read_dcx_cross_surface_reference_match(
+    normalized_text: str,
+    reference_prefix: str,
+) -> dict | None:
     normalized_prefix = reference_prefix.strip().upper() if isinstance(reference_prefix, str) else ""
     if not normalized_prefix.isalpha() or len(normalized_prefix) > 4:
         return None
 
     pattern = re.compile(
-        rf"(?:^|[\s#]){re.escape(normalized_prefix)}(?P<item_id>[0-9]{{1,12}})(?=\b)",
+        rf"(?:^|[\s#])(?P<reference_prefix>{re.escape(normalized_prefix)})(?P<item_id>[0-9]{{1,12}})(?=\b)",
         re.IGNORECASE,
     )
     match = pattern.search(normalized_text)
     if match is None:
         return None
-    return f"{normalized_prefix}{match.group('item_id')}"
+    return {
+        "reference_code": f"{normalized_prefix}{match.group('item_id')}",
+        "match_start": match.start("reference_prefix"),
+    }
+
+
+def _read_dcx_cross_surface_reference_detection_text(text: str) -> str:
+    normalized_text = text if isinstance(text, str) else ""
+    detection_lines = []
+    for raw_line in normalized_text.splitlines():
+        line = raw_line.strip()
+        if line == "":
+            continue
+        if line.startswith(">") or _read_line_is_email_reply_quote_boundary(line):
+            break
+        if "open in dcx:" in line.lower() or "reply with #" in line.lower():
+            continue
+        detection_lines.append(line)
+    return "\n".join(detection_lines)
 
 
 def read_dcx_cross_surface_reference_id(reference_code: str, reference_prefix: str) -> int | None:
@@ -127,7 +208,13 @@ def strip_dcx_cross_surface_reference_from_message_text(message_text: str, refer
         stripped_lines.append(line)
 
     stripped_text = "\n".join(stripped_lines)
-    stripped_text = re.sub(rf"#?{re.escape(reference_code)}\b", "", stripped_text, flags=re.IGNORECASE)
+    stripped_text = re.sub(
+        rf"#?{re.escape(reference_code)}\b[\s,;:\-]*",
+        "",
+        stripped_text,
+        flags=re.IGNORECASE,
+    )
+    stripped_text = re.sub(r"^[\s,;:\-]+", "", stripped_text)
     return stripped_text.strip()
 
 
@@ -152,6 +239,8 @@ def strip_dcx_cross_surface_reference_from_subject(message_subject: str, referen
     if normalized_subject.lower() in {
         "dcx trade chat",
         "trade chat",
+        "dcx ai chat",
+        "ai chat",
         "dcx market topic",
         "market topic",
         "dcx topic chat",

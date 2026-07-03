@@ -1,23 +1,23 @@
 """
 CONTEXT:
-This file builds the compact cross-surface notification text for one private DCX market topic.
-It exists so initial topic creation and later `#T` topic-chat replies use the same WhatsApp/email
+This file builds the compact cross-surface notification text for one private DCX AI chat.
+It exists so initial AI chat creation and later `#AI` chat replies use the same WhatsApp/email
 message shape instead of drifting across separate formatter blocks.
 
 FLOW/SYSTEM:
-- Inbound WhatsApp/email/app messages can create private market topics.
-- Later WhatsApp/email replies can continue the topic with `#T{id}`.
-- Both surfaces should show only the necessary topic reference, link, and AI message.
+- Inbound WhatsApp/email/app messages can create private AI chats.
+- Later WhatsApp/email replies can continue the chat with `#AI{id}`.
+- Both surfaces should show only the necessary chat reference, link, and AI message.
 
 CONTRACT:
   preconditions:
     - market_topic_id is a positive persisted topic id.
-    - route_reference_code is the visible topic reference such as `T18`.
+    - route_reference_code is the visible chat reference such as `AI18`.
     - message_text is the user-facing generated topic message.
     - topic_title may be empty for legacy callers, but should be present when available.
   postconditions:
     - Returns compact text in the shape:
-      `#T18 Topic title`
+      `#AI18 Chat title`
       `https://app.../ai/chats/18`
       blank line
       message text

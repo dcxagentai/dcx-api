@@ -51,7 +51,22 @@ ADD COLUMN IF NOT EXISTS recipient_user_id bigint NULL REFERENCES public.stephen
 ADD COLUMN IF NOT EXISTS route_channel text NULL,
 ADD COLUMN IF NOT EXISTS provider_message_id text NULL,
 ADD COLUMN IF NOT EXISTS provider_thread_id text NULL,
-ADD COLUMN IF NOT EXISTS route_reference_code text NULL;
+ADD COLUMN IF NOT EXISTS route_reference_code text NULL,
+ADD COLUMN IF NOT EXISTS updated_at_ts_ms bigint NULL;
+
+UPDATE public.stephen_dcx_outbound_interaction_routes
+SET updated_at_ts_ms = COALESCE(
+    updated_at_ts_ms,
+    created_at_ts_ms,
+    ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint)
+)
+WHERE updated_at_ts_ms IS NULL;
+
+ALTER TABLE public.stephen_dcx_outbound_interaction_routes
+ALTER COLUMN updated_at_ts_ms SET DEFAULT ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint);
+
+ALTER TABLE public.stephen_dcx_outbound_interaction_routes
+ALTER COLUMN updated_at_ts_ms SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_outbound_interaction_routes_trade_thread_idx
 ON public.stephen_dcx_outbound_interaction_routes(trade_thread_id);

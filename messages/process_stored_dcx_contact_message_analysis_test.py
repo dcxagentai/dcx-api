@@ -139,12 +139,12 @@ def test_builds_one_consolidated_workflow_outcome_for_mixed_email_message(monkey
         "message_id": 44,
         "channel_type": "email",
         "recipient_handle": "trader@example.com",
-        "subject": "DCX found trades and market topics",
+        "subject": "DCX found trades and AI chats",
         "message_text": (
             "Trade candidates:\n"
             "Offer for 200 MT urea CFR Tema for June.\n"
             "Review: https://app.dcxagent.ai/trades/objects/12\n\n"
-            "#T7 Sanctions impact on fertilizer shipping to Ghana\n"
+            "#AI7 Sanctions impact on fertilizer shipping to Ghana\n"
             "https://app.dcxagent.ai/ai/chats/7\n\n"
             "EU sanctions may tighten vessel availability and raise risk premiums."
         ),
@@ -179,7 +179,7 @@ def test_builds_policy_blocked_workflow_outcome_for_prohibited_whatsapp_message(
         "subject": "DCX message blocked",
         "message_text": (
             "We received your message, but it was blocked by DCX content policy.\n\n"
-            "It has not been routed into a trade or market topic workflow."
+            "It has not been routed into a trade or AI chat workflow."
         ),
         "trade_ids": [],
         "market_topic_ids": [],

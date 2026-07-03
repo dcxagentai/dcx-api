@@ -103,7 +103,8 @@ def record_dcx_meta_whatsapp_outbound_status_event(
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_outbound_interaction_routes
-                    SET route_metadata_json = jsonb_set(
+                    SET
+                        route_metadata_json = jsonb_set(
                             route_metadata_json
                             || jsonb_build_object(
                                 'latest_provider_status', %s,
@@ -124,7 +125,8 @@ def record_dcx_meta_whatsapp_outbound_status_event(
                                 ) latest_events
                             ),
                             true
-                        )
+                        ),
+                        updated_at_ts_ms = %s
                     WHERE provider_type = 'meta_whatsapp'
                       AND provider_message_id = %s
                     RETURNING id, trade_thread_id, recipient_user_id
@@ -134,6 +136,7 @@ def record_dcx_meta_whatsapp_outbound_status_event(
                         event_timestamp_ms,
                         Json(latest_provider_error),
                         Json([diagnostic_event]),
+                        now_ts_ms,
                         provider_message_id,
                     ),
                 )

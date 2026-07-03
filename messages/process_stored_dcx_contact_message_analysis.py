@@ -554,7 +554,7 @@ def _persist_message_analysis_result(
                     contains_market_topic_items = %s,
                     contains_other_items = %s,
                     workflow_reason_summary = %s,
-                    workflow_metadata_json = workflow_metadata_json || %s::jsonb,
+                    workflow_metadata_json = COALESCE(workflow_metadata_json, '{}'::jsonb) || %s::jsonb,
                     analysis_completed_at_ts_ms = %s
                 WHERE id = %s
                 """,
@@ -1466,7 +1466,7 @@ def _rebuild_message_workflow_projections(
         UPDATE stephen_dcx_contact_messages
         SET
             workflow_classification_status = %s,
-            workflow_metadata_json = workflow_metadata_json || %s::jsonb,
+            workflow_metadata_json = COALESCE(workflow_metadata_json, '{}'::jsonb) || %s::jsonb,
             workflow_completed_at_ts_ms = %s
         WHERE id = %s
         """,
@@ -1520,7 +1520,7 @@ def _build_message_workflow_outcome_notification_payload(
             "subject": "DCX message blocked",
             "message_text": (
                 "We received your message, but it was blocked by DCX content policy.\n\n"
-                "It has not been routed into a trade or market topic workflow."
+                "It has not been routed into a trade or AI chat workflow."
             ),
             "trade_ids": [],
             "market_topic_ids": [],
@@ -1546,11 +1546,11 @@ def _build_message_workflow_outcome_notification_payload(
             message_lines.append("")
         for topic_output in topic_outputs:
             market_topic_id = topic_output["market_topic_id"]
-            topic_reference_code = f"T{market_topic_id}"
+            topic_reference_code = f"AI{market_topic_id}"
             topic_title = _read_first_nonempty_text(
                 topic_output.get("title"),
                 topic_output.get("summary"),
-                f"Market topic #{market_topic_id}",
+                f"AI chat #{market_topic_id}",
             )
             opening_ai_response_text = _read_first_nonempty_text(topic_output.get("opening_ai_response_text"))
             if opening_ai_response_text:
@@ -1566,11 +1566,11 @@ def _build_message_workflow_outcome_notification_payload(
 
     if not trade_outputs and not topic_outputs and other_outputs:
         message_lines.append("")
-        message_lines.append("We saved your message. It was not treated as a trade or market topic.")
+        message_lines.append("We saved your message. It was not treated as a trade or AI chat.")
 
     if not trade_outputs and not topic_outputs and not other_outputs:
         message_lines.append("")
-        message_lines.append("We saved your message, but no trade or market topic workflow was created.")
+        message_lines.append("We saved your message, but no trade or AI chat workflow was created.")
 
     if projection_errors:
         message_lines.append("")
@@ -1578,7 +1578,7 @@ def _build_message_workflow_outcome_notification_payload(
 
     subject = "DCX processed your message"
     if trade_outputs and topic_outputs:
-        subject = "DCX found trades and market topics"
+        subject = "DCX found trades and AI chats"
     elif trade_outputs:
         subject = "DCX found trade candidates"
     elif topic_outputs:
@@ -1586,11 +1586,11 @@ def _build_message_workflow_outcome_notification_payload(
             topic_title = _read_first_nonempty_text(
                 topic_outputs[0].get("title"),
                 topic_outputs[0].get("summary"),
-                f"Market topic #{topic_outputs[0]['market_topic_id']}",
+                f"AI chat #{topic_outputs[0]['market_topic_id']}",
             )
             subject = f"DCX: {topic_title}"
         else:
-            subject = "DCX opened market topics"
+            subject = "DCX opened AI chats"
     elif other_outputs:
         subject = "DCX saved your message"
 
@@ -1674,7 +1674,7 @@ def _mark_message_workflow_outcome_notification_result(
             cursor.execute(
                 """
                 UPDATE stephen_dcx_contact_messages
-                SET workflow_metadata_json = workflow_metadata_json || %s::jsonb
+                SET workflow_metadata_json = COALESCE(workflow_metadata_json, '{}'::jsonb) || %s::jsonb
                 WHERE id = %s
                 """,
                 (

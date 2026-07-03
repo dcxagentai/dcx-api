@@ -70,7 +70,7 @@ def start_authenticated_dcx_trade_thread_from_market_trade(
                         "counterparty_user_id": authenticated_user_id,
                     }
 
-                temporary_reference_code = f"C_PENDING_{uuid.uuid4().hex}"
+                temporary_reference_code = f"TC_PENDING_{uuid.uuid4().hex}"
                 cursor.execute(
                     """
                     INSERT INTO stephen_dcx_trade_threads (
@@ -99,7 +99,7 @@ def start_authenticated_dcx_trade_thread_from_market_trade(
                     ),
                 )
                 thread_id = cursor.fetchone()[0]
-                thread_reference_code = f"C{thread_id}"
+                thread_reference_code = f"TC{thread_id}"
                 cursor.execute(
                     """
                     UPDATE stephen_dcx_trade_threads

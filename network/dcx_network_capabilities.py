@@ -8,6 +8,7 @@ Trade Chats or exposing public web/SEO surfaces yet.
 from __future__ import annotations
 
 import re
+import uuid
 from typing import Any, Callable
 
 from botocore.exceptions import ClientError
@@ -554,9 +555,10 @@ def create_authenticated_dcx_network_feed_post(
                         post_metadata_json,
                         attachment_file_object_id,
                         attachment_kind,
-                        attachment_metadata_json
+                        attachment_metadata_json,
+                        public_reference_code
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -568,9 +570,21 @@ def create_authenticated_dcx_network_feed_post(
                         attachment_file_object_id,
                         attachment_kind,
                         Json(attachment_metadata),
+                        f"P_PENDING_{uuid.uuid4().hex}",
                     ),
                 )
                 post_id = cursor.fetchone()[0]
+                cursor.execute(
+                    """
+                    UPDATE public.stephen_dcx_network_feed_posts
+                    SET public_reference_code = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        f"P{post_id}",
+                        post_id,
+                    ),
+                )
                 return _read_network_feed_post_by_id(
                     cursor=cursor,
                     post_id=post_id,
@@ -684,6 +698,8 @@ def append_authenticated_dcx_network_feed_reply(
     feed_post_id: int,
     reply_text: str,
     language_code: str = "en",
+    source_channel_type: str = "app",
+    source_contact_message_id: int | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -775,6 +791,29 @@ def append_authenticated_dcx_network_feed_reply(
                 if cursor.fetchone() is None:
                     raise RuntimeError("API_DCX_NETWORK_FEED_POST_NOT_FOUND")
 
+                if source_contact_message_id is not None:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM public.stephen_dcx_network_feed_replies
+                        WHERE feed_post_id = %s
+                          AND author_user_id = %s
+                          AND reply_metadata_json->>'source_contact_message_id' = %s
+                        LIMIT 1
+                        """,
+                        (
+                            feed_post_id,
+                            authenticated_user_id,
+                            str(source_contact_message_id),
+                        ),
+                    )
+                    if cursor.fetchone() is not None:
+                        return _read_network_feed_post_by_id(
+                            cursor=cursor,
+                            post_id=feed_post_id,
+                            viewer_user_id=authenticated_user_id,
+                        )
+
                 cursor.execute(
                     """
                     INSERT INTO public.stephen_dcx_network_feed_replies (
@@ -793,7 +832,13 @@ def append_authenticated_dcx_network_feed_reply(
                         normalized_reply_text,
                         normalized_language_code,
                         Json(policy_check),
-                        Json({"translation_status": "not_started"}),
+                        Json(
+                            {
+                                "translation_status": "not_started",
+                                "source_channel_type": source_channel_type,
+                                "source_contact_message_id": source_contact_message_id,
+                            }
+                        ),
                     ),
                 )
                 cursor.execute(
@@ -873,7 +918,8 @@ def read_authenticated_dcx_network_dm_threads(
                         latest_message.canonical_message_text,
                         latest_message.language_code,
                         latest_message.translations_json,
-                        latest_message.created_at_ts_ms
+                        latest_message.created_at_ts_ms,
+                        thread.thread_reference_code
                     FROM public.stephen_dcx_network_dm_threads thread
                     JOIN public.stephen_dcx_users other_user
                       ON other_user.id = CASE
@@ -990,9 +1036,10 @@ def start_authenticated_dcx_network_dm_thread(
                     INSERT INTO public.stephen_dcx_network_dm_threads (
                         participant_user_id_1,
                         participant_user_id_2,
-                        thread_status
+                        thread_status,
+                        thread_reference_code
                     )
-                    VALUES (%s, %s, 'open')
+                    VALUES (%s, %s, 'open', %s)
                     ON CONFLICT (participant_user_id_1, participant_user_id_2) DO UPDATE
                     SET
                         thread_status = CASE
@@ -1006,11 +1053,25 @@ def start_authenticated_dcx_network_dm_thread(
                     (
                         first_user_id,
                         second_user_id,
+                        f"DM_PENDING_{uuid.uuid4().hex}",
                     ),
                 )
                 thread_id, thread_status = cursor.fetchone()
                 if thread_status == "blocked":
                     raise RuntimeError("API_DCX_NETWORK_DM_NOT_ALLOWED")
+                cursor.execute(
+                    """
+                    UPDATE public.stephen_dcx_network_dm_threads
+                    SET thread_reference_code = %s
+                    WHERE id = %s
+                      AND thread_reference_code IS DISTINCT FROM %s
+                    """,
+                    (
+                        f"DM{thread_id}",
+                        thread_id,
+                        f"DM{thread_id}",
+                    ),
+                )
                 return _read_network_dm_thread_detail_payload(
                     cursor=cursor,
                     authenticated_user_id=authenticated_user_id,
@@ -1082,6 +1143,8 @@ def append_authenticated_dcx_network_dm_message(
     dm_thread_id: int,
     message_text: str,
     language_code: str = "en",
+    source_channel_type: str = "app",
+    source_contact_message_id: int | None = None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -1165,6 +1228,29 @@ def append_authenticated_dcx_network_dm_message(
                 if thread_row is None:
                     raise RuntimeError("API_DCX_NETWORK_DM_NOT_FOUND")
 
+                if source_contact_message_id is not None:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM public.stephen_dcx_network_dm_messages
+                        WHERE dm_thread_id = %s
+                          AND sender_user_id = %s
+                          AND message_metadata_json->>'source_contact_message_id' = %s
+                        LIMIT 1
+                        """,
+                        (
+                            dm_thread_id,
+                            authenticated_user_id,
+                            str(source_contact_message_id),
+                        ),
+                    )
+                    if cursor.fetchone() is not None:
+                        return _read_network_dm_thread_detail_payload(
+                            cursor=cursor,
+                            authenticated_user_id=authenticated_user_id,
+                            dm_thread_id=dm_thread_id,
+                        )
+
                 recipient_user_id = (
                     thread_row[1]
                     if int(thread_row[0]) == authenticated_user_id
@@ -1199,7 +1285,13 @@ def append_authenticated_dcx_network_dm_message(
                         normalized_language_code,
                         Json(translations_json),
                         Json(policy_check),
-                        Json({"translation_status": translations_json.get("translation_status", "not_needed")}),
+                        Json(
+                            {
+                                "translation_status": translations_json.get("translation_status", "not_needed"),
+                                "source_channel_type": source_channel_type,
+                                "source_contact_message_id": source_contact_message_id,
+                            }
+                        ),
                     ),
                 )
                 cursor.execute(
@@ -1698,7 +1790,8 @@ SELECT
     file_object.content_type,
     file_object.file_size_bytes,
     file_object.original_filename,
-    file_object.file_kind
+    file_object.file_kind,
+    post.public_reference_code
 FROM public.stephen_dcx_network_feed_posts post
 Cross JOIN viewer
 JOIN public.stephen_dcx_users author
@@ -1748,7 +1841,8 @@ def _read_network_recent_posts_for_profile(cursor, authenticated_user_id: int, p
             file_object.content_type,
             file_object.file_size_bytes,
             file_object.original_filename,
-            file_object.file_kind
+            file_object.file_kind,
+            post.public_reference_code
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
@@ -1846,7 +1940,8 @@ def _read_network_feed_post_by_id(cursor, post_id: int, viewer_user_id: int) -> 
             file_object.content_type,
             file_object.file_size_bytes,
             file_object.original_filename,
-            file_object.file_kind
+            file_object.file_kind,
+            post.public_reference_code
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
@@ -1870,6 +1965,7 @@ def _read_network_feed_post_by_id(cursor, post_id: int, viewer_user_id: int) -> 
 def _read_network_feed_post_payload(post_row: tuple, reply_rows: list[tuple], viewer_user_id: int) -> dict:
     return {
         "feed_post_id": post_row[0],
+        "public_reference_code": post_row[21] if len(post_row) > 21 and post_row[21] else f"P{post_row[0]}",
         "author": _read_network_author_payload(
             user_id=post_row[1],
             public_display_name=post_row[7],
@@ -1964,7 +2060,8 @@ def _read_network_dm_thread_detail_payload(cursor, authenticated_user_id: int, d
             other_user.public_display_name,
             other_user.public_handle,
             other_user.public_identity_mode,
-            COALESCE(other_user.network_profile_image_url, '')
+            COALESCE(other_user.network_profile_image_url, ''),
+            thread.thread_reference_code
         FROM public.stephen_dcx_network_dm_threads thread
         JOIN public.stephen_dcx_users other_user
           ON other_user.id = CASE
@@ -2007,6 +2104,7 @@ def _read_network_dm_thread_detail_payload(cursor, authenticated_user_id: int, d
     message_rows = cursor.fetchall()
     return {
         "dm_thread_id": thread_row[0],
+        "thread_reference_code": thread_row[9] or f"DM{thread_row[0]}",
         "thread_status": thread_row[1],
         "created_at_ts_ms": thread_row[2],
         "updated_at_ts_ms": thread_row[3],
@@ -2028,6 +2126,7 @@ def _read_network_dm_thread_catalog_payload(thread_row: tuple, viewer_user_id: i
     translations_json = thread_row[13] if isinstance(thread_row[13], dict) else {}
     return {
         "dm_thread_id": thread_row[0],
+        "thread_reference_code": thread_row[15] or f"DM{thread_row[0]}",
         "thread_status": thread_row[1],
         "updated_at_ts_ms": thread_row[2],
         "other_participant": _read_network_author_payload(

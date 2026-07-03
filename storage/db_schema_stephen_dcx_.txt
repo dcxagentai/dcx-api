@@ -36,6 +36,11 @@ TABLE LIST (\dt):
 - stephen_dcx_market_topic_turns
 - stephen_dcx_market_topics
 - stephen_dcx_message_workflow_items
+- stephen_dcx_network_dm_messages
+- stephen_dcx_network_dm_threads
+- stephen_dcx_network_feed_posts
+- stephen_dcx_network_feed_replies
+- stephen_dcx_network_follows
 - stephen_dcx_outbound_interaction_routes
 - stephen_dcx_public_content_publish_state
 - stephen_dcx_public_route_rate_limits
@@ -52,7 +57,10 @@ TABLE LIST (\dt):
 - stephen_dcx_user_auth_challenges
 - stephen_dcx_user_auth_identities
 - stephen_dcx_user_auth_sessions
+- stephen_dcx_user_countries
+- stephen_dcx_user_languages
 - stephen_dcx_user_password_credentials
+- stephen_dcx_user_timezones
 - stephen_dcx_user_trade_interest_materials
 - stephen_dcx_users
 - stephen_dcx_users_contact_methods
@@ -889,6 +897,133 @@ PRIMARY KEYS / UNIQUE:
 
 
 ============================================================
+TABLE: stephen_dcx_network_dm_messages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+dm_thread_id                   | bigint                    | NO       | 
+sender_user_id                 | bigint                    | NO       | 
+message_status                 | text                      | NO       | 'active'::text
+raw_message_text               | text                      | NO       | ''::text
+canonical_message_text         | text                      | NO       | ''::text
+language_code                  | text                      | NO       | 'en'::text
+translations_json              | jsonb                     | NO       | '{}'::jsonb
+moderation_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+message_metadata_json          | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- dm_thread_id -> stephen_dcx_network_dm_threads(id) [stephen_dcx_network_dm_messages_dm_thread_id_fkey]
+- sender_user_id -> stephen_dcx_users(id) [stephen_dcx_network_dm_messages_sender_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_network_dm_messages_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_network_dm_threads
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+participant_user_id_1          | bigint                    | NO       | 
+participant_user_id_2          | bigint                    | NO       | 
+thread_status                  | text                      | NO       | 'open'::text
+thread_metadata_json           | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- participant_user_id_1 -> stephen_dcx_users(id) [stephen_dcx_network_dm_threads_participant_user_id_1_fkey]
+- participant_user_id_2 -> stephen_dcx_users(id) [stephen_dcx_network_dm_threads_participant_user_id_2_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_network_dm_threads_pkey]
+- UNIQUE: participant_user_id_1 [stephen_dcx_network_dm_threads_participants_key]
+- UNIQUE: participant_user_id_2 [stephen_dcx_network_dm_threads_participants_key]
+
+
+============================================================
+TABLE: stephen_dcx_network_feed_posts
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+author_user_id                 | bigint                    | NO       | 
+post_status                    | text                      | NO       | 'active'::text
+visibility_status              | text                      | NO       | 'app_public'::text
+source_kind                    | text                      | NO       | 'manual'::text
+source_id                      | bigint                    | YES      | 
+post_text                      | text                      | NO       | ''::text
+language_code                  | text                      | NO       | 'en'::text
+translations_json              | jsonb                     | NO       | '{}'::jsonb
+moderation_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+post_metadata_json             | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+attachment_file_object_id      | bigint                    | YES      | 
+attachment_kind                | text                      | NO       | ''::text
+attachment_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+
+FOREIGN KEYS:
+- author_user_id -> stephen_dcx_users(id) [stephen_dcx_network_feed_posts_author_user_id_fkey]
+- attachment_file_object_id -> stephen_dcx_file_objects(id) [stephen_dcx_network_feed_posts_attachment_file_object_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_network_feed_posts_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_network_feed_replies
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+feed_post_id                   | bigint                    | NO       | 
+author_user_id                 | bigint                    | NO       | 
+reply_status                   | text                      | NO       | 'active'::text
+reply_text                     | text                      | NO       | ''::text
+language_code                  | text                      | NO       | 'en'::text
+translations_json              | jsonb                     | NO       | '{}'::jsonb
+moderation_metadata_json       | jsonb                     | NO       | '{}'::jsonb
+reply_metadata_json            | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- feed_post_id -> stephen_dcx_network_feed_posts(id) [stephen_dcx_network_feed_replies_feed_post_id_fkey]
+- author_user_id -> stephen_dcx_users(id) [stephen_dcx_network_feed_replies_author_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_network_feed_replies_pkey]
+
+
+============================================================
+TABLE: stephen_dcx_network_follows
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+id                             | bigint                    | NO       | 
+follower_user_id               | bigint                    | NO       | 
+followed_user_id               | bigint                    | NO       | 
+follow_status                  | text                      | NO       | 'active'::text
+follow_metadata_json           | jsonb                     | NO       | '{}'::jsonb
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- follower_user_id -> stephen_dcx_users(id) [stephen_dcx_network_follows_follower_user_id_fkey]
+- followed_user_id -> stephen_dcx_users(id) [stephen_dcx_network_follows_followed_user_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: id [stephen_dcx_network_follows_pkey]
+- UNIQUE: follower_user_id [stephen_dcx_network_follows_user_pair_key]
+- UNIQUE: followed_user_id [stephen_dcx_network_follows_user_pair_key]
+
+
+============================================================
 TABLE: stephen_dcx_outbound_interaction_routes
 ============================================================
 COLUMN                         | TYPE                      | NULL?    | DEFAULT
@@ -974,9 +1109,10 @@ sort_order                     | integer                   | NO       | 1000
 is_active                      | boolean                   | NO       | true
 created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
 updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+country_id                     | bigint                    | YES      | 
 
 FOREIGN KEYS:
-- None
+- country_id -> stephen_dcx_countries(id) [stephen_dcx_timezones_country_id_fkey]
 
 PRIMARY KEYS / UNIQUE:
 - PRIMARY KEY: id [stephen_dcx_timezones_pkey]
@@ -1406,6 +1542,50 @@ PRIMARY KEYS / UNIQUE:
 
 
 ============================================================
+TABLE: stephen_dcx_user_countries
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+user_id                        | bigint                    | NO       | 
+country_id                     | bigint                    | NO       | 
+sort_order                     | integer                   | NO       | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_countries_user_id_fkey]
+- country_id -> stephen_dcx_countries(id) [stephen_dcx_user_countries_country_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: user_id [stephen_dcx_user_countries_pkey]
+- PRIMARY KEY: country_id [stephen_dcx_user_countries_pkey]
+- UNIQUE: user_id [stephen_dcx_user_countries_user_id_sort_order_key]
+- UNIQUE: sort_order [stephen_dcx_user_countries_user_id_sort_order_key]
+
+
+============================================================
+TABLE: stephen_dcx_user_languages
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+user_id                        | bigint                    | NO       | 
+language_id                    | bigint                    | NO       | 
+sort_order                     | integer                   | NO       | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_languages_user_id_fkey]
+- language_id -> stephen_dcx_languages(id) [stephen_dcx_user_languages_language_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: user_id [stephen_dcx_user_languages_pkey]
+- PRIMARY KEY: language_id [stephen_dcx_user_languages_pkey]
+- UNIQUE: user_id [stephen_dcx_user_languages_user_id_sort_order_key]
+- UNIQUE: sort_order [stephen_dcx_user_languages_user_id_sort_order_key]
+
+
+============================================================
 TABLE: stephen_dcx_user_password_credentials
 ============================================================
 COLUMN                         | TYPE                      | NULL?    | DEFAULT
@@ -1428,6 +1608,28 @@ PRIMARY KEYS / UNIQUE:
 
 
 ============================================================
+TABLE: stephen_dcx_user_timezones
+============================================================
+COLUMN                         | TYPE                      | NULL?    | DEFAULT
+--------------------------------------------------------------------------------
+user_id                        | bigint                    | NO       | 
+timezone_id                    | bigint                    | NO       | 
+sort_order                     | integer                   | NO       | 
+created_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+updated_at_ts_ms               | bigint                    | NO       | ((EXTRACT(epoch FROM clock_timestamp()) * (1000)::numeric))::bigint
+
+FOREIGN KEYS:
+- user_id -> stephen_dcx_users(id) [stephen_dcx_user_timezones_user_id_fkey]
+- timezone_id -> stephen_dcx_timezones(id) [stephen_dcx_user_timezones_timezone_id_fkey]
+
+PRIMARY KEYS / UNIQUE:
+- PRIMARY KEY: user_id [stephen_dcx_user_timezones_pkey]
+- PRIMARY KEY: timezone_id [stephen_dcx_user_timezones_pkey]
+- UNIQUE: user_id [stephen_dcx_user_timezones_user_id_sort_order_key]
+- UNIQUE: sort_order [stephen_dcx_user_timezones_user_id_sort_order_key]
+
+
+============================================================
 TABLE: stephen_dcx_user_trade_interest_materials
 ============================================================
 COLUMN                         | TYPE                      | NULL?    | DEFAULT
@@ -1435,6 +1637,7 @@ COLUMN                         | TYPE                      | NULL?    | DEFAULT
 user_id                        | bigint                    | NO       | 
 material_key                   | text                      | NO       | 
 created_at_ts_ms               | bigint                    | NO       | 
+sort_order                     | integer                   | NO       | 
 
 FOREIGN KEYS:
 - material_key -> stephen_dcx_trade_interest_material_options(material_key) [stephen_dcx_user_trade_interest_materials_material_key_fkey]
@@ -1466,6 +1669,11 @@ public_identity_mode           | text                      | NO       | 'display
 default_interaction_channel    | text                      | NO       | 'app_only'::text
 sidebar_clock_timezone_id_1    | bigint                    | YES      | 
 sidebar_clock_timezone_id_2    | bigint                    | YES      | 
+user_origin_key                | text                      | NO       | 'dcx_website'::text
+user_origin_url                | text                      | NO       | ''::text
+network_dm_acceptance_mode     | text                      | NO       | 'everyone'::text
+network_profile_image_url      | text                      | NO       | ''::text
+network_profile_image_metadata_json | jsonb                     | NO       | '{}'::jsonb
 
 FOREIGN KEYS:
 - preferred_language_id -> stephen_dcx_languages(id) [stephen_dcx_users_preferred_language_id_fkey]

@@ -40,7 +40,7 @@ WHAT CAN GO WRONG:
   Missing app base URL configuration can produce a wrong link.
 WHAT COMES NEXT:
   Add richer per-thread routing controls and provider reply-id correlation. For MVP, explicit
-  #C-style references keep routing legible and safe.
+  #TC-style references keep routing legible and safe.
 
 TESTS:
 - Manual MVP smoke: set user B default to email, user A posts in a trade chat, B receives one email
@@ -419,11 +419,12 @@ def _record_trade_thread_notification_route(
                     channel_type,
                     route_metadata_json,
                     created_at_ts_ms,
+                    updated_at_ts_ms,
                     trade_thread_id,
                     route_channel,
                     route_reference_code
                 )
-                VALUES (%s, %s, %s, 'trade_thread', %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, 'trade_thread', %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (provider_type, provider_message_id)
                 DO NOTHING
                 """,
@@ -439,6 +440,7 @@ def _record_trade_thread_notification_route(
                             "provider_result": provider_result,
                         }
                     ),
+                    now_ts_ms,
                     now_ts_ms,
                     trade_thread_id,
                     channel_type,
