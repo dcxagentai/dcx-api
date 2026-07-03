@@ -20,7 +20,11 @@ from network.dcx_network_capabilities import (
     append_authenticated_dcx_network_feed_reply,
     create_authenticated_dcx_network_feed_post,
     read_authenticated_dcx_network_feed,
+    read_authenticated_dcx_network_feed_post,
     read_authenticated_dcx_network_feed_post_attachment_stream,
+    set_authenticated_dcx_network_feed_post_bookmark,
+    set_authenticated_dcx_network_feed_post_like,
+    set_authenticated_dcx_network_feed_post_repost,
 )
 
 dcx_api_routes_network_feed_router = APIRouter(prefix="/network", tags=["network"])
@@ -31,6 +35,24 @@ class DcxNetworkFeedReplyRequest(BaseModel):
 
     reply_text: str
     language_code: str | None = "en"
+
+
+class DcxNetworkFeedLikeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    should_like: bool
+
+
+class DcxNetworkFeedRepostRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    should_repost: bool
+
+
+class DcxNetworkFeedBookmarkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    should_bookmark: bool
 
 
 @dcx_api_routes_network_feed_router.get("/feed", response_model=None)
@@ -69,6 +91,63 @@ def get_authenticated_dcx_network_feed(request: Request, scope: str = "following
         "context": {
             "surface": "app",
             "view": "network_feed",
+            "identity_resolution_mode": identity_resolution_mode,
+        },
+    }
+
+
+@dcx_api_routes_network_feed_router.get("/feed/posts/{feed_post_id}", response_model=None)
+def get_authenticated_dcx_network_feed_post(
+    request: Request,
+    feed_post_id: int,
+):
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
+    authenticated_user_id, identity_resolution_mode, error_response = (
+        read_authenticated_dcx_user_id_or_error_response(request=request)
+    )
+    if error_response is not None:
+        return error_response
+
+    try:
+        feed_post_payload = read_authenticated_dcx_network_feed_post(
+            authenticated_user_id=authenticated_user_id,
+            feed_post_id=feed_post_id,
+        )
+    except RuntimeError as runtime_error:
+        if str(runtime_error) == "API_DCX_NETWORK_FEED_POST_NOT_FOUND":
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "API_DCX_NETWORK_FEED_POST_NOT_FOUND",
+                        "message": "That network post is not available.",
+                        "suggested_action": "Refresh the feed and retry with a current post.",
+                    },
+                },
+            )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error": {
+                    "code": "API_DCX_NETWORK_FEED_READ_FAILED",
+                    "message": "We could not load that network post right now.",
+                    "suggested_action": "Retry in a moment after the backend is healthy.",
+                },
+            },
+        )
+
+    return {
+        "ok": True,
+        "data": feed_post_payload,
+        "context": {
+            "surface": "app",
+            "view": "network_feed_post",
+            "operation": "network_feed_post_read",
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
@@ -122,6 +201,60 @@ async def post_authenticated_dcx_network_feed_post(
             "identity_resolution_mode": identity_resolution_mode,
         },
     }
+
+
+@dcx_api_routes_network_feed_router.post("/feed/posts/{feed_post_id}/like", response_model=None)
+def post_authenticated_dcx_network_feed_like(
+    request: Request,
+    feed_post_id: int,
+    feed_like_request: DcxNetworkFeedLikeRequest,
+):
+    return _post_authenticated_dcx_network_feed_action(
+        request=request,
+        feed_post_id=feed_post_id,
+        action_label="network_feed_like_set",
+        action_callable=lambda authenticated_user_id: set_authenticated_dcx_network_feed_post_like(
+            authenticated_user_id=authenticated_user_id,
+            feed_post_id=feed_post_id,
+            should_like=feed_like_request.should_like,
+        ),
+    )
+
+
+@dcx_api_routes_network_feed_router.post("/feed/posts/{feed_post_id}/repost", response_model=None)
+def post_authenticated_dcx_network_feed_repost(
+    request: Request,
+    feed_post_id: int,
+    feed_repost_request: DcxNetworkFeedRepostRequest,
+):
+    return _post_authenticated_dcx_network_feed_action(
+        request=request,
+        feed_post_id=feed_post_id,
+        action_label="network_feed_repost_set",
+        action_callable=lambda authenticated_user_id: set_authenticated_dcx_network_feed_post_repost(
+            authenticated_user_id=authenticated_user_id,
+            feed_post_id=feed_post_id,
+            should_repost=feed_repost_request.should_repost,
+        ),
+    )
+
+
+@dcx_api_routes_network_feed_router.post("/feed/posts/{feed_post_id}/bookmark", response_model=None)
+def post_authenticated_dcx_network_feed_bookmark(
+    request: Request,
+    feed_post_id: int,
+    feed_bookmark_request: DcxNetworkFeedBookmarkRequest,
+):
+    return _post_authenticated_dcx_network_feed_action(
+        request=request,
+        feed_post_id=feed_post_id,
+        action_label="network_feed_bookmark_set",
+        action_callable=lambda authenticated_user_id: set_authenticated_dcx_network_feed_post_bookmark(
+            authenticated_user_id=authenticated_user_id,
+            feed_post_id=feed_post_id,
+            should_bookmark=feed_bookmark_request.should_bookmark,
+        ),
+    )
 
 
 @dcx_api_routes_network_feed_router.get("/feed/posts/{feed_post_id}/attachment/file", response_model=None)
@@ -217,7 +350,53 @@ def post_authenticated_dcx_network_feed_reply(
     }
 
 
+def _post_authenticated_dcx_network_feed_action(
+    request: Request,
+    feed_post_id: int,
+    action_label: str,
+    action_callable,
+):
+    _, origin_error_response = read_allowed_dcx_frontend_origin_or_error_response(request)
+    if origin_error_response is not None:
+        return origin_error_response
+
+    authenticated_user_id, identity_resolution_mode, error_response = (
+        read_authenticated_dcx_user_id_or_error_response(request=request)
+    )
+    if error_response is not None:
+        return error_response
+
+    try:
+        feed_post_payload = action_callable(authenticated_user_id)
+    except RuntimeError as runtime_error:
+        return _read_network_feed_mutation_error_response(str(runtime_error))
+
+    return {
+        "ok": True,
+        "data": feed_post_payload,
+        "context": {
+            "surface": "app",
+            "view": "network_feed_post",
+            "operation": action_label,
+            "identity_resolution_mode": identity_resolution_mode,
+        },
+    }
+
+
 def _read_network_feed_mutation_error_response(error_code: str) -> JSONResponse:
+    if error_code == "API_DCX_NETWORK_FEED_ACTION_FAILED":
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error": {
+                    "code": error_code,
+                    "message": "We could not update that network action right now.",
+                    "suggested_action": "Retry in a moment after the backend is healthy.",
+                },
+            },
+        )
+
     if error_code in {
         "API_DCX_NETWORK_FEED_POST_INVALID",
         "API_DCX_NETWORK_FEED_REPLY_INVALID",

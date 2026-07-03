@@ -417,6 +417,87 @@ def read_authenticated_dcx_network_feed(
         raise RuntimeError("API_DCX_NETWORK_FEED_READ_FAILED") from exc
 
 
+def read_authenticated_dcx_network_feed_post(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    should_record_view: bool = True,
+    connect_to_database: Callable[..., Any] | None = None,
+) -> dict:
+    if not isinstance(feed_post_id, int) or feed_post_id <= 0:
+        raise RuntimeError("API_DCX_NETWORK_FEED_POST_NOT_FOUND")
+
+    connect = connect_to_database or psycopg2.connect
+    try:
+        with connect(**DB_CONFIG) as connection:
+            with connection.cursor() as cursor:
+                if should_record_view:
+                    _record_network_feed_post_view(
+                        cursor=cursor,
+                        feed_post_id=feed_post_id,
+                        viewer_user_id=authenticated_user_id,
+                    )
+                return _read_network_feed_post_by_id(
+                    cursor=cursor,
+                    post_id=feed_post_id,
+                    viewer_user_id=authenticated_user_id,
+                )
+    except RuntimeError:
+        raise
+    except Exception as exc:  # pragma: no cover - integration path
+        raise RuntimeError("API_DCX_NETWORK_FEED_READ_FAILED") from exc
+
+
+def set_authenticated_dcx_network_feed_post_like(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    should_like: bool,
+    connect_to_database: Callable[..., Any] | None = None,
+) -> dict:
+    return _set_authenticated_dcx_network_feed_post_action(
+        authenticated_user_id=authenticated_user_id,
+        feed_post_id=feed_post_id,
+        action_table_name="stephen_dcx_network_feed_likes",
+        action_status_column_name="like_status",
+        action_metadata_column_name="like_metadata_json",
+        should_activate=should_like,
+        connect_to_database=connect_to_database,
+    )
+
+
+def set_authenticated_dcx_network_feed_post_repost(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    should_repost: bool,
+    connect_to_database: Callable[..., Any] | None = None,
+) -> dict:
+    return _set_authenticated_dcx_network_feed_post_action(
+        authenticated_user_id=authenticated_user_id,
+        feed_post_id=feed_post_id,
+        action_table_name="stephen_dcx_network_feed_reposts",
+        action_status_column_name="repost_status",
+        action_metadata_column_name="repost_metadata_json",
+        should_activate=should_repost,
+        connect_to_database=connect_to_database,
+    )
+
+
+def set_authenticated_dcx_network_feed_post_bookmark(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    should_bookmark: bool,
+    connect_to_database: Callable[..., Any] | None = None,
+) -> dict:
+    return _set_authenticated_dcx_network_feed_post_action(
+        authenticated_user_id=authenticated_user_id,
+        feed_post_id=feed_post_id,
+        action_table_name="stephen_dcx_network_feed_bookmarks",
+        action_status_column_name="bookmark_status",
+        action_metadata_column_name="bookmark_metadata_json",
+        should_activate=should_bookmark,
+        connect_to_database=connect_to_database,
+    )
+
+
 def create_authenticated_dcx_network_feed_post(
     authenticated_user_id: int,
     post_text: str,
@@ -1731,6 +1812,122 @@ def _persist_network_feed_attachment_file_object_row(cursor, prepared_attachment
     return int(cursor.fetchone()[0])
 
 
+def _record_network_feed_post_view(cursor, feed_post_id: int, viewer_user_id: int) -> None:
+    if not _ensure_network_feed_post_visible(cursor, feed_post_id):
+        raise RuntimeError("API_DCX_NETWORK_FEED_POST_NOT_FOUND")
+
+    cursor.execute(
+        """
+        INSERT INTO public.stephen_dcx_network_feed_views (
+            feed_post_id,
+            user_id,
+            view_count,
+            first_viewed_at_ts_ms,
+            last_viewed_at_ts_ms,
+            view_metadata_json
+        )
+        VALUES (
+            %s,
+            %s,
+            1,
+            ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint),
+            ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint),
+            %s
+        )
+        ON CONFLICT (feed_post_id, user_id)
+        DO UPDATE
+        SET
+            view_count = stephen_dcx_network_feed_views.view_count + 1,
+            last_viewed_at_ts_ms = ((EXTRACT(EPOCH FROM clock_timestamp()) * 1000::numeric)::bigint),
+            view_metadata_json = EXCLUDED.view_metadata_json
+        """,
+        (
+            feed_post_id,
+            viewer_user_id,
+            Json({"view_surface": "network_feed_post"}),
+        ),
+    )
+
+
+def _set_authenticated_dcx_network_feed_post_action(
+    authenticated_user_id: int,
+    feed_post_id: int,
+    action_table_name: str,
+    action_status_column_name: str,
+    action_metadata_column_name: str,
+    should_activate: bool,
+    connect_to_database: Callable[..., Any] | None,
+) -> dict:
+    allowed_action_columns = {
+        "stephen_dcx_network_feed_likes": ("like_status", "like_metadata_json"),
+        "stephen_dcx_network_feed_reposts": ("repost_status", "repost_metadata_json"),
+        "stephen_dcx_network_feed_bookmarks": ("bookmark_status", "bookmark_metadata_json"),
+    }
+    if (
+        action_table_name not in allowed_action_columns
+        or allowed_action_columns[action_table_name] != (action_status_column_name, action_metadata_column_name)
+    ):
+        raise RuntimeError("API_DCX_NETWORK_FEED_ACTION_FAILED")
+
+    if not isinstance(feed_post_id, int) or feed_post_id <= 0:
+        raise RuntimeError("API_DCX_NETWORK_FEED_POST_NOT_FOUND")
+
+    next_status = "active" if should_activate else "inactive"
+    connect = connect_to_database or psycopg2.connect
+    try:
+        with connect(**DB_CONFIG) as connection:
+            with connection.cursor() as cursor:
+                if not _ensure_network_feed_post_visible(cursor, feed_post_id):
+                    raise RuntimeError("API_DCX_NETWORK_FEED_POST_NOT_FOUND")
+
+                cursor.execute(
+                    f"""
+                    INSERT INTO public.{action_table_name} (
+                        feed_post_id,
+                        user_id,
+                        {action_status_column_name},
+                        {action_metadata_column_name}
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (feed_post_id, user_id)
+                    DO UPDATE
+                    SET
+                        {action_status_column_name} = EXCLUDED.{action_status_column_name},
+                        {action_metadata_column_name} = EXCLUDED.{action_metadata_column_name}
+                    """,
+                    (
+                        feed_post_id,
+                        authenticated_user_id,
+                        next_status,
+                        Json({"source_surface": "network_feed"}),
+                    ),
+                )
+                return _read_network_feed_post_by_id(
+                    cursor=cursor,
+                    post_id=feed_post_id,
+                    viewer_user_id=authenticated_user_id,
+                )
+    except RuntimeError:
+        raise
+    except Exception as exc:  # pragma: no cover - integration path
+        raise RuntimeError("API_DCX_NETWORK_FEED_ACTION_FAILED") from exc
+
+
+def _ensure_network_feed_post_visible(cursor, feed_post_id: int) -> bool:
+    cursor.execute(
+        """
+        SELECT id
+        FROM public.stephen_dcx_network_feed_posts
+        WHERE id = %s
+          AND post_status = 'active'
+          AND visibility_status = 'app_public'
+        LIMIT 1
+        """,
+        (feed_post_id,),
+    )
+    return cursor.fetchone() is not None
+
+
 def _build_network_feed_posts_query(feed_scope: str) -> str:
     following_clause = ""
     if feed_scope == "following":
@@ -1743,6 +1940,22 @@ def _build_network_feed_posts_query(feed_scope: str) -> str:
                   WHERE follow.follower_user_id = viewer.user_id
                     AND follow.followed_user_id = post.author_user_id
                     AND follow.follow_status = 'active'
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM public.stephen_dcx_network_feed_reposts repost_include
+                  WHERE repost_include.feed_post_id = post.id
+                    AND repost_include.repost_status = 'active'
+                    AND (
+                        repost_include.user_id = viewer.user_id
+                        OR EXISTS (
+                            SELECT 1
+                            FROM public.stephen_dcx_network_follows follow_reposter
+                            WHERE follow_reposter.follower_user_id = viewer.user_id
+                              AND follow_reposter.followed_user_id = repost_include.user_id
+                              AND follow_reposter.follow_status = 'active'
+                        )
+                    )
               )
           )
         """
@@ -1791,7 +2004,70 @@ SELECT
     file_object.file_size_bytes,
     file_object.original_filename,
     file_object.file_kind,
-    post.public_reference_code
+    post.public_reference_code,
+    (
+        SELECT COUNT(*)
+        FROM public.stephen_dcx_network_feed_likes like_count
+        WHERE like_count.feed_post_id = post.id
+          AND like_count.like_status = 'active'
+    ) AS like_count,
+    (
+        SELECT COUNT(*)
+        FROM public.stephen_dcx_network_feed_reposts repost_count
+        WHERE repost_count.feed_post_id = post.id
+          AND repost_count.repost_status = 'active'
+    ) AS repost_count,
+    (
+        SELECT COUNT(*)
+        FROM public.stephen_dcx_network_feed_bookmarks bookmark_count
+        WHERE bookmark_count.feed_post_id = post.id
+          AND bookmark_count.bookmark_status = 'active'
+    ) AS bookmark_count,
+    COALESCE((
+        SELECT SUM(view_count.view_count)
+        FROM public.stephen_dcx_network_feed_views view_count
+        WHERE view_count.feed_post_id = post.id
+    ), 0) AS view_count,
+    EXISTS (
+        SELECT 1
+        FROM public.stephen_dcx_network_feed_likes viewer_like
+        WHERE viewer_like.feed_post_id = post.id
+          AND viewer_like.user_id = viewer.user_id
+          AND viewer_like.like_status = 'active'
+    ) AS viewer_has_liked,
+    EXISTS (
+        SELECT 1
+        FROM public.stephen_dcx_network_feed_reposts viewer_repost
+        WHERE viewer_repost.feed_post_id = post.id
+          AND viewer_repost.user_id = viewer.user_id
+          AND viewer_repost.repost_status = 'active'
+    ) AS viewer_has_reposted,
+    EXISTS (
+        SELECT 1
+        FROM public.stephen_dcx_network_feed_bookmarks viewer_bookmark
+        WHERE viewer_bookmark.feed_post_id = post.id
+          AND viewer_bookmark.user_id = viewer.user_id
+          AND viewer_bookmark.bookmark_status = 'active'
+    ) AS viewer_has_bookmarked,
+    GREATEST(
+        post.created_at_ts_ms,
+        COALESCE((
+            SELECT MAX(repost_activity.updated_at_ts_ms)
+            FROM public.stephen_dcx_network_feed_reposts repost_activity
+            WHERE repost_activity.feed_post_id = post.id
+              AND repost_activity.repost_status = 'active'
+              AND (
+                  repost_activity.user_id = viewer.user_id
+                  OR EXISTS (
+                      SELECT 1
+                      FROM public.stephen_dcx_network_follows follow_repost_activity
+                      WHERE follow_repost_activity.follower_user_id = viewer.user_id
+                        AND follow_repost_activity.followed_user_id = repost_activity.user_id
+                        AND follow_repost_activity.follow_status = 'active'
+                  )
+              )
+        ), 0)
+    ) AS feed_activity_ts_ms
 FROM public.stephen_dcx_network_feed_posts post
 Cross JOIN viewer
 JOIN public.stephen_dcx_users author
@@ -1801,7 +2077,7 @@ LEFT JOIN public.stephen_dcx_file_objects file_object
 WHERE post.post_status = 'active'
   AND post.visibility_status = 'app_public'
 /* following_clause */
-ORDER BY post.created_at_ts_ms DESC, post.id DESC
+ORDER BY feed_activity_ts_ms DESC, post.id DESC
 LIMIT 100
 """
 
@@ -1842,7 +2118,52 @@ def _read_network_recent_posts_for_profile(cursor, authenticated_user_id: int, p
             file_object.file_size_bytes,
             file_object.original_filename,
             file_object.file_kind,
-            post.public_reference_code
+            post.public_reference_code,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_likes like_count
+                WHERE like_count.feed_post_id = post.id
+                  AND like_count.like_status = 'active'
+            ) AS like_count,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_reposts repost_count
+                WHERE repost_count.feed_post_id = post.id
+                  AND repost_count.repost_status = 'active'
+            ) AS repost_count,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_bookmarks bookmark_count
+                WHERE bookmark_count.feed_post_id = post.id
+                  AND bookmark_count.bookmark_status = 'active'
+            ) AS bookmark_count,
+            COALESCE((
+                SELECT SUM(view_count.view_count)
+                FROM public.stephen_dcx_network_feed_views view_count
+                WHERE view_count.feed_post_id = post.id
+            ), 0) AS view_count,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_likes viewer_like
+                WHERE viewer_like.feed_post_id = post.id
+                  AND viewer_like.user_id = %s
+                  AND viewer_like.like_status = 'active'
+            ) AS viewer_has_liked,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_reposts viewer_repost
+                WHERE viewer_repost.feed_post_id = post.id
+                  AND viewer_repost.user_id = %s
+                  AND viewer_repost.repost_status = 'active'
+            ) AS viewer_has_reposted,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_bookmarks viewer_bookmark
+                WHERE viewer_bookmark.feed_post_id = post.id
+                  AND viewer_bookmark.user_id = %s
+                  AND viewer_bookmark.bookmark_status = 'active'
+            ) AS viewer_has_bookmarked,
+            post.created_at_ts_ms AS feed_activity_ts_ms
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
@@ -1855,6 +2176,9 @@ def _read_network_recent_posts_for_profile(cursor, authenticated_user_id: int, p
         LIMIT 10
         """,
         (
+            authenticated_user_id,
+            authenticated_user_id,
+            authenticated_user_id,
             authenticated_user_id,
             profile_user_id,
         ),
@@ -1941,16 +2265,66 @@ def _read_network_feed_post_by_id(cursor, post_id: int, viewer_user_id: int) -> 
             file_object.file_size_bytes,
             file_object.original_filename,
             file_object.file_kind,
-            post.public_reference_code
+            post.public_reference_code,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_likes like_count
+                WHERE like_count.feed_post_id = post.id
+                  AND like_count.like_status = 'active'
+            ) AS like_count,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_reposts repost_count
+                WHERE repost_count.feed_post_id = post.id
+                  AND repost_count.repost_status = 'active'
+            ) AS repost_count,
+            (
+                SELECT COUNT(*)
+                FROM public.stephen_dcx_network_feed_bookmarks bookmark_count
+                WHERE bookmark_count.feed_post_id = post.id
+                  AND bookmark_count.bookmark_status = 'active'
+            ) AS bookmark_count,
+            COALESCE((
+                SELECT SUM(view_count.view_count)
+                FROM public.stephen_dcx_network_feed_views view_count
+                WHERE view_count.feed_post_id = post.id
+            ), 0) AS view_count,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_likes viewer_like
+                WHERE viewer_like.feed_post_id = post.id
+                  AND viewer_like.user_id = %s
+                  AND viewer_like.like_status = 'active'
+            ) AS viewer_has_liked,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_reposts viewer_repost
+                WHERE viewer_repost.feed_post_id = post.id
+                  AND viewer_repost.user_id = %s
+                  AND viewer_repost.repost_status = 'active'
+            ) AS viewer_has_reposted,
+            EXISTS (
+                SELECT 1
+                FROM public.stephen_dcx_network_feed_bookmarks viewer_bookmark
+                WHERE viewer_bookmark.feed_post_id = post.id
+                  AND viewer_bookmark.user_id = %s
+                  AND viewer_bookmark.bookmark_status = 'active'
+            ) AS viewer_has_bookmarked,
+            post.created_at_ts_ms AS feed_activity_ts_ms
         FROM public.stephen_dcx_network_feed_posts post
         JOIN public.stephen_dcx_users author
           ON author.id = post.author_user_id
         LEFT JOIN public.stephen_dcx_file_objects file_object
           ON file_object.id = post.attachment_file_object_id
         WHERE post.id = %s
+          AND post.post_status = 'active'
+          AND post.visibility_status = 'app_public'
         LIMIT 1
         """,
         (
+            viewer_user_id,
+            viewer_user_id,
+            viewer_user_id,
             viewer_user_id,
             post_id,
         ),
@@ -1979,7 +2353,15 @@ def _read_network_feed_post_payload(post_row: tuple, reply_rows: list[tuple], vi
         "created_at_ts_ms": post_row[5],
         "updated_at_ts_ms": post_row[6],
         "reply_count": int(post_row[11] or 0),
+        "like_count": int(post_row[22] or 0) if len(post_row) > 22 else 0,
+        "repost_count": int(post_row[23] or 0) if len(post_row) > 23 else 0,
+        "bookmark_count": int(post_row[24] or 0) if len(post_row) > 24 else 0,
+        "view_count": int(post_row[25] or 0) if len(post_row) > 25 else 0,
         "viewer_follows_author": post_row[12] is True or int(post_row[1]) == viewer_user_id,
+        "viewer_has_liked": post_row[26] is True if len(post_row) > 26 else False,
+        "viewer_has_reposted": post_row[27] is True if len(post_row) > 27 else False,
+        "viewer_has_bookmarked": post_row[28] is True if len(post_row) > 28 else False,
+        "feed_activity_ts_ms": post_row[29] if len(post_row) > 29 else post_row[5],
         "is_owned_by_authenticated_user": int(post_row[1]) == viewer_user_id,
         "attachment": _read_network_feed_post_attachment_payload(post_row),
         "replies": [
