@@ -44,7 +44,7 @@ NETWORK_RESERVED_HANDLES = {
     "profile",
     "profiles",
 }
-NETWORK_FEED_SCOPES = {"following", "all"}
+NETWORK_FEED_SCOPES = {"following", "all", "bookmarks"}
 NETWORK_CONTACT_SCOPES = {"all", "following", "followers", "mutual"}
 NETWORK_TEXT_LANGUAGE_PATTERN = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})?$")
 NETWORK_FEED_ATTACHMENT_FILE_KINDS = {"image", "audio"}
@@ -1959,11 +1959,45 @@ def _build_network_feed_posts_query(feed_scope: str) -> str:
               )
           )
         """
-        return _NETWORK_FEED_POST_SELECT_SQL.replace("/* following_clause */", following_clause)
+        return (
+            _NETWORK_FEED_POST_SELECT_SQL
+            .replace("/* following_clause */", following_clause)
+            .replace("/* feed_activity_extra_clause */", "")
+        )
 
-    return _NETWORK_FEED_POST_SELECT_SQL.replace(
-        "/* following_clause */",
-        "          AND TRUE",
+    if feed_scope == "bookmarks":
+        bookmarks_clause = """
+          AND EXISTS (
+              SELECT 1
+              FROM public.stephen_dcx_network_feed_bookmarks bookmark_filter
+              WHERE bookmark_filter.feed_post_id = post.id
+                AND bookmark_filter.user_id = viewer.user_id
+                AND bookmark_filter.bookmark_status = 'active'
+          )
+        """
+        bookmark_activity_clause = """
+        ,
+        COALESCE((
+            SELECT MAX(bookmark_activity.updated_at_ts_ms)
+            FROM public.stephen_dcx_network_feed_bookmarks bookmark_activity
+            WHERE bookmark_activity.feed_post_id = post.id
+              AND bookmark_activity.user_id = viewer.user_id
+              AND bookmark_activity.bookmark_status = 'active'
+        ), 0)
+        """
+        return (
+            _NETWORK_FEED_POST_SELECT_SQL
+            .replace("/* following_clause */", bookmarks_clause)
+            .replace("/* feed_activity_extra_clause */", bookmark_activity_clause)
+        )
+
+    return (
+        _NETWORK_FEED_POST_SELECT_SQL
+        .replace(
+            "/* following_clause */",
+            "          AND TRUE",
+        )
+        .replace("/* feed_activity_extra_clause */", "")
     )
 
 
@@ -2065,8 +2099,9 @@ SELECT
                         AND follow_repost_activity.followed_user_id = repost_activity.user_id
                         AND follow_repost_activity.follow_status = 'active'
                   )
-              )
+            )
         ), 0)
+        /* feed_activity_extra_clause */
     ) AS feed_activity_ts_ms
 FROM public.stephen_dcx_network_feed_posts post
 Cross JOIN viewer
