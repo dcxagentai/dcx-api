@@ -17,6 +17,9 @@ from auth.session.hash_dcx_auth_session_token import hash_dcx_auth_session_token
 from auth.session.read_dcx_auth_session_cookie_settings import (
     read_dcx_auth_session_cookie_settings,
 )
+from auth.authorization.read_dcx_user_role_may_access_admin import (
+    read_dcx_user_role_may_access_admin,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -153,5 +156,5 @@ def read_authenticated_dcx_session_from_request(
             else None
         ),
         "may_access_app": True,
-        "may_access_admin": user_role in {"admin", "dev"},
+        "may_access_admin": read_dcx_user_role_may_access_admin(user_role),
     }

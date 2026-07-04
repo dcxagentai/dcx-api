@@ -11,6 +11,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from auth.authorization.read_dcx_user_role_may_access_admin import (
+    read_dcx_user_role_may_access_admin,
+)
 from auth.password.verify_dcx_password_hash import verify_dcx_password_hash
 from auth.session.create_dcx_auth_session import create_dcx_auth_session
 from storage.db_config import DB_CONFIG
@@ -161,7 +164,7 @@ def login_dcx_user_with_email_and_password(
             "account_status": user_row[4],
             "allowed_surfaces": {
                 "app": True,
-                "admin": user_role in {"admin", "dev"},
+                "admin": read_dcx_user_role_may_access_admin(user_role),
             },
         },
     }

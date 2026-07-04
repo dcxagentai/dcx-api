@@ -1,8 +1,8 @@
 """
 CONTEXT:
-This file resolves one authenticated DCX admin user id or returns one canonical HTTP error response.
-It exists so admin-facing routes can enforce one shared session-cookie plus role gate as the stable
-internal authorization boundary.
+This file resolves one authenticated DCX admin-capable user id or returns one canonical HTTP error
+response. It exists so admin-facing routes can enforce one shared session-cookie plus role gate as
+the stable internal authorization boundary.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
       preconditions:
         - request is the current admin-facing HTTP request.
       postconditions:
-        - Returns the authenticated admin user id plus one identity-resolution label when a valid admin/dev session exists.
+        - Returns the authenticated admin-capable user id plus one identity-resolution label when a valid internal session exists.
         - Returns one canonical error response when no valid admin/dev session exists.
       side_effects: []
       idempotent: true
@@ -48,7 +48,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
 
     ERRORS:
       - API_DCX_ADMIN_AUTH_REQUIRED:
-          suggested_action: Sign in as an admin/dev user, then retry.
+          suggested_action: Sign in as an admin-capable user, then retry.
           common_causes:
             - no session cookie
             - expired or revoked session
@@ -56,7 +56,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
             - Sign in through the real auth flow.
           retry_safe: true
       - API_DCX_ADMIN_FORBIDDEN:
-          suggested_action: Sign in with a dev/admin account to access the admin workspace.
+          suggested_action: Sign in with an admin, dev, shareholder, or investor account to access the admin workspace.
           common_causes:
             - normal user session tried to access admin
           recovery_steps:
@@ -75,8 +75,8 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
                     "ok": False,
                     "error": {
                         "code": "API_DCX_ADMIN_FORBIDDEN",
-                        "message": "This authenticated DCX user does not have admin access.",
-                        "suggested_action": "Sign in with a dev/admin account to access the admin workspace.",
+                    "message": "This authenticated DCX user does not have admin access.",
+                    "suggested_action": "Sign in with an admin, dev, shareholder, or investor account to access the admin workspace.",
                     },
                 },
             )
@@ -90,7 +90,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
             "error": {
                 "code": "API_DCX_ADMIN_AUTH_REQUIRED",
                 "message": "No authenticated DCX admin session is active.",
-                "suggested_action": "Sign in as an admin/dev user, then retry.",
+                "suggested_action": "Sign in as an admin-capable user, then retry.",
             },
         },
     )
