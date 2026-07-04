@@ -1,7 +1,7 @@
 """
 CONTEXT:
 This file owns the admin-facing tracker work-item save HTTP boundary.
-It exists so the Tracker page can create and edit the nested strategy/operation/battle/task map.
+It exists so the Tracker page can create and edit the nested strategy/operation/challenge/task map.
 """
 
 from __future__ import annotations
@@ -29,9 +29,10 @@ class DcxAdminTrackerWorkItemSaveRequest(BaseModel):
     work_item_id: int | None = None
     title: str
     description: str
-    current_state: str
+    current_state: str = ""
     level: str
-    pillar: str
+    pillar: str | None = None
+    pillars: list[str] | None = None
     status: str
     parent_work_item_id: int | None = None
 
@@ -63,6 +64,7 @@ def post_dcx_admin_tracker_work_item_save(
             current_state=work_item_save_request.current_state,
             level=work_item_save_request.level,
             pillar=work_item_save_request.pillar,
+            pillars=work_item_save_request.pillars,
             status=work_item_save_request.status,
             parent_work_item_id=work_item_save_request.parent_work_item_id,
         )

@@ -2,7 +2,7 @@
 CONTEXT:
 This file creates or updates one DCX admin tracker work item.
 It exists so the tracker can maintain a nested map of long-term items, strategy, operations,
-battles, and concrete tasks without separate tables for each level.
+challenges, and concrete tasks without separate tables for each level.
 """
 
 from __future__ import annotations
@@ -18,6 +18,17 @@ DCX_ADMIN_TRACKER_PILLARS = {"legibility", "investors", "building", "customers",
 DCX_ADMIN_TRACKER_STATUSES = {"not_started", "active", "waiting", "done"}
 
 
+def _normalize_dcx_admin_tracker_pillars(pillars: list[str] | None, fallback_pillar: str | None) -> list[str]:
+    pillar_inputs = pillars if pillars is not None else ([fallback_pillar] if fallback_pillar else [])
+    normalized_pillars: list[str] = []
+    for pillar_input in pillar_inputs:
+        normalized_pillar = pillar_input.strip().lower()
+        if normalized_pillar == "" or normalized_pillar in normalized_pillars:
+            continue
+        normalized_pillars.append(normalized_pillar)
+    return normalized_pillars
+
+
 def save_dcx_admin_tracker_work_item_capability(
     acting_admin_user_id: int,
     work_item_id: int | None,
@@ -25,7 +36,8 @@ def save_dcx_admin_tracker_work_item_capability(
     description: str,
     current_state: str,
     level: str,
-    pillar: str,
+    pillar: str | None,
+    pillars: list[str] | None,
     status: str,
     parent_work_item_id: int | None,
     connect_to_database: Callable[..., Any] | None = None,
@@ -35,7 +47,7 @@ def save_dcx_admin_tracker_work_item_capability(
       preconditions:
         - acting_admin_user_id identifies the admin-capable user saving the item.
         - title is non-empty.
-        - level, pillar, and status are from the tracker vocabularies.
+        - level, pillars, and status are from the tracker vocabularies.
         - parent_work_item_id is null or identifies another work item.
       postconditions:
         - Creates a new work item when work_item_id is null.
@@ -46,7 +58,7 @@ def save_dcx_admin_tracker_work_item_capability(
       idempotent: true
       retry_safe: true
       async: false
-      idempotency_key: dcx_admin_tracker_work_item:{work_item_id}:{title}:{level}:{pillar}:{status}:{parent_work_item_id}
+      idempotency_key: dcx_admin_tracker_work_item:{work_item_id}:{title}:{level}:{pillars}:{status}:{parent_work_item_id}
       locks:
         - one row-level lock on the edited work item when updating
       contention_strategy: serialize competing edits through a FOR UPDATE lock on the target row
@@ -114,14 +126,16 @@ def save_dcx_admin_tracker_work_item_capability(
     normalized_description = description.strip()
     normalized_current_state = current_state.strip()
     normalized_level = level.strip().lower()
-    normalized_pillar = pillar.strip().lower()
+    normalized_pillars = _normalize_dcx_admin_tracker_pillars(pillars, pillar)
+    normalized_pillar = normalized_pillars[0] if normalized_pillars else ""
     normalized_status = status.strip().lower()
 
     if (
         acting_admin_user_id <= 0
         or normalized_title == ""
         or normalized_level not in DCX_ADMIN_TRACKER_LEVELS
-        or normalized_pillar not in DCX_ADMIN_TRACKER_PILLARS
+        or len(normalized_pillars) == 0
+        or any(normalized_pillar_value not in DCX_ADMIN_TRACKER_PILLARS for normalized_pillar_value in normalized_pillars)
         or normalized_status not in DCX_ADMIN_TRACKER_STATUSES
         or (work_item_id is not None and work_item_id <= 0)
         or (parent_work_item_id is not None and parent_work_item_id <= 0)
@@ -156,12 +170,13 @@ def save_dcx_admin_tracker_work_item_capability(
                             current_state,
                             work_item_level,
                             pillar,
+                            pillars,
                             item_status,
                             parent_work_item_id,
                             created_by_user_id,
                             updated_by_user_id
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
@@ -170,6 +185,7 @@ def save_dcx_admin_tracker_work_item_capability(
                             normalized_current_state,
                             normalized_level,
                             normalized_pillar,
+                            normalized_pillars,
                             normalized_status,
                             parent_work_item_id,
                             acting_admin_user_id,
@@ -228,6 +244,7 @@ def save_dcx_admin_tracker_work_item_capability(
                         current_state = %s,
                         work_item_level = %s,
                         pillar = %s,
+                        pillars = %s,
                         item_status = %s,
                         parent_work_item_id = %s,
                         updated_by_user_id = %s
@@ -239,6 +256,7 @@ def save_dcx_admin_tracker_work_item_capability(
                         normalized_current_state,
                         normalized_level,
                         normalized_pillar,
+                        normalized_pillars,
                         normalized_status,
                         parent_work_item_id,
                         acting_admin_user_id,

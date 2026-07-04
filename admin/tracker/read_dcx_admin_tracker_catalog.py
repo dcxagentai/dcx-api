@@ -1,7 +1,7 @@
 """
 CONTEXT:
 This file reads the first DCX admin tracker catalog.
-It exists so the internal admin surface can show nested strategy, operations, battles, tasks,
+It exists so the internal admin surface can show nested strategy, operations, challenges, tasks,
 and the activity updates attached to them without creating spreadsheet drift.
 """
 
@@ -72,6 +72,7 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.current_state,
                         item.work_item_level,
                         item.pillar,
+                        item.pillars,
                         item.item_status,
                         item.parent_work_item_id,
                         parent_item.title AS parent_title,
@@ -173,17 +174,18 @@ def read_dcx_admin_tracker_catalog_capability(
                 "current_state": row[3],
                 "level": row[4],
                 "pillar": row[5],
-                "status": row[6],
-                "parent_work_item_id": row[7],
-                "parent_title": row[8],
-                "created_by_user_id": row[9],
-                "created_by_email": row[10],
-                "updated_by_user_id": row[11],
-                "updated_by_email": row[12],
-                "created_at_ts_ms": row[13],
-                "updated_at_ts_ms": row[14],
-                "update_count": int(row[15] or 0),
-                "latest_update_at_ts_ms": row[16],
+                "pillars": list(row[6] or [row[5]]),
+                "status": row[7],
+                "parent_work_item_id": row[8],
+                "parent_title": row[9],
+                "created_by_user_id": row[10],
+                "created_by_email": row[11],
+                "updated_by_user_id": row[12],
+                "updated_by_email": row[13],
+                "created_at_ts_ms": row[14],
+                "updated_at_ts_ms": row[15],
+                "update_count": int(row[16] or 0),
+                "latest_update_at_ts_ms": row[17],
             }
             for row in work_item_rows
         ],

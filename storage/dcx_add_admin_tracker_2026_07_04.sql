@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.stephen_dcx_admin_tracker_work_items (
     current_state text NOT NULL DEFAULT '',
     work_item_level text NOT NULL,
     pillar text NOT NULL,
+    pillars text[] NOT NULL DEFAULT ARRAY['building']::text[],
     item_status text NOT NULL DEFAULT 'not_started',
     parent_work_item_id bigint REFERENCES public.stephen_dcx_admin_tracker_work_items(id) ON DELETE SET NULL,
     created_by_user_id bigint REFERENCES public.stephen_dcx_users(id) ON DELETE SET NULL,
@@ -22,6 +23,11 @@ CREATE TABLE IF NOT EXISTS public.stephen_dcx_admin_tracker_work_items (
         CHECK (work_item_level IN ('long_term', 'strategy', 'operation', 'battle', 'task')),
     CONSTRAINT stephen_dcx_admin_tracker_work_items_pillar_check
         CHECK (pillar IN ('legibility', 'investors', 'building', 'customers', 'other')),
+    CONSTRAINT stephen_dcx_admin_tracker_work_items_pillars_check
+        CHECK (
+            cardinality(pillars) > 0
+            AND pillars <@ ARRAY['legibility', 'investors', 'building', 'customers', 'other']::text[]
+        ),
     CONSTRAINT stephen_dcx_admin_tracker_work_items_status_check
         CHECK (item_status IN ('not_started', 'active', 'waiting', 'done'))
 );
@@ -34,6 +40,10 @@ ON public.stephen_dcx_admin_tracker_work_items(item_status, updated_at_ts_ms DES
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_admin_tracker_work_items_pillar_idx
 ON public.stephen_dcx_admin_tracker_work_items(pillar, item_status, updated_at_ts_ms DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_admin_tracker_work_items_pillars_gin_idx
+ON public.stephen_dcx_admin_tracker_work_items
+USING GIN (pillars);
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_admin_tracker_work_items_level_idx
 ON public.stephen_dcx_admin_tracker_work_items(work_item_level, updated_at_ts_ms DESC, id DESC);
