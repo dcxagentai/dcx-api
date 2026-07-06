@@ -1,0 +1,12 @@
+# Admin tracker people and update editing
+
+Added tracker backend support on 2026-07-06:
+
+- New migration: `storage/dcx_admin_tracker_people_and_update_editing_2026_07_06.sql`.
+- Work items now support optional `assigned_to_user_id`.
+- Activity updates now support `updated_by_user_id`; existing update rows are backfilled from `author_user_id`.
+- Catalog reads include assignee/editor primary emails and an `assignable_users` list for the admin UI.
+- Work-item save accepts `assigned_to_user_id`.
+- New update-save capability and route: `POST /admin/tracker/updates/save`, preserving the original author while recording the latest editor.
+
+Fresh installs also include the new columns in `storage/dcx_add_admin_tracker_2026_07_04.sql`.

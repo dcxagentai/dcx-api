@@ -76,6 +76,8 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.item_status,
                         item.parent_work_item_id,
                         parent_item.title AS parent_title,
+                        item.assigned_to_user_id,
+                        assigned_email_contact.normalized_value AS assigned_to_email,
                         item.created_by_user_id,
                         created_email_contact.normalized_value AS created_by_email,
                         item.updated_by_user_id,
@@ -87,6 +89,16 @@ def read_dcx_admin_tracker_catalog_capability(
                     FROM public.stephen_dcx_admin_tracker_work_items item
                     LEFT JOIN public.stephen_dcx_admin_tracker_work_items parent_item
                       ON parent_item.id = item.parent_work_item_id
+                    LEFT JOIN LATERAL (
+                        SELECT normalized_value
+                        FROM public.stephen_dcx_users_contact_methods
+                        WHERE user_id = item.assigned_to_user_id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) assigned_email_contact
+                      ON TRUE
                     LEFT JOIN LATERAL (
                         SELECT normalized_value
                         FROM public.stephen_dcx_users_contact_methods
@@ -127,7 +139,7 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.created_at_ts_ms ASC,
                         item.id ASC
                     """,
-                    ("email", "email"),
+                    ("email", "email", "email"),
                 )
                 work_item_rows = cursor.fetchall()
 
@@ -142,7 +154,9 @@ def read_dcx_admin_tracker_catalog_capability(
                         tracker_update.update_kind,
                         tracker_update.update_body,
                         tracker_update.created_at_ts_ms,
-                        tracker_update.updated_at_ts_ms
+                        tracker_update.updated_at_ts_ms,
+                        tracker_update.updated_by_user_id,
+                        updated_by_email_contact.normalized_value AS updated_by_email
                     FROM public.stephen_dcx_admin_tracker_updates tracker_update
                     INNER JOIN public.stephen_dcx_admin_tracker_work_items item
                       ON item.id = tracker_update.work_item_id
@@ -156,12 +170,47 @@ def read_dcx_admin_tracker_catalog_capability(
                         LIMIT 1
                     ) author_email_contact
                       ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT normalized_value
+                        FROM public.stephen_dcx_users_contact_methods
+                        WHERE user_id = tracker_update.updated_by_user_id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) updated_by_email_contact
+                      ON TRUE
                     ORDER BY tracker_update.created_at_ts_ms DESC, tracker_update.id DESC
                     LIMIT 500
                     """,
-                    ("email",),
+                    ("email", "email"),
                 )
                 update_rows = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        u.id,
+                        email_contact.normalized_value,
+                        u.user_role,
+                        u.account_status
+                    FROM public.stephen_dcx_users u
+                    INNER JOIN LATERAL (
+                        SELECT normalized_value
+                        FROM public.stephen_dcx_users_contact_methods
+                        WHERE user_id = u.id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) email_contact
+                      ON TRUE
+                    WHERE u.user_role IN ('admin', 'dev', 'shareholder', 'shareholders', 'investor', 'investors')
+                    ORDER BY email_contact.normalized_value ASC, u.id ASC
+                    """,
+                    ("email",),
+                )
+                assignable_user_rows = cursor.fetchall()
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_DCX_ADMIN_TRACKER_CATALOG_READ_FAILED") from exc
 
@@ -178,14 +227,16 @@ def read_dcx_admin_tracker_catalog_capability(
                 "status": row[7],
                 "parent_work_item_id": row[8],
                 "parent_title": row[9],
-                "created_by_user_id": row[10],
-                "created_by_email": row[11],
-                "updated_by_user_id": row[12],
-                "updated_by_email": row[13],
-                "created_at_ts_ms": row[14],
-                "updated_at_ts_ms": row[15],
-                "update_count": int(row[16] or 0),
-                "latest_update_at_ts_ms": row[17],
+                "assigned_to_user_id": row[10],
+                "assigned_to_email": row[11],
+                "created_by_user_id": row[12],
+                "created_by_email": row[13],
+                "updated_by_user_id": row[14],
+                "updated_by_email": row[15],
+                "created_at_ts_ms": row[16],
+                "updated_at_ts_ms": row[17],
+                "update_count": int(row[18] or 0),
+                "latest_update_at_ts_ms": row[19],
             }
             for row in work_item_rows
         ],
@@ -200,8 +251,19 @@ def read_dcx_admin_tracker_catalog_capability(
                 "update_body": row[6],
                 "created_at_ts_ms": row[7],
                 "updated_at_ts_ms": row[8],
+                "updated_by_user_id": row[9],
+                "updated_by_email": row[10],
             }
             for row in update_rows
+        ],
+        "assignable_users": [
+            {
+                "user_id": row[0],
+                "primary_email": row[1],
+                "user_role": row[2],
+                "account_status": row[3],
+            }
+            for row in assignable_user_rows
         ],
         "total_work_item_count": len(work_item_rows),
         "returned_update_count": len(update_rows),

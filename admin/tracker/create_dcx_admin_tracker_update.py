@@ -2,7 +2,7 @@
 CONTEXT:
 This file creates one activity update for a DCX admin tracker work item.
 It exists so the tracker can act as the shared activity log for strategy, operations,
-battles, and tasks as the small internal group moves work forward.
+challenges, and tasks as the small internal group moves work forward.
 """
 
 from __future__ import annotations
@@ -124,14 +124,16 @@ def create_dcx_admin_tracker_update_capability(
                     INSERT INTO public.stephen_dcx_admin_tracker_updates (
                         work_item_id,
                         author_user_id,
+                        updated_by_user_id,
                         update_kind,
                         update_body
                     )
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         work_item_id,
+                        acting_admin_user_id,
                         acting_admin_user_id,
                         normalized_update_kind,
                         normalized_update_body,
