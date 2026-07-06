@@ -79,6 +79,10 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.origin_update_id,
                         item.assigned_to_user_id,
                         assigned_email_contact.normalized_value AS assigned_to_email,
+                        item.is_archived,
+                        item.archived_by_user_id,
+                        archived_email_contact.normalized_value AS archived_by_email,
+                        item.archived_at_ts_ms,
                         item.created_by_user_id,
                         created_email_contact.normalized_value AS created_by_email,
                         item.updated_by_user_id,
@@ -99,6 +103,16 @@ def read_dcx_admin_tracker_catalog_capability(
                           AND is_active = TRUE
                         LIMIT 1
                     ) assigned_email_contact
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT normalized_value
+                        FROM public.stephen_dcx_users_contact_methods
+                        WHERE user_id = item.archived_by_user_id
+                          AND contact_type = %s
+                          AND is_primary = TRUE
+                          AND is_active = TRUE
+                        LIMIT 1
+                    ) archived_email_contact
                       ON TRUE
                     LEFT JOIN LATERAL (
                         SELECT normalized_value
@@ -140,7 +154,7 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.created_at_ts_ms ASC,
                         item.id ASC
                     """,
-                    ("email", "email", "email"),
+                    ("email", "email", "email", "email"),
                 )
                 work_item_rows = cursor.fetchall()
 
@@ -231,14 +245,18 @@ def read_dcx_admin_tracker_catalog_capability(
                 "origin_update_id": row[10],
                 "assigned_to_user_id": row[11],
                 "assigned_to_email": row[12],
-                "created_by_user_id": row[13],
-                "created_by_email": row[14],
-                "updated_by_user_id": row[15],
-                "updated_by_email": row[16],
-                "created_at_ts_ms": row[17],
-                "updated_at_ts_ms": row[18],
-                "update_count": int(row[19] or 0),
-                "latest_update_at_ts_ms": row[20],
+                "is_archived": bool(row[13]),
+                "archived_by_user_id": row[14],
+                "archived_by_email": row[15],
+                "archived_at_ts_ms": row[16],
+                "created_by_user_id": row[17],
+                "created_by_email": row[18],
+                "updated_by_user_id": row[19],
+                "updated_by_email": row[20],
+                "created_at_ts_ms": row[21],
+                "updated_at_ts_ms": row[22],
+                "update_count": int(row[23] or 0),
+                "latest_update_at_ts_ms": row[24],
             }
             for row in work_item_rows
         ],

@@ -175,6 +175,9 @@ from routes.admin.dcx_api_routes_admin_public_site_mark_local_rebuild_complete i
 from routes.admin.dcx_api_routes_admin_tracker_catalog import (
     dcx_api_routes_admin_tracker_catalog_router,
 )
+from routes.admin.dcx_api_routes_admin_tracker_work_item_archive import (
+    dcx_api_routes_admin_tracker_work_item_archive_router,
+)
 from routes.admin.dcx_api_routes_admin_tracker_work_item_save import (
     dcx_api_routes_admin_tracker_work_item_save_router,
 )
@@ -348,6 +351,7 @@ app.include_router(dcx_api_routes_admin_public_site_publish_status_router)
 app.include_router(dcx_api_routes_admin_public_site_publish_run_router)
 app.include_router(dcx_api_routes_admin_public_site_mark_local_rebuild_complete_router)
 app.include_router(dcx_api_routes_admin_tracker_catalog_router)
+app.include_router(dcx_api_routes_admin_tracker_work_item_archive_router)
 app.include_router(dcx_api_routes_admin_tracker_work_item_save_router)
 app.include_router(dcx_api_routes_admin_tracker_update_create_router)
 app.include_router(dcx_api_routes_admin_tracker_update_save_router)
