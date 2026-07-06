@@ -74,6 +74,12 @@ ON public.stephen_dcx_admin_tracker_updates(author_user_id, created_at_ts_ms DES
 CREATE INDEX IF NOT EXISTS stephen_dcx_admin_tracker_updates_updated_by_idx
 ON public.stephen_dcx_admin_tracker_updates(updated_by_user_id, updated_at_ts_ms DESC, id DESC);
 
+ALTER TABLE public.stephen_dcx_admin_tracker_work_items
+ADD COLUMN IF NOT EXISTS origin_update_id bigint REFERENCES public.stephen_dcx_admin_tracker_updates(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_admin_tracker_work_items_origin_update_idx
+ON public.stephen_dcx_admin_tracker_work_items(origin_update_id, id);
+
 DO $$
 BEGIN
     IF NOT EXISTS (

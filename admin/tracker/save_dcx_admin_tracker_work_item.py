@@ -41,6 +41,7 @@ def save_dcx_admin_tracker_work_item_capability(
     status: str,
     parent_work_item_id: int | None,
     assigned_to_user_id: int | None,
+    origin_update_id: int | None,
     connect_to_database: Callable[..., Any] | None = None,
 ) -> dict:
     """
@@ -51,6 +52,7 @@ def save_dcx_admin_tracker_work_item_capability(
         - level, pillars, and status are from the tracker vocabularies.
         - parent_work_item_id is null or identifies another work item.
         - assigned_to_user_id is null or identifies one existing user.
+        - origin_update_id is null or identifies the activity update this item came from.
       postconditions:
         - Creates a new work item when work_item_id is null.
         - Updates one existing work item when work_item_id is present.
@@ -142,6 +144,7 @@ def save_dcx_admin_tracker_work_item_capability(
         or (work_item_id is not None and work_item_id <= 0)
         or (parent_work_item_id is not None and parent_work_item_id <= 0)
         or (assigned_to_user_id is not None and assigned_to_user_id <= 0)
+        or (origin_update_id is not None and origin_update_id <= 0)
         or (work_item_id is not None and parent_work_item_id == work_item_id)
     ):
         raise RuntimeError("API_DCX_ADMIN_TRACKER_WORK_ITEM_INVALID")
@@ -160,6 +163,19 @@ def save_dcx_admin_tracker_work_item_capability(
                         LIMIT 1
                         """,
                         (parent_work_item_id,),
+                    )
+                    if cursor.fetchone() is None:
+                        raise RuntimeError("API_DCX_ADMIN_TRACKER_WORK_ITEM_INVALID")
+
+                if origin_update_id is not None:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM public.stephen_dcx_admin_tracker_updates
+                        WHERE id = %s
+                        LIMIT 1
+                        """,
+                        (origin_update_id,),
                     )
                     if cursor.fetchone() is None:
                         raise RuntimeError("API_DCX_ADMIN_TRACKER_WORK_ITEM_INVALID")
@@ -190,10 +206,11 @@ def save_dcx_admin_tracker_work_item_capability(
                             item_status,
                             parent_work_item_id,
                             assigned_to_user_id,
+                            origin_update_id,
                             created_by_user_id,
                             updated_by_user_id
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
@@ -206,6 +223,7 @@ def save_dcx_admin_tracker_work_item_capability(
                             normalized_status,
                             parent_work_item_id,
                             assigned_to_user_id,
+                            origin_update_id,
                             acting_admin_user_id,
                             acting_admin_user_id,
                         ),
@@ -266,6 +284,7 @@ def save_dcx_admin_tracker_work_item_capability(
                         item_status = %s,
                         parent_work_item_id = %s,
                         assigned_to_user_id = %s,
+                        origin_update_id = %s,
                         updated_by_user_id = %s
                     WHERE id = %s
                     """,
@@ -279,6 +298,7 @@ def save_dcx_admin_tracker_work_item_capability(
                         normalized_status,
                         parent_work_item_id,
                         assigned_to_user_id,
+                        origin_update_id,
                         acting_admin_user_id,
                         work_item_id,
                     ),

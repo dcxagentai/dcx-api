@@ -36,6 +36,7 @@ class DcxAdminTrackerWorkItemSaveRequest(BaseModel):
     status: str
     parent_work_item_id: int | None = None
     assigned_to_user_id: int | None = None
+    origin_update_id: int | None = None
 
 
 @dcx_api_routes_admin_tracker_work_item_save_router.post(
@@ -69,6 +70,7 @@ def post_dcx_admin_tracker_work_item_save(
             status=work_item_save_request.status,
             parent_work_item_id=work_item_save_request.parent_work_item_id,
             assigned_to_user_id=work_item_save_request.assigned_to_user_id,
+            origin_update_id=work_item_save_request.origin_update_id,
         )
     except RuntimeError as runtime_error:
         error_code = str(runtime_error)
