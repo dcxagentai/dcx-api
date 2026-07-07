@@ -64,6 +64,9 @@ from routes.admin.dcx_api_routes_admin_users_list import (
 from routes.admin.dcx_api_routes_admin_user_detail import (
     dcx_api_routes_admin_user_detail_router,
 )
+from routes.admin.dcx_api_routes_admin_user_tracker_team_membership_save import (
+    dcx_api_routes_admin_user_tracker_team_membership_save_router,
+)
 from routes.admin.dcx_api_routes_admin_content_ux_strings_catalog import (
     dcx_api_routes_admin_content_ux_strings_catalog_router,
 )
@@ -314,6 +317,7 @@ app.include_router(dcx_api_routes_auth_password_request_reset_router)
 app.include_router(dcx_api_routes_auth_session_router)
 app.include_router(dcx_api_routes_admin_users_list_router)
 app.include_router(dcx_api_routes_admin_user_detail_router)
+app.include_router(dcx_api_routes_admin_user_tracker_team_membership_save_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_catalog_router)
 app.include_router(dcx_api_routes_admin_content_ux_string_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_ux_strings_save_live_row_router)

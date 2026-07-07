@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS stephen_dcx_users (
     primary_email_confirmed_at_ts_ms BIGINT,
     preferred_language_id BIGINT REFERENCES stephen_dcx_languages (id) ON DELETE SET NULL,
     user_role TEXT NOT NULL DEFAULT 'user',
+    is_tracker_team_member BOOLEAN NOT NULL DEFAULT FALSE,
     account_status TEXT NOT NULL DEFAULT 'pending_email_verification',
     email_communication_preference TEXT NOT NULL DEFAULT 'announcements',
     last_seen_at_ts_ms BIGINT,
@@ -100,6 +101,9 @@ ADD COLUMN IF NOT EXISTS send_budget_request_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE stephen_dcx_users
 ADD COLUMN IF NOT EXISTS user_role TEXT NOT NULL DEFAULT 'user';
 
+ALTER TABLE stephen_dcx_users
+ADD COLUMN IF NOT EXISTS is_tracker_team_member BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS stephen_dcx_user_password_credentials (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES stephen_dcx_users (id) ON DELETE CASCADE,
@@ -153,6 +157,9 @@ ON stephen_dcx_users (account_status);
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_users_user_role_idx
 ON stephen_dcx_users (user_role);
+
+CREATE INDEX IF NOT EXISTS stephen_dcx_users_tracker_team_member_idx
+ON stephen_dcx_users (is_tracker_team_member, updated_at_ts_ms DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS stephen_dcx_user_auth_identities_user_id_idx
 ON stephen_dcx_user_auth_identities (user_id);

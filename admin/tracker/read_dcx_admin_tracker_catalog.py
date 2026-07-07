@@ -79,6 +79,7 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.origin_update_id,
                         item.assigned_to_user_id,
                         assigned_email_contact.normalized_value AS assigned_to_email,
+                        assigned_user.public_display_name AS assigned_to_display_name,
                         item.is_archived,
                         item.archived_by_user_id,
                         archived_email_contact.normalized_value AS archived_by_email,
@@ -94,6 +95,8 @@ def read_dcx_admin_tracker_catalog_capability(
                     FROM public.stephen_dcx_admin_tracker_work_items item
                     LEFT JOIN public.stephen_dcx_admin_tracker_work_items parent_item
                       ON parent_item.id = item.parent_work_item_id
+                    LEFT JOIN public.stephen_dcx_users assigned_user
+                      ON assigned_user.id = item.assigned_to_user_id
                     LEFT JOIN LATERAL (
                         SELECT normalized_value
                         FROM public.stephen_dcx_users_contact_methods
@@ -166,15 +169,21 @@ def read_dcx_admin_tracker_catalog_capability(
                         item.title AS work_item_title,
                         tracker_update.author_user_id,
                         author_email_contact.normalized_value AS author_email,
+                        author_user.public_display_name AS author_display_name,
                         tracker_update.update_kind,
                         tracker_update.update_body,
                         tracker_update.created_at_ts_ms,
                         tracker_update.updated_at_ts_ms,
                         tracker_update.updated_by_user_id,
-                        updated_by_email_contact.normalized_value AS updated_by_email
+                        updated_by_email_contact.normalized_value AS updated_by_email,
+                        updated_by_user.public_display_name AS updated_by_display_name
                     FROM public.stephen_dcx_admin_tracker_updates tracker_update
                     INNER JOIN public.stephen_dcx_admin_tracker_work_items item
                       ON item.id = tracker_update.work_item_id
+                    LEFT JOIN public.stephen_dcx_users author_user
+                      ON author_user.id = tracker_update.author_user_id
+                    LEFT JOIN public.stephen_dcx_users updated_by_user
+                      ON updated_by_user.id = tracker_update.updated_by_user_id
                     LEFT JOIN LATERAL (
                         SELECT normalized_value
                         FROM public.stephen_dcx_users_contact_methods
@@ -207,8 +216,10 @@ def read_dcx_admin_tracker_catalog_capability(
                     SELECT
                         u.id,
                         email_contact.normalized_value,
+                        u.public_display_name,
                         u.user_role,
-                        u.account_status
+                        u.account_status,
+                        u.is_tracker_team_member
                     FROM public.stephen_dcx_users u
                     INNER JOIN LATERAL (
                         SELECT normalized_value
@@ -220,8 +231,25 @@ def read_dcx_admin_tracker_catalog_capability(
                         LIMIT 1
                     ) email_contact
                       ON TRUE
-                    WHERE u.user_role IN ('admin', 'dev', 'shareholder', 'shareholders', 'investor', 'investors')
-                    ORDER BY email_contact.normalized_value ASC, u.id ASC
+                    WHERE u.is_tracker_team_member = TRUE
+                       OR EXISTS (
+                            SELECT 1
+                            FROM public.stephen_dcx_admin_tracker_work_items assigned_item
+                            WHERE assigned_item.assigned_to_user_id = u.id
+                              AND assigned_item.is_archived = FALSE
+                       )
+                       OR EXISTS (
+                            SELECT 1
+                            FROM public.stephen_dcx_admin_tracker_updates authored_update
+                            INNER JOIN public.stephen_dcx_admin_tracker_work_items update_item
+                              ON update_item.id = authored_update.work_item_id
+                            WHERE authored_update.author_user_id = u.id
+                              AND update_item.is_archived = FALSE
+                       )
+                    ORDER BY
+                        u.is_tracker_team_member DESC,
+                        COALESCE(NULLIF(u.public_display_name, ''), email_contact.normalized_value) ASC,
+                        u.id ASC
                     """,
                     ("email",),
                 )
@@ -245,18 +273,19 @@ def read_dcx_admin_tracker_catalog_capability(
                 "origin_update_id": row[10],
                 "assigned_to_user_id": row[11],
                 "assigned_to_email": row[12],
-                "is_archived": bool(row[13]),
-                "archived_by_user_id": row[14],
-                "archived_by_email": row[15],
-                "archived_at_ts_ms": row[16],
-                "created_by_user_id": row[17],
-                "created_by_email": row[18],
-                "updated_by_user_id": row[19],
-                "updated_by_email": row[20],
-                "created_at_ts_ms": row[21],
-                "updated_at_ts_ms": row[22],
-                "update_count": int(row[23] or 0),
-                "latest_update_at_ts_ms": row[24],
+                "assigned_to_display_name": row[13],
+                "is_archived": bool(row[14]),
+                "archived_by_user_id": row[15],
+                "archived_by_email": row[16],
+                "archived_at_ts_ms": row[17],
+                "created_by_user_id": row[18],
+                "created_by_email": row[19],
+                "updated_by_user_id": row[20],
+                "updated_by_email": row[21],
+                "created_at_ts_ms": row[22],
+                "updated_at_ts_ms": row[23],
+                "update_count": int(row[24] or 0),
+                "latest_update_at_ts_ms": row[25],
             }
             for row in work_item_rows
         ],
@@ -267,12 +296,14 @@ def read_dcx_admin_tracker_catalog_capability(
                 "work_item_title": row[2],
                 "author_user_id": row[3],
                 "author_email": row[4],
-                "update_kind": row[5],
-                "update_body": row[6],
-                "created_at_ts_ms": row[7],
-                "updated_at_ts_ms": row[8],
-                "updated_by_user_id": row[9],
-                "updated_by_email": row[10],
+                "author_display_name": row[5],
+                "update_kind": row[6],
+                "update_body": row[7],
+                "created_at_ts_ms": row[8],
+                "updated_at_ts_ms": row[9],
+                "updated_by_user_id": row[10],
+                "updated_by_email": row[11],
+                "updated_by_display_name": row[12],
             }
             for row in update_rows
         ],
@@ -280,8 +311,10 @@ def read_dcx_admin_tracker_catalog_capability(
             {
                 "user_id": row[0],
                 "primary_email": row[1],
-                "user_role": row[2],
-                "account_status": row[3],
+                "display_name": row[2],
+                "user_role": row[3],
+                "account_status": row[4],
+                "is_tracker_team_member": bool(row[5]),
             }
             for row in assignable_user_rows
         ],

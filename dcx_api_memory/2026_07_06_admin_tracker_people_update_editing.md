@@ -13,5 +13,9 @@ Added tracker backend support on 2026-07-06:
 - New migration: `storage/dcx_admin_tracker_archive_2026_07_06.sql`.
 - Work items now support soft archive metadata through `is_archived`, `archived_by_user_id`, and `archived_at_ts_ms`.
 - New archive/restore route: `POST /admin/tracker/work-items/archive`.
+- New migration: `storage/dcx_admin_tracker_team_membership_2026_07_07.sql`.
+- Users now support `is_tracker_team_member`, an explicit operational Team flag separate from role/permission fields.
+- New team-membership route: `POST /admin/users/tracker-team-membership/save`.
+- Tracker catalog now returns user `public_display_name` fields for assignees, update authors/editors, and assignable Team users.
 
 Fresh installs also include the new columns in `storage/dcx_add_admin_tracker_2026_07_04.sql`.

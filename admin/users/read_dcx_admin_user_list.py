@@ -78,6 +78,8 @@ def read_dcx_admin_user_list_capability(
                         primary_phone_contact_method.normalized_value,
                         primary_phone_contact_method.is_verified,
                         primary_phone_contact_method.verified_at_ts_ms,
+                        u.public_display_name,
+                        u.is_tracker_team_member,
                         u.user_role,
                         u.account_status,
                         u.email_communication_preference,
@@ -151,13 +153,13 @@ def read_dcx_admin_user_list_capability(
     users = []
     for user_row in user_rows:
         preferred_language = None
-        if user_row[14] is not None:
+        if user_row[16] is not None:
             preferred_language = {
-                "id": user_row[14],
-                "language_code": user_row[15],
-                "language_name_en": user_row[16],
-                "language_name_native": user_row[17],
-                "is_rtl": user_row[18],
+                "id": user_row[16],
+                "language_code": user_row[17],
+                "language_name_en": user_row[18],
+                "language_name_native": user_row[19],
+                "is_rtl": user_row[20],
             }
 
         users.append(
@@ -170,16 +172,18 @@ def read_dcx_admin_user_list_capability(
                 "primary_phone": user_row[5],
                 "primary_phone_confirmed": user_row[6],
                 "primary_phone_confirmed_at_ts_ms": user_row[7],
-                "user_role": user_row[8],
-                "account_status": user_row[9],
-                "email_communication_preference": user_row[10],
-                "last_seen_at_ts_ms": user_row[11],
-                "created_at_ts_ms": user_row[12],
-                "updated_at_ts_ms": user_row[13],
+                "public_display_name": user_row[8],
+                "is_tracker_team_member": bool(user_row[9]),
+                "user_role": user_row[10],
+                "account_status": user_row[11],
+                "email_communication_preference": user_row[12],
+                "last_seen_at_ts_ms": user_row[13],
+                "created_at_ts_ms": user_row[14],
+                "updated_at_ts_ms": user_row[15],
                 "preferred_language": preferred_language,
-                "total_token_count": int(user_row[19] or 0) if len(user_row) > 19 else 0,
-                "usage_event_count": int(user_row[20] or 0) if len(user_row) > 20 else 0,
-                "activity_event_count": int(user_row[21] or 0) if len(user_row) > 21 else 0,
+                "total_token_count": int(user_row[21] or 0) if len(user_row) > 21 else 0,
+                "usage_event_count": int(user_row[22] or 0) if len(user_row) > 22 else 0,
+                "activity_event_count": int(user_row[23] or 0) if len(user_row) > 23 else 0,
             }
         )
 
