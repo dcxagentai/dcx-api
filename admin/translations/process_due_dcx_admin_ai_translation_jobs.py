@@ -7,6 +7,7 @@ long-running worker can all reuse the same work loop.
 
 from __future__ import annotations
 
+import logging
 import os
 import socket
 import time
@@ -26,6 +27,9 @@ from apis.gemini.translate_dcx_gemini_structured_admin_content import (
 )
 from storage.db_config import DB_CONFIG
 from usage.record_dcx_user_llm_usage_event import record_dcx_user_llm_usage_event
+
+LOGGER = logging.getLogger(__name__)
+MAX_TRANSLATION_PROVIDER_ATTEMPTS = 3
 
 
 def process_due_dcx_admin_ai_translation_jobs_capability(
@@ -168,7 +172,10 @@ def _process_claimed_translation_job(
                 "target_language_code": claimed_job["target_language_code"],
             }
 
-        translation_result = (translate_structured_content or translate_dcx_gemini_structured_admin_content)(
+        translation_result = _translate_structured_content_with_retries(
+            translate_structured_content=(
+                translate_structured_content or translate_dcx_gemini_structured_admin_content
+            ),
             entity_kind=source_payload["entity_kind"],
             source_language_code=source_payload["source_language_code"],
             target_language_code=target_language["language_code"],
@@ -261,6 +268,16 @@ def _process_claimed_translation_job(
     except Exception as exc:
         error_code = _read_translation_error_code(exc)
         next_status = "failed"
+        LOGGER.warning(
+            "AI translation job failed job_id=%s entity_kind=%s entity_key=%s target_language_code=%s error_code=%s error_detail=%s",
+            claimed_job["job_id"],
+            claimed_job["entity_kind"],
+            claimed_job["entity_key"],
+            claimed_job["target_language_code"],
+            error_code,
+            str(exc)[:1000],
+            exc_info=True,
+        )
         _mark_translation_job_finished(
             job_id=claimed_job["job_id"],
             job_status=next_status,
@@ -274,6 +291,42 @@ def _process_claimed_translation_job(
             "target_language_code": claimed_job["target_language_code"],
             "error_code": error_code,
         }
+
+
+def _translate_structured_content_with_retries(
+    translate_structured_content: Callable[..., dict],
+    entity_kind: str,
+    source_language_code: str,
+    target_language_code: str,
+    source_fields: dict,
+) -> dict:
+    for attempt_number in range(1, MAX_TRANSLATION_PROVIDER_ATTEMPTS + 1):
+        try:
+            return translate_structured_content(
+                entity_kind=entity_kind,
+                source_language_code=source_language_code,
+                target_language_code=target_language_code,
+                source_fields=source_fields,
+            )
+        except RuntimeError as exc:
+            if (
+                not _is_retryable_structured_translation_error(exc)
+                or attempt_number >= MAX_TRANSLATION_PROVIDER_ATTEMPTS
+            ):
+                raise
+            LOGGER.warning(
+                "AI translation provider attempt failed attempt=%s target_language_code=%s error_code=%s error_detail=%s",
+                attempt_number,
+                target_language_code,
+                _read_translation_error_code(exc),
+                str(exc)[:1000],
+            )
+
+    raise RuntimeError("API_DCX_ADMIN_AI_TRANSLATION_PROCESS_FAILED")
+
+
+def _is_retryable_structured_translation_error(exc: RuntimeError) -> bool:
+    return _read_translation_error_code(exc).startswith("API_DCX_GEMINI_ADMIN_TRANSLATION_")
 
 
 def _mark_translation_job_finished(

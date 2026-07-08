@@ -11,6 +11,8 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
+from collections import Counter
 from typing import Any, Callable
 
 from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
@@ -22,7 +24,7 @@ PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translat
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
 _URL_PATTERN = re.compile(r"https?://[^\s)>\]]+")
-_NUMBER_PATTERN = re.compile(r"\d+(?:[.,]\d+)*")
+_NUMBER_PATTERN = re.compile(r"\d+(?:[.,\u066B\u066C\u00A0\u202F' ]\d+)*")
 _COMMERCIAL_TOKEN_PATTERN = re.compile(
     r"\b(?:USD|EUR|GBP|CNY|RMB|AED|FOB|CIF|CFR|DAP|DDP|EXW|LC|L/C|MT|KG|G|LB|OZ|SGS|HS|ISO)\b",
     re.IGNORECASE,
@@ -158,6 +160,8 @@ The fields object must contain exactly the same field names as the input.
 - Translate naturally and professionally for commodities, markets, currency, and international business.
 - Preserve the commercial meaning exactly.
 - Preserve quantities, grades, units, currencies, dates, locations, ports, company names, URLs, placeholders, and markdown link targets.
+- Preserve every digit-bearing number as digits. Do not spell source digit tokens out as words, remove them, or introduce new digit tokens.
+- Locale punctuation such as decimal commas, non-breaking-space group separators, and native digit glyphs is allowed only when it preserves the same number.
 - Translate field text, headings, and link labels where appropriate.
 - Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
 - Preserve markdown structure and line breaks.
@@ -256,14 +260,32 @@ def _validate_same_tokens(
 
 
 def _validate_same_number_shapes(source_value: str, translated_value: str) -> None:
-    source_numbers = [_normalize_number_token(token) for token in _NUMBER_PATTERN.findall(source_value or "")]
-    translated_numbers = [
-        _normalize_number_token(token)
-        for token in _NUMBER_PATTERN.findall(translated_value or "")
+    source_numbers = _read_normalized_number_tokens(source_value)
+    translated_numbers = _read_normalized_number_tokens(translated_value)
+    if Counter(source_numbers) != Counter(translated_numbers):
+        raise RuntimeError(
+            "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH:"
+            f"source_numbers={json.dumps(source_numbers, ensure_ascii=False)};"
+            f"translated_numbers={json.dumps(translated_numbers, ensure_ascii=False)}"
+        )
+
+
+def _read_normalized_number_tokens(value: str) -> list[str]:
+    return [
+        normalized_token
+        for normalized_token in (
+            _normalize_number_token(token)
+            for token in _NUMBER_PATTERN.findall(value or "")
+        )
+        if normalized_token != ""
     ]
-    if source_numbers != translated_numbers:
-        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH")
 
 
 def _normalize_number_token(value: str) -> str:
-    return re.sub(r"[^0-9]", "", value or "")
+    normalized_digits = []
+    for character in value or "":
+        try:
+            normalized_digits.append(str(unicodedata.digit(character)))
+        except (TypeError, ValueError):
+            continue
+    return "".join(normalized_digits)

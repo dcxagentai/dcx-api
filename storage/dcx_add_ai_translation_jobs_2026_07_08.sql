@@ -59,3 +59,20 @@ BEGIN
     END IF;
 END
 $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_roles
+        WHERE rolname = 'dcxagent_user'
+    ) THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE
+        ON TABLE public.stephen_dcx_ai_translation_jobs
+        TO dcxagent_user;
+
+        GRANT USAGE, SELECT
+        ON SEQUENCE public.stephen_dcx_ai_translation_jobs_id_seq
+        TO dcxagent_user;
+    END IF;
+END $$;

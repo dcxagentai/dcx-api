@@ -101,3 +101,63 @@ def test_rejects_structured_translation_with_commercial_token_drift(monkeypatch)
         assert str(runtime_error) == "API_DCX_GEMINI_ADMIN_TRANSLATION_COMMERCIAL_TOKEN_MISMATCH"
     else:
         raise AssertionError("Expected commercial token mismatch to fail.")
+
+
+def test_allows_localized_number_formatting_and_unicode_digits(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
+
+    def fake_send_gemini_request(_request_context: dict) -> dict:
+        return {
+            "output_text": json.dumps(
+                {
+                    "target_language_code": "ur",
+                    "fields": {
+                        "email_subject": "2035 تک ٥% اور 3,5% کے لیے 1\u202f000 ارکان",
+                    },
+                }
+            ),
+        }
+
+    result = translate_dcx_gemini_structured_admin_content(
+        entity_kind="newsletter",
+        source_language_code="en",
+        target_language_code="ur",
+        source_fields={
+            "email_subject": "1,000 members for 5% and 3.5% by 2035",
+        },
+        send_gemini_request=fake_send_gemini_request,
+    )
+
+    assert "2035" in result["translated_fields"]["email_subject"]
+
+
+def test_rejects_structured_translation_with_number_drift(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
+
+    def fake_send_gemini_request(_request_context: dict) -> dict:
+        return {
+            "output_text": json.dumps(
+                {
+                    "target_language_code": "es",
+                    "fields": {
+                        "email_subject": "Objetivo del 5% para 2035",
+                    },
+                }
+            ),
+        }
+
+    try:
+        translate_dcx_gemini_structured_admin_content(
+            entity_kind="newsletter",
+            source_language_code="en",
+            target_language_code="es",
+            source_fields={
+                "email_subject": "5% and 3.5% target by 2035",
+            },
+            send_gemini_request=fake_send_gemini_request,
+        )
+    except RuntimeError as runtime_error:
+        assert str(runtime_error).startswith("API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH:")
+        assert 'source_numbers=["5", "35", "2035"]' in str(runtime_error)
+    else:
+        raise AssertionError("Expected number mismatch to fail.")
