@@ -20,7 +20,8 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v2"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v3"
+MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
 _URL_PATTERN = re.compile(r"https?://[^\s)>\]]+")
@@ -73,43 +74,65 @@ def translate_dcx_gemini_structured_admin_content(
     if api_key == "" and send_gemini_request is None:
         raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED")
 
-    prompt_text = _build_admin_translation_prompt(
-        entity_kind=entity_kind.strip(),
-        source_language_code=normalized_source_language_code,
-        target_language_code=normalized_target_language_code,
-        source_fields=normalized_source_fields,
-    )
-
-    try:
-        response_payload = (send_gemini_request or _send_gemini_generate_content_request)(
-            {
-                "api_key": api_key,
-                "model_name": model_name,
-                "prompt_text": prompt_text,
-            }
-        )
-        output_text = str(response_payload.get("output_text", "")).strip()
-        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
-        translated_fields = _read_translated_fields_from_output_text(
-            output_text=output_text,
-            expected_language_code=normalized_target_language_code,
-            expected_field_names=sorted(normalized_source_fields.keys()),
-        )
-        _validate_translated_fields(
+    prompt_text = ""
+    usage_metadata = {}
+    validation_feedback = None
+    translated_fields = {}
+    for attempt_number in range(1, MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS + 1):
+        prompt_text = _build_admin_translation_prompt(
+            entity_kind=entity_kind.strip(),
+            source_language_code=normalized_source_language_code,
+            target_language_code=normalized_target_language_code,
             source_fields=normalized_source_fields,
-            translated_fields=translated_fields,
+            validation_feedback=validation_feedback,
         )
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED") from exc
+        try:
+            response_payload = (send_gemini_request or _send_gemini_generate_content_request)(
+                {
+                    "api_key": api_key,
+                    "model_name": model_name,
+                    "prompt_text": prompt_text,
+                }
+            )
+            output_text = str(response_payload.get("output_text", "")).strip()
+            usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
+            translated_fields = _read_translated_fields_from_output_text(
+                output_text=output_text,
+                expected_language_code=normalized_target_language_code,
+                expected_field_names=sorted(normalized_source_fields.keys()),
+            )
+            _validate_translated_fields(
+                source_fields=normalized_source_fields,
+                translated_fields=translated_fields,
+            )
+            break
+        except RuntimeError as exc:
+            if (
+                not _is_retryable_translation_response_error(exc)
+                or attempt_number >= MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS
+            ):
+                raise
+            validation_feedback = _build_validation_feedback(
+                error_detail=str(exc),
+                previous_output_text=output_text if "output_text" in locals() else "",
+            )
+        except Exception as exc:
+            raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED") from exc
+    else:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED")
+
+    resolved_usage_metadata = usage_metadata if isinstance(usage_metadata, dict) else {}
+    resolved_usage_metadata = {
+        **resolved_usage_metadata,
+        "translation_response_attempt_count": attempt_number,
+    }
 
     return {
         "translated_fields": translated_fields,
         "provider_name": "google_gemini",
         "model_name": model_name,
         "prompt_version": PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION,
-        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
+        "usage_metadata": resolved_usage_metadata,
         "prompt_fingerprint": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
     }
 
@@ -133,12 +156,14 @@ def _build_admin_translation_prompt(
     source_language_code: str,
     target_language_code: str,
     source_fields: dict[str, str],
+    validation_feedback: dict | None = None,
 ) -> str:
     target_language_profile = LANGUAGE_PROFILE_BY_CODE.get(
         target_language_code,
         f"language code {target_language_code}",
     )
     preservation_manifest = _build_preservation_manifest(source_fields)
+    validation_feedback_block = _build_validation_feedback_block(validation_feedback)
     return f"""
 <dcx_task>
 Translate structured DCX admin content from source_language_code={source_language_code} to target_language_code={target_language_code}.
@@ -182,6 +207,8 @@ The fields object must contain exactly the same field names as the input.
 <preservation_manifest_json>
 {json.dumps(preservation_manifest, ensure_ascii=False, sort_keys=True)}
 </preservation_manifest_json>
+
+{validation_feedback_block}
 """.strip()
 
 
@@ -210,6 +237,44 @@ def _build_preservation_manifest(source_fields: dict[str, str]) -> dict:
             field_name: _COMMERCIAL_TOKEN_PATTERN.findall(source_value or "")
             for field_name, source_value in source_fields.items()
         },
+    }
+
+
+def _build_validation_feedback(error_detail: str, previous_output_text: str) -> dict:
+    return {
+        "previous_error": error_detail,
+        "previous_output_text": previous_output_text[:8000],
+        "required_action": (
+            "Return the full JSON contract again. Correct the failed field while preserving "
+            "the same source meaning. If a number mismatch is reported, every source number "
+            "token listed in the preservation manifest must appear as a digit-bearing equivalent "
+            "in the same translated field, and no new digit-bearing number may be introduced."
+        ),
+    }
+
+
+def _build_validation_feedback_block(validation_feedback: dict | None) -> str:
+    if not isinstance(validation_feedback, dict):
+        return ""
+    return f"""
+<previous_validation_failure>
+The previous response failed automated validation. Fix it and return the full JSON contract again.
+{json.dumps(validation_feedback, ensure_ascii=False, sort_keys=True)}
+</previous_validation_failure>
+""".strip()
+
+
+def _is_retryable_translation_response_error(exc: RuntimeError) -> bool:
+    error_code = str(exc).split(":", 1)[0]
+    return error_code in {
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID_JSON",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_LANGUAGE_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_FIELD_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_EMPTY_FIELD",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_PLACEHOLDER_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_URL_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_COMMERCIAL_TOKEN_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH",
     }
 
 

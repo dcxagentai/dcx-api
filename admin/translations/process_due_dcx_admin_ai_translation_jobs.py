@@ -326,7 +326,7 @@ def _translate_structured_content_with_retries(
 
 
 def _is_retryable_structured_translation_error(exc: RuntimeError) -> bool:
-    return _read_translation_error_code(exc).startswith("API_DCX_GEMINI_ADMIN_TRANSLATION_")
+    return _read_translation_error_code(exc) == "API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED"
 
 
 def _mark_translation_job_finished(

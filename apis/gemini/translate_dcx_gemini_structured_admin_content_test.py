@@ -37,7 +37,11 @@ def test_returns_translated_fields_from_structured_json_response(monkeypatch) ->
     assert result["translated_fields"]["email_body"].startswith("Hola {{first_name}}")
     assert result["provider_name"] == "google_gemini"
     assert result["model_name"] == "gemini-test-model"
-    assert result["usage_metadata"] == {"input_token_count": 10, "output_token_count": 8}
+    assert result["usage_metadata"] == {
+        "input_token_count": 10,
+        "output_token_count": 8,
+        "translation_response_attempt_count": 1,
+    }
 
 
 def test_includes_preservation_manifest_in_prompt(monkeypatch) -> None:
@@ -68,13 +72,60 @@ def test_includes_preservation_manifest_in_prompt(monkeypatch) -> None:
         send_gemini_request=fake_send_gemini_request,
     )
 
-    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_08_v2"
+    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_08_v3"
     assert "<preservation_manifest_json>" in captured_prompt
     assert '"source_token": "16"' in captured_prompt
     assert '"source_token": "1"' in captured_prompt
     assert '"source_token": "0"' in captured_prompt
     assert '"source_token": "3"' in captured_prompt
     assert '"source_token": "2"' in captured_prompt
+
+
+def test_repairs_number_mismatch_with_validation_feedback(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
+    captured_prompts = []
+
+    def fake_send_gemini_request(request_context: dict) -> dict:
+        captured_prompts.append(request_context["prompt_text"])
+        if len(captured_prompts) == 1:
+            return {
+                "output_text": json.dumps(
+                    {
+                        "target_language_code": "es",
+                        "fields": {
+                            "email_body": "El informe dice que Egipto perdio 1-0 y 3-2.",
+                        },
+                    }
+                ),
+            }
+        return {
+            "output_text": json.dumps(
+                {
+                    "target_language_code": "es",
+                    "fields": {
+                        "email_body": "El informe de 16 paginas dice que Egipto perdio 1-0 y 3-2.",
+                    },
+                }
+            ),
+            "usage_metadata": {"input_token_count": 20},
+        }
+
+    result = translate_dcx_gemini_structured_admin_content(
+        entity_kind="newsletter",
+        source_language_code="en",
+        target_language_code="es",
+        source_fields={
+            "email_body": "The 16-page report says Egypt lost 1-0 and 3-2.",
+        },
+        send_gemini_request=fake_send_gemini_request,
+    )
+
+    assert len(captured_prompts) == 2
+    assert "<previous_validation_failure>" not in captured_prompts[0]
+    assert "<previous_validation_failure>" in captured_prompts[1]
+    assert "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH" in captured_prompts[1]
+    assert "16 paginas" in result["translated_fields"]["email_body"]
+    assert result["usage_metadata"]["translation_response_attempt_count"] == 2
 
 
 def test_rejects_structured_translation_with_missing_field(monkeypatch) -> None:

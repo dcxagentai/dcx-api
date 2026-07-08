@@ -10,7 +10,7 @@ def test_retries_retryable_structured_translation_errors() -> None:
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID_JSON")
+            raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED")
         return {
             "translated_fields": {
                 "email_subject": "Hola",
