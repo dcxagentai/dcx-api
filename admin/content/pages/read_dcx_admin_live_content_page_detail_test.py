@@ -109,6 +109,7 @@ def test_returns_requested_live_content_page_detail_with_ai_metadata() -> None:
                     None,
                     None,
                     None,
+                    "insights",
                 ),
             ],
         ],
@@ -131,6 +132,11 @@ def test_returns_requested_live_content_page_detail_with_ai_metadata() -> None:
         "source_row_id_snapshot": None,
         "translated_at_ts_ms": None,
     }
+    assert payload["translation_summary"]["existing_translations"][0]["category_slug"] == "insights"
+    assert (
+        payload["translation_summary"]["existing_translations"][0]["public_route_path"]
+        == "/en/insights/test-page"
+    )
     assert payload["translation_summary"]["missing_languages"][0]["language_code"] == "es"
 
 

@@ -189,10 +189,19 @@ def read_dcx_admin_live_content_page_detail_capability(
                         ai_translation_job.id,
                         ai_translation_job.source_row_id_snapshot,
                         ai_translation_job.source_content_hash,
-                        ai_translation_job.updated_at_ts_ms
+                        ai_translation_job.updated_at_ts_ms,
+                        COALESCE(category_localized.category_slug, category_original.category_slug)
                     FROM stephen_dcx_content_pages AS translation_page
                     JOIN stephen_dcx_languages AS translation_language
                       ON translation_language.id = translation_page.language_id
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_localized
+                      ON category_localized.category_key = translation_page.category_key
+                     AND category_localized.language_id = translation_page.language_id
+                     AND category_localized.is_live = TRUE
+                    LEFT JOIN stephen_dcx_content_page_categories AS category_original
+                      ON category_original.category_key = translation_page.category_key
+                     AND category_original.is_original = TRUE
+                     AND category_original.is_live = TRUE
                     LEFT JOIN LATERAL (
                         SELECT
                             translation_job.id,
@@ -267,6 +276,12 @@ def read_dcx_admin_live_content_page_detail_capability(
                 "page_key": translation_row[1],
                 "page_title": translation_row[2],
                 "page_slug": translation_row[3],
+                "category_slug": translation_row[17],
+                "public_route_path": (
+                    f"/{translation_language['language_code']}/{translation_row[17]}/{translation_row[3]}"
+                    if translation_row[17]
+                    else None
+                ),
                 "publication_status": translation_row[4],
                 "is_original": translation_row[5],
                 "created_at_ts_ms": translation_row[6],
