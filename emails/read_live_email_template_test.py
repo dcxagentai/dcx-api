@@ -45,7 +45,7 @@ class FakeConnection:
 def test_returns_requested_live_translation_when_language_exists() -> None:
     fake_connection = FakeConnection(
         fetchone_results=[
-            (12, "es", "Asunto", "Cuerpo", False),
+            (12, "es", "Asunto", "Cuerpo", False, None),
         ]
     )
 
@@ -68,7 +68,7 @@ def test_returns_requested_live_translation_when_language_exists() -> None:
 def test_falls_back_to_live_original_when_translation_missing() -> None:
     fake_connection = FakeConnection(
         fetchone_results=[
-            (1, "en", "Original subject", "Original body", True),
+            (1, "en", "Original subject", "Original body", True, None),
         ]
     )
 
@@ -102,3 +102,20 @@ def test_raises_clear_error_when_no_live_template_exists() -> None:
         assert str(runtime_error) == "API_LIVE_EMAIL_TEMPLATE_NOT_FOUND"
     else:
         raise AssertionError("Expected live email template not found error.")
+
+
+def test_appends_ai_translated_label_for_ai_template() -> None:
+    fake_connection = FakeConnection(
+        fetchone_results=[
+            (12, "fr", "Sujet", "Corps\n", False, 9001),
+        ]
+    )
+
+    payload = read_live_email_template_capability(
+        email_type="transactional",
+        email_key="signup_verify_otp",
+        language_code="fr",
+        connect_to_database=lambda **_: fake_connection,
+    )
+
+    assert payload["email_body"] == "Corps\n\nAI translated from English."

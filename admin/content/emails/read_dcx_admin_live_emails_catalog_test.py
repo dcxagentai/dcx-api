@@ -56,6 +56,10 @@ def test_returns_live_email_rows_with_language_details() -> None:
                     "English",
                     "English",
                     False,
+                    None,
+                    None,
+                    None,
+                    None,
                 ),
                 (
                     2,
@@ -74,6 +78,10 @@ def test_returns_live_email_rows_with_language_details() -> None:
                     "French",
                     "Français",
                     False,
+                    9001,
+                    1,
+                    "stale-source-hash",
+                    1775319000400,
                 ),
             ]
         ),
@@ -82,6 +90,8 @@ def test_returns_live_email_rows_with_language_details() -> None:
     assert result["total_live_row_count"] == 2
     assert result["emails"][0]["email_type"] == "transactional"
     assert result["emails"][1]["language"]["language_code"] == "fr"
+    assert result["emails"][1]["ai_translation"]["is_ai_translated"] is True
+    assert result["emails"][1]["ai_translation"]["is_stale"] is True
 
 
 def test_returns_empty_catalog_when_no_live_emails_exist() -> None:

@@ -1,0 +1,269 @@
+"""
+CONTEXT:
+This file asks Gemini to translate one structured admin content payload into one target language.
+It exists for CMS/email AI translation jobs where the backend needs field-level JSON back, not a
+freeform translated paragraph.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from typing import Any, Callable
+
+from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
+    read_dcx_gemini_message_analysis_model_name,
+)
+from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
+
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v1"
+
+_PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
+_URL_PATTERN = re.compile(r"https?://[^\s)>\]]+")
+_NUMBER_PATTERN = re.compile(r"\d+(?:[.,]\d+)*")
+_COMMERCIAL_TOKEN_PATTERN = re.compile(
+    r"\b(?:USD|EUR|GBP|CNY|RMB|AED|FOB|CIF|CFR|DAP|DDP|EXW|LC|L/C|MT|KG|G|LB|OZ|SGS|HS|ISO)\b",
+    re.IGNORECASE,
+)
+
+LANGUAGE_PROFILE_BY_CODE = {
+    "ar": "Arabic, Modern Standard Arabic, right-to-left business register",
+    "de": "German for Germany",
+    "en": "English",
+    "es": "Spanish from Spain",
+    "fr": "French from France",
+    "hi": "Hindi in Devanagari script",
+    "id": "Indonesian",
+    "pt": "Portuguese from Portugal",
+    "ru": "Russian",
+    "tr": "Turkish",
+    "ur": "Urdu, right-to-left business register",
+    "vi": "Vietnamese",
+    "zh": "Simplified Chinese business register",
+}
+
+
+def translate_dcx_gemini_structured_admin_content(
+    entity_kind: str,
+    source_language_code: str,
+    target_language_code: str,
+    source_fields: dict[str, str],
+    send_gemini_request: Callable[[dict], dict] | None = None,
+) -> dict:
+    normalized_source_fields = {
+        str(key): str(value or "")
+        for key, value in (source_fields or {}).items()
+    }
+    normalized_source_language_code = source_language_code.strip().lower()
+    normalized_target_language_code = target_language_code.strip().lower()
+    if (
+        entity_kind.strip() == ""
+        or normalized_source_language_code == ""
+        or normalized_target_language_code == ""
+        or not normalized_source_fields
+    ):
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID")
+
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    model_name = read_dcx_gemini_message_analysis_model_name()
+    if api_key == "" and send_gemini_request is None:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED")
+
+    prompt_text = _build_admin_translation_prompt(
+        entity_kind=entity_kind.strip(),
+        source_language_code=normalized_source_language_code,
+        target_language_code=normalized_target_language_code,
+        source_fields=normalized_source_fields,
+    )
+
+    try:
+        response_payload = (send_gemini_request or _send_gemini_generate_content_request)(
+            {
+                "api_key": api_key,
+                "model_name": model_name,
+                "prompt_text": prompt_text,
+            }
+        )
+        output_text = str(response_payload.get("output_text", "")).strip()
+        usage_metadata = response_payload.get("usage_metadata") if isinstance(response_payload, dict) else {}
+        translated_fields = _read_translated_fields_from_output_text(
+            output_text=output_text,
+            expected_language_code=normalized_target_language_code,
+            expected_field_names=sorted(normalized_source_fields.keys()),
+        )
+        _validate_translated_fields(
+            source_fields=normalized_source_fields,
+            translated_fields=translated_fields,
+        )
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FAILED") from exc
+
+    return {
+        "translated_fields": translated_fields,
+        "provider_name": "google_gemini",
+        "model_name": model_name,
+        "prompt_version": PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION,
+        "usage_metadata": usage_metadata if isinstance(usage_metadata, dict) else {},
+        "prompt_fingerprint": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
+    }
+
+
+def _send_gemini_generate_content_request(request_context: dict) -> dict:
+    from google import genai
+
+    client = genai.Client(api_key=request_context["api_key"])
+    response = client.models.generate_content(
+        model=request_context["model_name"],
+        contents=[request_context["prompt_text"]],
+    )
+    return {
+        "output_text": (response.text or "").strip(),
+        "usage_metadata": read_dcx_gemini_usage_metadata(response),
+    }
+
+
+def _build_admin_translation_prompt(
+    entity_kind: str,
+    source_language_code: str,
+    target_language_code: str,
+    source_fields: dict[str, str],
+) -> str:
+    target_language_profile = LANGUAGE_PROFILE_BY_CODE.get(
+        target_language_code,
+        f"language code {target_language_code}",
+    )
+    return f"""
+<dcx_task>
+Translate structured DCX admin content from source_language_code={source_language_code} to target_language_code={target_language_code}.
+Target locale/register: {target_language_profile}.
+Return only valid JSON. Do not wrap in markdown. Do not add commentary.
+</dcx_task>
+
+<json_contract>
+Return exactly this shape:
+{{
+  "target_language_code": "{target_language_code}",
+  "fields": {{
+    "field_name": "translated value"
+  }}
+}}
+The fields object must contain exactly the same field names as the input.
+</json_contract>
+
+<translation_rules>
+- Translate naturally and professionally for commodities, markets, currency, and international business.
+- Preserve the commercial meaning exactly.
+- Preserve quantities, grades, units, currencies, dates, locations, ports, company names, URLs, placeholders, and markdown link targets.
+- Translate field text, headings, and link labels where appropriate.
+- Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
+- Preserve markdown structure and line breaks.
+- If a field is empty, return an empty string for that field.
+- If the text is already in the target language, return it unchanged.
+</translation_rules>
+
+<entity_kind>
+{entity_kind}
+</entity_kind>
+
+<source_fields_json>
+{json.dumps(source_fields, ensure_ascii=False, sort_keys=True)}
+</source_fields_json>
+""".strip()
+
+
+def _read_translated_fields_from_output_text(
+    output_text: str,
+    expected_language_code: str,
+    expected_field_names: list[str],
+) -> dict[str, str]:
+    cleaned_output_text = output_text.strip()
+    if cleaned_output_text.startswith("```"):
+        cleaned_output_text = re.sub(r"^```(?:json)?\s*", "", cleaned_output_text)
+        cleaned_output_text = re.sub(r"\s*```$", "", cleaned_output_text)
+
+    try:
+        payload = json.loads(cleaned_output_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID_JSON") from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID_JSON")
+    if str(payload.get("target_language_code", "")).strip().lower() != expected_language_code:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_LANGUAGE_MISMATCH")
+
+    fields = payload.get("fields")
+    if not isinstance(fields, dict):
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_INVALID_JSON")
+
+    if sorted(str(key) for key in fields.keys()) != expected_field_names:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_FIELD_MISMATCH")
+
+    return {
+        field_name: str(fields.get(field_name, ""))
+        for field_name in expected_field_names
+    }
+
+
+def _validate_translated_fields(
+    source_fields: dict[str, str],
+    translated_fields: dict[str, str],
+) -> None:
+    for field_name, source_value in source_fields.items():
+        translated_value = translated_fields.get(field_name, "")
+        if source_value.strip() != "" and translated_value.strip() == "":
+            raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_EMPTY_FIELD")
+
+        _validate_same_tokens(
+            source_value=source_value,
+            translated_value=translated_value,
+            pattern=_PLACEHOLDER_PATTERN,
+            error_code="API_DCX_GEMINI_ADMIN_TRANSLATION_PLACEHOLDER_MISMATCH",
+        )
+        _validate_same_tokens(
+            source_value=source_value,
+            translated_value=translated_value,
+            pattern=_URL_PATTERN,
+            error_code="API_DCX_GEMINI_ADMIN_TRANSLATION_URL_MISMATCH",
+        )
+        _validate_same_tokens(
+            source_value=source_value,
+            translated_value=translated_value,
+            pattern=_COMMERCIAL_TOKEN_PATTERN,
+            error_code="API_DCX_GEMINI_ADMIN_TRANSLATION_COMMERCIAL_TOKEN_MISMATCH",
+            casefold=True,
+        )
+        _validate_same_number_shapes(source_value=source_value, translated_value=translated_value)
+
+
+def _validate_same_tokens(
+    source_value: str,
+    translated_value: str,
+    pattern: re.Pattern[str],
+    error_code: str,
+    casefold: bool = False,
+) -> None:
+    source_tokens = pattern.findall(source_value or "")
+    translated_tokens = pattern.findall(translated_value or "")
+    if casefold:
+        source_tokens = [token.upper() for token in source_tokens]
+        translated_tokens = [token.upper() for token in translated_tokens]
+    if sorted(source_tokens) != sorted(translated_tokens):
+        raise RuntimeError(error_code)
+
+
+def _validate_same_number_shapes(source_value: str, translated_value: str) -> None:
+    source_numbers = [_normalize_number_token(token) for token in _NUMBER_PATTERN.findall(source_value or "")]
+    translated_numbers = [
+        _normalize_number_token(token)
+        for token in _NUMBER_PATTERN.findall(translated_value or "")
+    ]
+    if source_numbers != translated_numbers:
+        raise RuntimeError("API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH")
+
+
+def _normalize_number_token(value: str) -> str:
+    return re.sub(r"[^0-9]", "", value or "")

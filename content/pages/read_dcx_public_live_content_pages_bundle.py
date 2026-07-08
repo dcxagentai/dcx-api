@@ -78,7 +78,9 @@ def read_dcx_public_live_content_pages_bundle(
                         page.updated_at_ts_ms,
                         COALESCE(category_localized.category_name, category_original.category_name),
                         COALESCE(category_localized.category_description, category_original.category_description),
-                        COALESCE(category_localized.category_slug, category_original.category_slug)
+                        COALESCE(category_localized.category_slug, category_original.category_slug),
+                        ai_translation_job.id,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_content_pages AS page
                     JOIN stephen_dcx_languages AS language
                       ON language.id = page.language_id
@@ -90,6 +92,18 @@ def read_dcx_public_live_content_pages_bundle(
                       ON category_original.category_key = page.category_key
                      AND category_original.is_original = TRUE
                      AND category_original.is_live = TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.entity_kind = 'content_page'
+                          AND translation_job.target_row_id = page.id
+                          AND translation_job.job_status = 'completed'
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE page.is_live = TRUE
                       AND page.publication_status = 'published'
                     ORDER BY
@@ -121,6 +135,10 @@ def read_dcx_public_live_content_pages_bundle(
                 "category_name": page_row[11],
                 "category_description": page_row[12],
                 "category_slug": page_row[13],
+                "ai_translation": {
+                    "is_ai_translated": page_row[14] is not None,
+                    "translated_at_ts_ms": page_row[15],
+                },
             }
         )
 

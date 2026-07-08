@@ -11,6 +11,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from admin.translations.build_dcx_admin_ai_translation_hash import (
+    build_dcx_admin_ai_translation_content_hash,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -114,10 +117,28 @@ def read_dcx_admin_live_newsletter_detail_capability(
                         l.language_code,
                         l.language_name_en,
                         l.language_name_native,
-                        l.is_rtl
+                        l.is_rtl,
+                        ai_translation_job.id,
+                        ai_translation_job.source_row_id_snapshot,
+                        ai_translation_job.source_content_hash,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_emails e
                     INNER JOIN stephen_dcx_languages l
                       ON l.id = e.language_id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.source_row_id_snapshot,
+                            translation_job.source_content_hash,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.entity_kind = 'newsletter'
+                          AND translation_job.target_row_id = e.id
+                          AND translation_job.job_status = 'completed'
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE e.is_live = TRUE
                       AND e.email_type = 'newsletter'
                       AND e.email_key = %s
@@ -154,10 +175,28 @@ def read_dcx_admin_live_newsletter_detail_capability(
                         l.language_code,
                         l.language_name_en,
                         l.language_name_native,
-                        l.is_rtl
+                        l.is_rtl,
+                        ai_translation_job.id,
+                        ai_translation_job.source_row_id_snapshot,
+                        ai_translation_job.source_content_hash,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_emails AS e
                     INNER JOIN stephen_dcx_languages AS l
                       ON l.id = e.language_id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.source_row_id_snapshot,
+                            translation_job.source_content_hash,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.entity_kind = 'newsletter'
+                          AND translation_job.target_row_id = e.id
+                          AND translation_job.job_status = 'completed'
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE e.email_type = 'newsletter'
                       AND e.email_key = %s
                       AND e.is_live = TRUE
@@ -166,6 +205,21 @@ def read_dcx_admin_live_newsletter_detail_capability(
                     (normalized_email_key,),
                 )
                 translation_rows = cursor.fetchall()
+                cursor.execute(
+                    """
+                    SELECT
+                        email_subject,
+                        email_body
+                    FROM stephen_dcx_emails
+                    WHERE email_type = 'newsletter'
+                      AND email_key = %s
+                      AND is_original = TRUE
+                      AND is_live = TRUE
+                    LIMIT 1
+                    """,
+                    (normalized_email_key,),
+                )
+                original_content_row = cursor.fetchone()
 
                 cursor.execute(
                     """
@@ -242,6 +296,10 @@ def read_dcx_admin_live_newsletter_detail_capability(
     available_language_codes = set()
     original_language_code = newsletter_row[12]
     original_email_id = newsletter_row[0]
+    current_original_source_hash = _build_current_original_email_source_hash(
+        selected_email_row=newsletter_row,
+        original_content_row=original_content_row,
+    )
     for translation_row in translation_rows:
         translation_language = {
             "id": translation_row[5],
@@ -264,6 +322,13 @@ def read_dcx_admin_live_newsletter_detail_capability(
                 "updated_at_ts_ms": translation_row[4],
                 "is_current_language": translation_language["language_code"] == normalized_language_code,
                 "language": translation_language,
+                "ai_translation": _build_ai_translation_payload(
+                    ai_translation_job_id=translation_row[10],
+                    source_row_id_snapshot=translation_row[11],
+                    source_content_hash=translation_row[12],
+                    translated_at_ts_ms=translation_row[13],
+                    current_original_source_hash=current_original_source_hash,
+                ),
             }
         )
 
@@ -346,6 +411,13 @@ def read_dcx_admin_live_newsletter_detail_capability(
             "language_name_native": newsletter_row[14],
             "is_rtl": newsletter_row[15],
         },
+        "ai_translation": _build_ai_translation_payload(
+            ai_translation_job_id=newsletter_row[16],
+            source_row_id_snapshot=newsletter_row[17],
+            source_content_hash=newsletter_row[18],
+            translated_at_ts_ms=newsletter_row[19],
+            current_original_source_hash=current_original_source_hash,
+        ),
         "translation_summary": {
             "original_email_id": original_email_id,
             "original_language_code": original_language_code,
@@ -360,4 +432,42 @@ def read_dcx_admin_live_newsletter_detail_capability(
             "language_rows": readiness_rows,
             "missing_languages": missing_readiness_languages,
         },
+    }
+
+
+def _build_current_original_email_source_hash(
+    selected_email_row: tuple,
+    original_content_row: tuple | None,
+) -> str:
+    if original_content_row is not None:
+        fields = {
+            "email_subject": original_content_row[0],
+            "email_body": original_content_row[1],
+        }
+    else:
+        fields = {
+            "email_subject": selected_email_row[3],
+            "email_body": selected_email_row[4],
+        }
+    return build_dcx_admin_ai_translation_content_hash(fields)
+
+
+def _build_ai_translation_payload(
+    ai_translation_job_id: int | None,
+    source_row_id_snapshot: int | None,
+    source_content_hash: str | None,
+    translated_at_ts_ms: int | None,
+    current_original_source_hash: str,
+) -> dict:
+    is_ai_translated = ai_translation_job_id is not None
+    return {
+        "is_ai_translated": is_ai_translated,
+        "is_stale": bool(
+            is_ai_translated
+            and source_content_hash
+            and source_content_hash != current_original_source_hash
+        ),
+        "job_id": ai_translation_job_id,
+        "source_row_id_snapshot": source_row_id_snapshot,
+        "translated_at_ts_ms": translated_at_ts_ms,
     }

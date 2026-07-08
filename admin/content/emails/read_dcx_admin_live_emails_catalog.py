@@ -11,6 +11,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from admin.translations.build_dcx_admin_ai_translation_hash import (
+    build_dcx_admin_ai_translation_content_hash,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -83,10 +86,31 @@ def read_dcx_admin_live_emails_catalog_capability(
                         l.language_code,
                         l.language_name_en,
                         l.language_name_native,
-                        l.is_rtl
+                        l.is_rtl,
+                        ai_translation_job.id,
+                        ai_translation_job.source_row_id_snapshot,
+                        ai_translation_job.source_content_hash,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_emails e
                     INNER JOIN stephen_dcx_languages l
                       ON l.id = e.language_id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.source_row_id_snapshot,
+                            translation_job.source_content_hash,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.target_row_id = e.id
+                          AND translation_job.job_status = 'completed'
+                          AND (
+                            (e.email_type = 'newsletter' AND translation_job.entity_kind = 'newsletter')
+                            OR (e.email_type <> 'newsletter' AND translation_job.entity_kind = 'email')
+                          )
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE e.is_live = TRUE
                     ORDER BY
                         e.email_type ASC,
@@ -101,6 +125,17 @@ def read_dcx_admin_live_emails_catalog_capability(
         raise
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_DCX_ADMIN_EMAILS_CATALOG_READ_FAILED") from exc
+
+    original_source_hash_by_identity = {
+        (catalog_row[1], catalog_row[2]): build_dcx_admin_ai_translation_content_hash(
+            {
+                "email_subject": catalog_row[3],
+                "email_body": catalog_row[4],
+            }
+        )
+        for catalog_row in catalog_rows
+        if catalog_row[5] is True
+    }
 
     emails = [
         {
@@ -122,6 +157,16 @@ def read_dcx_admin_live_emails_catalog_capability(
                 "language_name_native": catalog_row[14],
                 "is_rtl": catalog_row[15],
             },
+            "ai_translation": _build_ai_translation_payload(
+                ai_translation_job_id=catalog_row[16],
+                source_row_id_snapshot=catalog_row[17],
+                source_content_hash=catalog_row[18],
+                translated_at_ts_ms=catalog_row[19],
+                current_original_source_hash=original_source_hash_by_identity.get(
+                    (catalog_row[1], catalog_row[2]),
+                    "",
+                ),
+            ),
         }
         for catalog_row in catalog_rows
     ]
@@ -129,4 +174,26 @@ def read_dcx_admin_live_emails_catalog_capability(
     return {
         "emails": emails,
         "total_live_row_count": len(emails),
+    }
+
+
+def _build_ai_translation_payload(
+    ai_translation_job_id: int | None,
+    source_row_id_snapshot: int | None,
+    source_content_hash: str | None,
+    translated_at_ts_ms: int | None,
+    current_original_source_hash: str,
+) -> dict:
+    is_ai_translated = ai_translation_job_id is not None
+    return {
+        "is_ai_translated": is_ai_translated,
+        "is_stale": bool(
+            is_ai_translated
+            and source_content_hash
+            and current_original_source_hash
+            and source_content_hash != current_original_source_hash
+        ),
+        "job_id": ai_translation_job_id,
+        "source_row_id_snapshot": source_row_id_snapshot,
+        "translated_at_ts_ms": translated_at_ts_ms,
     }

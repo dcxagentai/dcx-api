@@ -68,7 +68,12 @@ def test_reports_translation_readiness_for_selected_audience_scope() -> None:
                 "English",
                 "English",
                 False,
+                None,
+                None,
+                None,
+                None,
             ),
+            ("Test Newsletter", "Hello"),
         ],
         fetchall_results=[
             [
@@ -76,7 +81,22 @@ def test_reports_translation_readiness_for_selected_audience_scope() -> None:
                 (2, "es", "Spanish", "Espanol", False),
             ],
             [
-                (101, "Test Newsletter", True, 1778000000000, 1778001000000, 1, "en", "English", "English", False),
+                (
+                    101,
+                    "Test Newsletter",
+                    True,
+                    1778000000000,
+                    1778001000000,
+                    1,
+                    "en",
+                    "English",
+                    "English",
+                    False,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
             ],
             [
                 (1, "dev@example.com", True, "newsletters", "confirmed", "dev", False),
@@ -95,7 +115,7 @@ def test_reports_translation_readiness_for_selected_audience_scope() -> None:
     assert payload["language_readiness"]["total_evaluated_recipient_count"] == 1
     assert payload["language_readiness"]["total_send_candidate_count"] == 1
     assert payload["language_readiness"]["total_blocked_missing_translation_count"] == 0
-    assert fake_connection.cursor_instance.executed_queries[3][1] == ("devs", "devs", "devs", "devs")
+    assert fake_connection.cursor_instance.executed_queries[4][1] == ("devs", "devs", "devs", "devs")
 
 
 def test_reports_translation_gaps_for_newsletter_eligible_recipients() -> None:
@@ -118,7 +138,12 @@ def test_reports_translation_gaps_for_newsletter_eligible_recipients() -> None:
                 "English",
                 "English",
                 False,
+                None,
+                None,
+                None,
+                None,
             ),
+            ("Test Newsletter", "Hello"),
         ],
         fetchall_results=[
             [
@@ -126,7 +151,22 @@ def test_reports_translation_gaps_for_newsletter_eligible_recipients() -> None:
                 (2, "es", "Spanish", "Espanol", False),
             ],
             [
-                (101, "Test Newsletter", True, 1778000000000, 1778001000000, 1, "en", "English", "English", False),
+                (
+                    101,
+                    "Test Newsletter",
+                    True,
+                    1778000000000,
+                    1778001000000,
+                    1,
+                    "en",
+                    "English",
+                    "English",
+                    False,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
             ],
             [
                 (2, "spanish@example.com", True, "newsletters", "confirmed", "dev", False),

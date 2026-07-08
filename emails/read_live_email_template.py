@@ -88,10 +88,24 @@ def read_live_email_template_capability(
                         l.language_code,
                         e.email_subject,
                         e.email_body,
-                        e.is_original
+                        e.is_original,
+                        ai_translation_job.id
                     FROM stephen_dcx_emails e
                     JOIN stephen_dcx_languages l
                       ON l.id = e.language_id
+                    LEFT JOIN LATERAL (
+                        SELECT translation_job.id
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.target_row_id = e.id
+                          AND translation_job.job_status = 'completed'
+                          AND (
+                            (e.email_type = 'newsletter' AND translation_job.entity_kind = 'newsletter')
+                            OR (e.email_type <> 'newsletter' AND translation_job.entity_kind = 'email')
+                          )
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE e.email_type = %s
                       AND e.email_key = %s
                       AND e.is_live = TRUE
@@ -124,6 +138,18 @@ def read_live_email_template_capability(
         "template_id": template_row[0],
         "language_code": template_row[1],
         "email_subject": template_row[2],
-        "email_body": template_row[3],
+        "email_body": _append_ai_translated_label_if_needed(
+            email_body=template_row[3],
+            ai_translation_job_id=template_row[5],
+        ),
         "is_original": template_row[4],
     }
+
+
+def _append_ai_translated_label_if_needed(
+    email_body: str,
+    ai_translation_job_id: int | None,
+) -> str:
+    if ai_translation_job_id is None:
+        return email_body
+    return f"{(email_body or '').rstrip()}\n\nAI translated from English."

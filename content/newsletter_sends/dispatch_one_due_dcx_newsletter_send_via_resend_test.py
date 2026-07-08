@@ -73,8 +73,8 @@ def test_dispatches_due_newsletter_send_and_updates_recipient_rows(monkeypatch) 
                 ("https://dcxagent.ai/market", "track-1"),
             ],
             [
-                (701, 31, "alpha@example.com", 101, "Weekly Alpha", "Read [Market](https://dcxagent.ai/market)"),
-                (702, 32, "beta@example.com", 101, "Weekly Alpha", "Visit https://dcxagent.ai/market"),
+                (701, 31, "alpha@example.com", 101, "Weekly Alpha", "Read [Market](https://dcxagent.ai/market)", None),
+                (702, 32, "beta@example.com", 101, "Weekly Alpha", "Visit https://dcxagent.ai/market", 9001),
             ],
         ],
     )
@@ -100,6 +100,9 @@ def test_dispatches_due_newsletter_send_and_updates_recipient_rows(monkeypatch) 
     assert "Market: https://api.example.com/public/email-links/track-1" in sent_batches[0][0]["text_body"]
     assert "Unsubscribe from promotional email: https://api.example.com/public/email-preferences/unsubscribe/promotional/" in sent_batches[0][0]["text_body"]
     assert "<a href=\"https://api.example.com/public/email-links/track-1\"" in sent_batches[0][0]["html_body"]
+    assert "AI translated from English." not in sent_batches[0][0]["text_body"]
+    assert "AI translated from English." in sent_batches[0][1]["text_body"]
+    assert "AI translated from English." in sent_batches[0][1]["html_body"]
 
 
 def test_marks_parent_send_failed_when_batch_send_fails() -> None:
@@ -114,8 +117,8 @@ def test_marks_parent_send_failed_when_batch_send_fails() -> None:
         fetchall_results=[
             [],
             [
-                (703, 31, "alpha@example.com", 102, "Weekly Beta", "Hello world"),
-                (704, 32, "beta@example.com", 102, "Weekly Beta", "Hello world"),
+                (703, 31, "alpha@example.com", 102, "Weekly Beta", "Hello world", None),
+                (704, 32, "beta@example.com", 102, "Weekly Beta", "Hello world", None),
             ],
         ],
     )

@@ -174,10 +174,24 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
                         recipient.recipient_email_snapshot,
                         recipient.resolved_email_id,
                         email_row.email_subject,
-                        email_row.email_body
+                        email_row.email_body,
+                        ai_translation_job.id
                     FROM stephen_dcx_emails_sends_recipients AS recipient
                     INNER JOIN stephen_dcx_emails AS email_row
                       ON email_row.id = recipient.resolved_email_id
+                    LEFT JOIN LATERAL (
+                        SELECT translation_job.id
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.target_row_id = email_row.id
+                          AND translation_job.job_status = 'completed'
+                          AND (
+                            (email_row.email_type = 'newsletter' AND translation_job.entity_kind = 'newsletter')
+                            OR (email_row.email_type <> 'newsletter' AND translation_job.entity_kind = 'email')
+                          )
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE recipient.email_send_id = %s
                       AND recipient.delivery_decision = 'send'
                       AND recipient.delivery_status = 'pending'
@@ -200,6 +214,8 @@ def dispatch_one_due_dcx_newsletter_send_via_resend_capability(
                         markdown_text=recipient_row[5],
                         tracked_url_by_original_url=tracked_url_by_original_url,
                     )
+                    if recipient_row[6] is not None:
+                        rendered_bodies = _append_ai_translated_label_to_email_bodies(rendered_bodies)
                     rendered_bodies = append_dcx_email_preferences_footer_to_newsletter_email_bodies(
                         rendered_bodies=rendered_bodies,
                         user_id=recipient_user_id,
@@ -380,6 +396,18 @@ def _build_dcx_newsletter_send_failure_reason(runtime_error: RuntimeError) -> st
         return f"{base_error_code} [{provider_exception_type}]"
 
     return f"{base_error_code} [{provider_exception_type}: {provider_exception_message}]"
+
+
+def _append_ai_translated_label_to_email_bodies(rendered_bodies: dict[str, str]) -> dict[str, str]:
+    return {
+        "text_body": f"{rendered_bodies.get('text_body', '').rstrip()}\n\nAI translated from English.",
+        "html_body": (
+            f"{rendered_bodies.get('html_body', '').rstrip()}"
+            "<p style=\"margin-top:24px;color:#64748b;font-size:12px;line-height:1.5;\">"
+            "AI translated from English."
+            "</p>"
+        ),
+    }
 
 
 def _build_dcx_email_send_tracking_redirect_url(tracking_token: str) -> str:

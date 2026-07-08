@@ -11,6 +11,9 @@ from typing import Any, Callable
 
 import psycopg2
 
+from admin.translations.build_dcx_admin_ai_translation_hash import (
+    build_dcx_admin_ai_translation_content_hash,
+)
 from storage.db_config import DB_CONFIG
 
 
@@ -114,7 +117,11 @@ def read_dcx_admin_live_content_page_detail_capability(
                         COALESCE(category_localized.id, category_original.id),
                         COALESCE(category_localized.category_name, category_original.category_name),
                         COALESCE(category_localized.category_description, category_original.category_description),
-                        COALESCE(category_localized.category_slug, category_original.category_slug)
+                        COALESCE(category_localized.category_slug, category_original.category_slug),
+                        ai_translation_job.id,
+                        ai_translation_job.source_row_id_snapshot,
+                        ai_translation_job.source_content_hash,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_content_pages AS page
                     JOIN stephen_dcx_languages AS language
                       ON language.id = page.language_id
@@ -126,6 +133,20 @@ def read_dcx_admin_live_content_page_detail_capability(
                       ON category_original.category_key = page.category_key
                      AND category_original.is_original = TRUE
                      AND category_original.is_live = TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.source_row_id_snapshot,
+                            translation_job.source_content_hash,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.entity_kind = 'content_page'
+                          AND translation_job.target_row_id = page.id
+                          AND translation_job.job_status = 'completed'
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE page.page_key = %s
                       AND language.language_code = %s
                       AND page.is_live = TRUE
@@ -164,10 +185,28 @@ def read_dcx_admin_live_content_page_detail_capability(
                         translation_language.language_code,
                         translation_language.language_name_en,
                         translation_language.language_name_native,
-                        translation_language.is_rtl
+                        translation_language.is_rtl,
+                        ai_translation_job.id,
+                        ai_translation_job.source_row_id_snapshot,
+                        ai_translation_job.source_content_hash,
+                        ai_translation_job.updated_at_ts_ms
                     FROM stephen_dcx_content_pages AS translation_page
                     JOIN stephen_dcx_languages AS translation_language
                       ON translation_language.id = translation_page.language_id
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            translation_job.id,
+                            translation_job.source_row_id_snapshot,
+                            translation_job.source_content_hash,
+                            translation_job.updated_at_ts_ms
+                        FROM stephen_dcx_ai_translation_jobs AS translation_job
+                        WHERE translation_job.entity_kind = 'content_page'
+                          AND translation_job.target_row_id = translation_page.id
+                          AND translation_job.job_status = 'completed'
+                        ORDER BY translation_job.id DESC
+                        LIMIT 1
+                    ) ai_translation_job
+                      ON TRUE
                     WHERE translation_page.page_key = %s
                       AND translation_page.is_live = TRUE
                     ORDER BY translation_language.id ASC, translation_page.id DESC
@@ -175,6 +214,23 @@ def read_dcx_admin_live_content_page_detail_capability(
                     (normalized_page_key,),
                 )
                 translation_rows = cursor.fetchall()
+                cursor.execute(
+                    """
+                    SELECT
+                        page_title,
+                        page_lede,
+                        page_body_markdown,
+                        meta_title,
+                        meta_description
+                    FROM stephen_dcx_content_pages
+                    WHERE page_key = %s
+                      AND is_original = TRUE
+                      AND is_live = TRUE
+                    LIMIT 1
+                    """,
+                    (normalized_page_key,),
+                )
+                original_content_row = cursor.fetchone()
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - integration path
@@ -188,6 +244,10 @@ def read_dcx_admin_live_content_page_detail_capability(
     original_language_code = normalized_language_code
     original_page_id = page_row[0]
     current_language_code = page_row[18]
+    current_original_source_hash = _build_current_original_page_source_hash(
+        selected_page_row=page_row,
+        original_content_row=original_content_row,
+    )
 
     for translation_row in translation_rows:
         translation_language = {
@@ -213,6 +273,13 @@ def read_dcx_admin_live_content_page_detail_capability(
                 "updated_at_ts_ms": translation_row[7],
                 "is_current_language": translation_language["language_code"] == current_language_code,
                 "language": translation_language,
+                "ai_translation": _build_ai_translation_payload(
+                    ai_translation_job_id=translation_row[13],
+                    source_row_id_snapshot=translation_row[14],
+                    source_content_hash=translation_row[15],
+                    translated_at_ts_ms=translation_row[16],
+                    current_original_source_hash=current_original_source_hash,
+                ),
             }
         )
 
@@ -262,10 +329,61 @@ def read_dcx_admin_live_content_page_detail_capability(
             "category_description": page_row[24],
             "category_slug": page_row[25],
         },
+        "ai_translation": _build_ai_translation_payload(
+            ai_translation_job_id=page_row[26],
+            source_row_id_snapshot=page_row[27],
+            source_content_hash=page_row[28],
+            translated_at_ts_ms=page_row[29],
+            current_original_source_hash=current_original_source_hash,
+        ),
         "translation_summary": {
             "original_page_id": original_page_id,
             "original_language_code": original_language_code,
             "existing_translations": existing_translations,
             "missing_languages": missing_languages,
         },
+    }
+
+
+def _build_current_original_page_source_hash(
+    selected_page_row: tuple,
+    original_content_row: tuple | None,
+) -> str:
+    if original_content_row is not None:
+        fields = {
+            "page_title": original_content_row[0],
+            "page_lede": original_content_row[1],
+            "page_body_markdown": original_content_row[2],
+            "meta_title": original_content_row[3],
+            "meta_description": original_content_row[4],
+        }
+    else:
+        fields = {
+            "page_title": selected_page_row[3],
+            "page_lede": selected_page_row[4],
+            "page_body_markdown": selected_page_row[5],
+            "meta_title": selected_page_row[6],
+            "meta_description": selected_page_row[7],
+        }
+    return build_dcx_admin_ai_translation_content_hash(fields)
+
+
+def _build_ai_translation_payload(
+    ai_translation_job_id: int | None,
+    source_row_id_snapshot: int | None,
+    source_content_hash: str | None,
+    translated_at_ts_ms: int | None,
+    current_original_source_hash: str,
+) -> dict:
+    is_ai_translated = ai_translation_job_id is not None
+    return {
+        "is_ai_translated": is_ai_translated,
+        "is_stale": bool(
+            is_ai_translated
+            and source_content_hash
+            and source_content_hash != current_original_source_hash
+        ),
+        "job_id": ai_translation_job_id,
+        "source_row_id_snapshot": source_row_id_snapshot,
+        "translated_at_ts_ms": translated_at_ts_ms,
     }
