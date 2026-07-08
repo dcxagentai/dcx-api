@@ -13,7 +13,16 @@ import psycopg2
 
 from storage.db_config import DB_CONFIG
 
-DCX_ADMIN_TRACKER_UPDATE_KINDS = {"note", "progress", "blocker", "decision", "question", "action"}
+DCX_ADMIN_TRACKER_UPDATE_KINDS = {
+    "note",
+    "progress",
+    "blocker",
+    "decision",
+    "question",
+    "action",
+    "concept",
+    "meeting",
+}
 
 
 def create_dcx_admin_tracker_update_capability(

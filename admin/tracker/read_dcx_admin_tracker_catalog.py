@@ -219,7 +219,8 @@ def read_dcx_admin_tracker_catalog_capability(
                         u.public_display_name,
                         u.user_role,
                         u.account_status,
-                        u.is_tracker_team_member
+                        u.is_tracker_team_member,
+                        u.last_seen_at_ts_ms
                     FROM public.stephen_dcx_users u
                     INNER JOIN LATERAL (
                         SELECT normalized_value
@@ -315,6 +316,7 @@ def read_dcx_admin_tracker_catalog_capability(
                 "user_role": row[3],
                 "account_status": row[4],
                 "is_tracker_team_member": bool(row[5]),
+                "last_seen_at_ts_ms": row[6],
             }
             for row in assignable_user_rows
         ],
