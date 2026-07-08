@@ -121,6 +121,9 @@ from routes.admin.dcx_api_routes_admin_content_page_save_live_row import (
 from routes.admin.dcx_api_routes_admin_content_page_publish_live_row import (
     dcx_api_routes_admin_content_page_publish_live_row_router,
 )
+from routes.admin.dcx_api_routes_admin_content_page_publish_translated_drafts import (
+    dcx_api_routes_admin_content_page_publish_translated_drafts_router,
+)
 from routes.admin.dcx_api_routes_admin_content_page_archive_live_row import (
     dcx_api_routes_admin_content_page_archive_live_row_router,
 )
@@ -339,6 +342,7 @@ app.include_router(dcx_api_routes_admin_content_page_create_draft_router)
 app.include_router(dcx_api_routes_admin_content_page_create_translation_router)
 app.include_router(dcx_api_routes_admin_content_page_save_live_row_router)
 app.include_router(dcx_api_routes_admin_content_page_publish_live_row_router)
+app.include_router(dcx_api_routes_admin_content_page_publish_translated_drafts_router)
 app.include_router(dcx_api_routes_admin_content_page_archive_live_row_router)
 app.include_router(dcx_api_routes_admin_content_newsletters_catalog_router)
 app.include_router(dcx_api_routes_admin_content_newsletter_detail_router)
