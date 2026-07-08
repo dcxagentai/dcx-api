@@ -40,6 +40,43 @@ def test_returns_translated_fields_from_structured_json_response(monkeypatch) ->
     assert result["usage_metadata"] == {"input_token_count": 10, "output_token_count": 8}
 
 
+def test_includes_preservation_manifest_in_prompt(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
+    captured_prompt = ""
+
+    def fake_send_gemini_request(request_context: dict) -> dict:
+        nonlocal captured_prompt
+        captured_prompt = request_context["prompt_text"]
+        return {
+            "output_text": json.dumps(
+                {
+                    "target_language_code": "es",
+                    "fields": {
+                        "email_body": "El informe de 16 paginas dice que Egipto perdio 1-0 y 3-2.",
+                    },
+                }
+            ),
+        }
+
+    result = translate_dcx_gemini_structured_admin_content(
+        entity_kind="newsletter",
+        source_language_code="en",
+        target_language_code="es",
+        source_fields={
+            "email_body": "The 16-page report says Egypt lost 1-0 and 3-2.",
+        },
+        send_gemini_request=fake_send_gemini_request,
+    )
+
+    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_08_v2"
+    assert "<preservation_manifest_json>" in captured_prompt
+    assert '"source_token": "16"' in captured_prompt
+    assert '"source_token": "1"' in captured_prompt
+    assert '"source_token": "0"' in captured_prompt
+    assert '"source_token": "3"' in captured_prompt
+    assert '"source_token": "2"' in captured_prompt
+
+
 def test_rejects_structured_translation_with_missing_field(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
 
@@ -112,7 +149,7 @@ def test_allows_localized_number_formatting_and_unicode_digits(monkeypatch) -> N
                 {
                     "target_language_code": "ur",
                     "fields": {
-                        "email_subject": "2035 تک ٥% اور 3,5% کے لیے 1\u202f000 ارکان",
+                        "email_subject": "2035 target \u0665% and 3,5% for 1\u202f000 members",
                     },
                 }
             ),

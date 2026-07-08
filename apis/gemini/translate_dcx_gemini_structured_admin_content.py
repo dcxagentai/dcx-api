@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v1"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v2"
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
 _URL_PATTERN = re.compile(r"https?://[^\s)>\]]+")
@@ -138,6 +138,7 @@ def _build_admin_translation_prompt(
         target_language_code,
         f"language code {target_language_code}",
     )
+    preservation_manifest = _build_preservation_manifest(source_fields)
     return f"""
 <dcx_task>
 Translate structured DCX admin content from source_language_code={source_language_code} to target_language_code={target_language_code}.
@@ -162,6 +163,7 @@ The fields object must contain exactly the same field names as the input.
 - Preserve quantities, grades, units, currencies, dates, locations, ports, company names, URLs, placeholders, and markdown link targets.
 - Preserve every digit-bearing number as digits. Do not spell source digit tokens out as words, remove them, or introduce new digit tokens.
 - Locale punctuation such as decimal commas, non-breaking-space group separators, and native digit glyphs is allowed only when it preserves the same number.
+- The preservation manifest is binding. For each field, make sure every listed source_token is represented by a digit-bearing equivalent in that translated field.
 - Translate field text, headings, and link labels where appropriate.
 - Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
 - Preserve markdown structure and line breaks.
@@ -176,7 +178,39 @@ The fields object must contain exactly the same field names as the input.
 <source_fields_json>
 {json.dumps(source_fields, ensure_ascii=False, sort_keys=True)}
 </source_fields_json>
+
+<preservation_manifest_json>
+{json.dumps(preservation_manifest, ensure_ascii=False, sort_keys=True)}
+</preservation_manifest_json>
 """.strip()
+
+
+def _build_preservation_manifest(source_fields: dict[str, str]) -> dict:
+    return {
+        "number_tokens_by_field": {
+            field_name: [
+                {
+                    "source_token": token,
+                    "normalized_digits": _normalize_number_token(token),
+                }
+                for token in _NUMBER_PATTERN.findall(source_value or "")
+                if _normalize_number_token(token) != ""
+            ]
+            for field_name, source_value in source_fields.items()
+        },
+        "placeholder_tokens_by_field": {
+            field_name: _PLACEHOLDER_PATTERN.findall(source_value or "")
+            for field_name, source_value in source_fields.items()
+        },
+        "url_tokens_by_field": {
+            field_name: _URL_PATTERN.findall(source_value or "")
+            for field_name, source_value in source_fields.items()
+        },
+        "commercial_tokens_by_field": {
+            field_name: _COMMERCIAL_TOKEN_PATTERN.findall(source_value or "")
+            for field_name, source_value in source_fields.items()
+        },
+    }
 
 
 def _read_translated_fields_from_output_text(
@@ -240,7 +274,11 @@ def _validate_translated_fields(
             error_code="API_DCX_GEMINI_ADMIN_TRANSLATION_COMMERCIAL_TOKEN_MISMATCH",
             casefold=True,
         )
-        _validate_same_number_shapes(source_value=source_value, translated_value=translated_value)
+        _validate_same_number_shapes(
+            field_name=field_name,
+            source_value=source_value,
+            translated_value=translated_value,
+        )
 
 
 def _validate_same_tokens(
@@ -259,12 +297,13 @@ def _validate_same_tokens(
         raise RuntimeError(error_code)
 
 
-def _validate_same_number_shapes(source_value: str, translated_value: str) -> None:
+def _validate_same_number_shapes(field_name: str, source_value: str, translated_value: str) -> None:
     source_numbers = _read_normalized_number_tokens(source_value)
     translated_numbers = _read_normalized_number_tokens(translated_value)
     if Counter(source_numbers) != Counter(translated_numbers):
         raise RuntimeError(
             "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH:"
+            f"field={field_name};"
             f"source_numbers={json.dumps(source_numbers, ensure_ascii=False)};"
             f"translated_numbers={json.dumps(translated_numbers, ensure_ascii=False)}"
         )
