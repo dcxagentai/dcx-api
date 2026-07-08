@@ -34,8 +34,11 @@ def read_authenticated_dcx_session_from_request(
         - The configured database is reachable when a session cookie is present.
       postconditions:
         - Returns one authenticated session payload when the cookie maps to an active unexpired session.
+        - Touches the session/user last-seen timestamp at most every few minutes.
         - Returns null when no valid session is present.
-      side_effects: []
+      side_effects:
+        - may update stephen_dcx_user_auth_sessions.last_seen_at_ts_ms
+        - may update stephen_dcx_users.last_seen_at_ts_ms
       idempotent: true
       retry_safe: true
       async: false
@@ -79,6 +82,9 @@ def read_authenticated_dcx_session_from_request(
     now_ts_ms = int(time.time() * 1000)
     session_token_hash = hash_dcx_auth_session_token(raw_session_token)
     connect = connect_to_database or psycopg2.connect
+
+    touch_interval_ms = 5 * 60 * 1000
+    effective_last_seen_at_ts_ms = None
 
     try:
         with connect(**DB_CONFIG) as connection:
@@ -128,6 +134,29 @@ def read_authenticated_dcx_session_from_request(
                     ),
                 )
                 session_row = cursor.fetchone()
+                if session_row is not None:
+                    effective_last_seen_at_ts_ms = session_row[4]
+                    if (
+                        effective_last_seen_at_ts_ms is None
+                        or effective_last_seen_at_ts_ms < now_ts_ms - touch_interval_ms
+                    ):
+                        cursor.execute(
+                            """
+                            UPDATE stephen_dcx_user_auth_sessions
+                            SET last_seen_at_ts_ms = %s
+                            WHERE id = %s
+                            """,
+                            (now_ts_ms, session_row[0]),
+                        )
+                        cursor.execute(
+                            """
+                            UPDATE stephen_dcx_users
+                            SET last_seen_at_ts_ms = %s
+                            WHERE id = %s
+                            """,
+                            (now_ts_ms, session_row[1]),
+                        )
+                        effective_last_seen_at_ts_ms = now_ts_ms
     except Exception as exc:  # pragma: no cover - integration path
         raise RuntimeError("API_DCX_AUTH_SESSION_READ_FAILED") from exc
 
@@ -141,7 +170,7 @@ def read_authenticated_dcx_session_from_request(
         "user_id": session_row[1],
         "issued_at_ts_ms": session_row[2],
         "expires_at_ts_ms": session_row[3],
-        "last_seen_at_ts_ms": session_row[4],
+        "last_seen_at_ts_ms": effective_last_seen_at_ts_ms,
         "user_uuid": str(session_row[5]),
         "primary_email": session_row[6],
         "user_role": user_role,

@@ -83,7 +83,14 @@ def read_dcx_admin_user_list_capability(
                         u.user_role,
                         u.account_status,
                         u.email_communication_preference,
-                        u.last_seen_at_ts_ms,
+                        NULLIF(
+                            GREATEST(
+                                COALESCE(latest_auth_session.latest_seen_at_ts_ms, 0),
+                                COALESCE(latest_activity.latest_activity_at_ts_ms, 0),
+                                COALESCE(u.last_seen_at_ts_ms, 0)
+                            ),
+                            0
+                        ) AS last_seen_at_ts_ms,
                         u.created_at_ts_ms,
                         u.updated_at_ts_ms,
                         l.id,
@@ -125,6 +132,24 @@ def read_dcx_admin_user_list_capability(
                       ON l.id = u.preferred_language_id
                     LEFT JOIN LATERAL (
                         SELECT
+                            MAX(
+                                GREATEST(
+                                    COALESCE(auth_session.last_seen_at_ts_ms, 0),
+                                    auth_session.issued_at_ts_ms
+                                )
+                            ) AS latest_seen_at_ts_ms
+                        FROM stephen_dcx_user_auth_sessions auth_session
+                        WHERE auth_session.user_id = u.id
+                    ) latest_auth_session
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT MAX(created_at_ts_ms) AS latest_activity_at_ts_ms
+                        FROM stephen_dcx_user_activity_events activity_event
+                        WHERE activity_event.user_id = u.id
+                    ) latest_activity
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
                             SUM(total_token_count) AS total_token_count,
                             COUNT(*) AS usage_event_count
                         FROM stephen_dcx_llm_usage_events
@@ -138,7 +163,18 @@ def read_dcx_admin_user_list_capability(
                     ) activity_totals
                       ON TRUE
                     ORDER BY
-                        COALESCE(u.last_seen_at_ts_ms, u.updated_at_ts_ms, u.created_at_ts_ms) DESC,
+                        COALESCE(
+                            NULLIF(
+                                GREATEST(
+                                    COALESCE(latest_auth_session.latest_seen_at_ts_ms, 0),
+                                    COALESCE(latest_activity.latest_activity_at_ts_ms, 0),
+                                    COALESCE(u.last_seen_at_ts_ms, 0)
+                                ),
+                                0
+                            ),
+                            u.updated_at_ts_ms,
+                            u.created_at_ts_ms
+                        ) DESC,
                         u.id DESC
                     """
                     ,

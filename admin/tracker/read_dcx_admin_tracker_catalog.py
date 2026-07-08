@@ -220,7 +220,14 @@ def read_dcx_admin_tracker_catalog_capability(
                         u.user_role,
                         u.account_status,
                         u.is_tracker_team_member,
-                        u.last_seen_at_ts_ms
+                        NULLIF(
+                            GREATEST(
+                                COALESCE(latest_auth_session.latest_seen_at_ts_ms, 0),
+                                COALESCE(latest_activity.latest_activity_at_ts_ms, 0),
+                                COALESCE(u.last_seen_at_ts_ms, 0)
+                            ),
+                            0
+                        ) AS last_active_at_ts_ms
                     FROM public.stephen_dcx_users u
                     INNER JOIN LATERAL (
                         SELECT normalized_value
@@ -231,6 +238,24 @@ def read_dcx_admin_tracker_catalog_capability(
                           AND is_active = TRUE
                         LIMIT 1
                     ) email_contact
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            MAX(
+                                GREATEST(
+                                    COALESCE(auth_session.last_seen_at_ts_ms, 0),
+                                    auth_session.issued_at_ts_ms
+                                )
+                            ) AS latest_seen_at_ts_ms
+                        FROM public.stephen_dcx_user_auth_sessions auth_session
+                        WHERE auth_session.user_id = u.id
+                    ) latest_auth_session
+                      ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT MAX(created_at_ts_ms) AS latest_activity_at_ts_ms
+                        FROM public.stephen_dcx_user_activity_events activity_event
+                        WHERE activity_event.user_id = u.id
+                    ) latest_activity
                       ON TRUE
                     WHERE u.is_tracker_team_member = TRUE
                        OR EXISTS (
@@ -316,7 +341,7 @@ def read_dcx_admin_tracker_catalog_capability(
                 "user_role": row[3],
                 "account_status": row[4],
                 "is_tracker_team_member": bool(row[5]),
-                "last_seen_at_ts_ms": row[6],
+                "last_active_at_ts_ms": row[6],
             }
             for row in assignable_user_rows
         ],

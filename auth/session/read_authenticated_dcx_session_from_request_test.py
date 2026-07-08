@@ -6,6 +6,7 @@ import auth.session.read_authenticated_dcx_session_from_request as session_read_
 class _FakeCursor:
     def __init__(self, fetchone_result):
         self._fetchone_result = fetchone_result
+        self.execute_calls = []
 
     def __enter__(self):
         return self
@@ -16,6 +17,7 @@ class _FakeCursor:
     def execute(self, query, params):
         self.query = query
         self.params = params
+        self.execute_calls.append((query, params))
 
     def fetchone(self):
         return self._fetchone_result
@@ -24,6 +26,7 @@ class _FakeCursor:
 class _FakeConnection:
     def __init__(self, fetchone_result):
         self._fetchone_result = fetchone_result
+        self.cursor_instance = _FakeCursor(self._fetchone_result)
 
     def __enter__(self):
         return self
@@ -32,7 +35,7 @@ class _FakeConnection:
         return False
 
     def cursor(self):
-        return _FakeCursor(self._fetchone_result)
+        return self.cursor_instance
 
 
 def _build_request_with_cookie(cookie_header: str | None) -> Request:
@@ -58,27 +61,29 @@ def test_returns_none_when_cookie_missing() -> None:
     ) is None
 
 
-def test_returns_session_payload_when_active_cookie_matches_database_row() -> None:
+def test_returns_session_payload_when_active_cookie_matches_database_row(monkeypatch) -> None:
     request = _build_request_with_cookie("dcx_session=raw-token")
+    monkeypatch.setattr(session_read_module.time, "time", lambda: 1775520400)
+    connection = _FakeConnection(
+        (
+            11,
+            5,
+            1775520000000,
+            1776729600000,
+            1775520300000,
+            "3a22bcc2-9265-4639-aac8-1769ddb989c4",
+            "matbenet77@gmail.com",
+            "admin",
+            "confirmed",
+            2,
+            "Europe/Madrid",
+            "Madrid",
+        )
+    )
 
     result = session_read_module.read_authenticated_dcx_session_from_request(
         request=request,
-        connect_to_database=lambda **_: _FakeConnection(
-            (
-                11,
-                5,
-                1775520000000,
-                1776729600000,
-                1775520300000,
-                "3a22bcc2-9265-4639-aac8-1769ddb989c4",
-                "matbenet77@gmail.com",
-                "admin",
-                "confirmed",
-                2,
-                "Europe/Madrid",
-                "Madrid",
-            )
-        ),
+        connect_to_database=lambda **_: connection,
     )
 
     assert result == {
@@ -99,3 +104,34 @@ def test_returns_session_payload_when_active_cookie_matches_database_row() -> No
         "may_access_app": True,
         "may_access_admin": True,
     }
+
+
+def test_touches_stale_session_and_user_last_seen(monkeypatch) -> None:
+    request = _build_request_with_cookie("dcx_session=raw-token")
+    connection = _FakeConnection(
+        (
+            11,
+            5,
+            1775520000000,
+            1776729600000,
+            1775520300000,
+            "3a22bcc2-9265-4639-aac8-1769ddb989c4",
+            "matbenet77@gmail.com",
+            "admin",
+            "confirmed",
+            None,
+            None,
+            None,
+        )
+    )
+    monkeypatch.setattr(session_read_module.time, "time", lambda: 1775521200)
+
+    result = session_read_module.read_authenticated_dcx_session_from_request(
+        request=request,
+        connect_to_database=lambda **_: connection,
+    )
+
+    assert result is not None
+    assert result["last_seen_at_ts_ms"] == 1775521200000
+    assert connection.cursor_instance.execute_calls[-2][1] == (1775521200000, 11)
+    assert connection.cursor_instance.execute_calls[-1][1] == (1775521200000, 5)
