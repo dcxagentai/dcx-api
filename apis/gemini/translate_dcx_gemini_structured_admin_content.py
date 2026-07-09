@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v7"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v8"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
@@ -199,7 +199,10 @@ def _build_dcx_admin_structured_translation_response_schema(
                 "properties": {
                     field_name: {
                         "type": "string",
-                        "description": _build_translation_field_schema_description(field_name),
+                        "description": _build_translation_field_schema_description(
+                            field_name=field_name,
+                            target_language_code=target_language_code,
+                        ),
                     }
                     for field_name in expected_field_names
                 },
@@ -210,14 +213,28 @@ def _build_dcx_admin_structured_translation_response_schema(
     }
 
 
-def _build_translation_field_schema_description(field_name: str) -> str:
+def _build_translation_field_schema_description(
+    field_name: str,
+    target_language_code: str,
+) -> str:
     if field_name in _SLUG_FIELD_NAMES:
+        native_script_hint = _build_native_script_slug_hint(target_language_code)
         return (
             "Localized UTF-8 public URL path segment. Use native script for Arabic, Hindi, "
             "Urdu, Chinese, and Russian generic words. Do not romanize or transliterate "
-            "non-Latin slug words."
+            f"non-Latin slug words. {native_script_hint}"
         )
     return "Translated UTF-8 field text preserving the source meaning and required tokens."
+
+
+def _build_native_script_slug_hint(target_language_code: str) -> str:
+    return {
+        "ar": "Arabic slug example: سياسة-خصوصية-واتساب.",
+        "hi": "Hindi slug example: व्हाट्सएप-गोपनीयता-नीति.",
+        "ru": "Russian slug example: политика-конфиденциальности-whatsapp.",
+        "ur": "Urdu slug example: واٹس-ایپ-پرائیویسی-پالیسی.",
+        "zh": "Chinese slug example: whatsapp-隐私政策.",
+    }.get(target_language_code, "")
 
 
 def _build_admin_translation_prompt(
@@ -277,6 +294,8 @@ The fields object must contain exactly the same field names as the input.
   - Hindi: `यह-एक-वेब-पता-है`
   - Chinese: `这是一个网址路径`
   - Arabic: `هذا-مسار-رابط`
+  - Urdu: `واٹس-ایپ-پرائیویسی-پالیسی`
+  - Russian: `политика-конфиденциальности-whatsapp`
 - Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
 - Preserve markdown structure and line breaks.
 - If a field is empty, return an empty string for that field.
@@ -337,7 +356,9 @@ def _build_validation_feedback(error_detail: str, previous_output_text: str) -> 
             "token listed in the preservation manifest must appear as a digit-bearing equivalent "
             "in the same translated field, and no new digit-bearing number may be introduced. "
             "If a native-script slug mismatch is reported, regenerate the slug in the target "
-            "language's native script rather than Latin-script-only romanized words."
+            "language's native script rather than Latin-script-only romanized words. For Russian, "
+            "use Cyrillic words such as политика-конфиденциальности-whatsapp, not "
+            "politika-konfidentsialnosti-whatsapp."
         ),
     }
 

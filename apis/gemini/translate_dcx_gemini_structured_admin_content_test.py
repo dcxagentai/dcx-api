@@ -72,13 +72,14 @@ def test_includes_preservation_manifest_in_prompt(monkeypatch) -> None:
         send_gemini_request=fake_send_gemini_request,
     )
 
-    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_09_v7"
+    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_09_v8"
     assert "<preservation_manifest_json>" in captured_prompt
     assert '"source_token": "16"' in captured_prompt
     assert '"source_token": "1"' in captured_prompt
     assert '"source_token": "0"' in captured_prompt
     assert '"source_token": "3"' in captured_prompt
     assert '"source_token": "2"' in captured_prompt
+    assert "политика-конфиденциальности-whatsapp" in captured_prompt
 
 
 def test_includes_interactions_json_response_format(monkeypatch) -> None:
