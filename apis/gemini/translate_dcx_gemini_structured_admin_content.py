@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v5"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v6"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
@@ -190,7 +190,9 @@ The fields object must contain exactly the same field names as the input.
 - Locale punctuation such as decimal commas, non-breaking-space group separators, and native digit glyphs is allowed only when it preserves the same number.
 - The preservation manifest is binding. For each field, make sure every listed source_token is represented by a digit-bearing equivalent in that translated field.
 - Translate field text, headings, link labels, and URL slug fields into the target language.
-- Return Unicode/UTF-8 text where the target language normally uses a non-Latin script. Do not transliterate Arabic, Hindi, Urdu, Chinese, or Russian into English/ASCII unless the source term is a brand, company, product, ticker, or other proper noun normally kept unchanged.
+- Return Unicode/UTF-8 text where the target language normally uses a non-Latin script.
+- For Arabic, Hindi, Urdu, Chinese, and Russian slug fields, use that language's native script for all translatable generic words. Do not use pinyin, romanized Hindi, romanized Urdu, romanized Arabic, or romanized Russian in slug fields.
+- Brand, company, product, ticker, and other proper nouns may remain in their usual written form, but generic words such as privacy, policy, terms, market, trading, insight, and update must be translated into the target language and script.
 - For fields named `page_slug` or `category_slug`, create a concise public URL path segment in the target language.
 - Slug fields are not technical identifiers to preserve. They must be newly localized from the translated title/category meaning.
 - For Latin-script languages, use lowercase words, remove accents/diacritics, and separate words with hyphens.
@@ -203,7 +205,7 @@ The fields object must contain exactly the same field names as the input.
   - Spanish: `esto-es-una-url`
   - French: `politique-de-confidentialite-whatsapp`
   - German: `whatsapp-datenschutzrichtlinie`
-  - Hindi: `यह-एक-url-स्लग-है`
+  - Hindi: `यह-एक-वेब-पता-है`
   - Chinese: `这是一个网址路径`
   - Arabic: `هذا-مسار-رابط`
 - Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
