@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v6"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v7"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
@@ -30,6 +30,14 @@ _COMMERCIAL_TOKEN_PATTERN = re.compile(
     r"\b(?:USD|EUR|GBP|CNY|RMB|AED|FOB|CIF|CFR|DAP|DDP|EXW|LC|L/C|MT|KG|G|LB|OZ|SGS|HS|ISO)\b",
     re.IGNORECASE,
 )
+_SLUG_FIELD_NAMES = {"category_slug", "page_slug"}
+_NATIVE_SCRIPT_SLUG_CHARACTER_PATTERN_BY_LANGUAGE_CODE = {
+    "ar": re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]"),
+    "hi": re.compile(r"[\u0900-\u097F]"),
+    "ru": re.compile(r"[\u0400-\u04FF]"),
+    "ur": re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]"),
+    "zh": re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]"),
+}
 
 LANGUAGE_PROFILE_BY_CODE = {
     "ar": "Arabic, Modern Standard Arabic, right-to-left business register",
@@ -78,6 +86,11 @@ def translate_dcx_gemini_structured_admin_content(
     usage_metadata = {}
     validation_feedback = None
     translated_fields = {}
+    expected_field_names = sorted(normalized_source_fields.keys())
+    response_format = _build_dcx_admin_structured_translation_response_format(
+        target_language_code=normalized_target_language_code,
+        expected_field_names=expected_field_names,
+    )
     for attempt_number in range(1, MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS + 1):
         prompt_text = _build_admin_translation_prompt(
             entity_kind=entity_kind.strip(),
@@ -87,11 +100,12 @@ def translate_dcx_gemini_structured_admin_content(
             validation_feedback=validation_feedback,
         )
         try:
-            response_payload = (send_gemini_request or _send_gemini_generate_content_request)(
+            response_payload = (send_gemini_request or _send_gemini_interactions_request)(
                 {
                     "api_key": api_key,
                     "model_name": model_name,
                     "prompt_text": prompt_text,
+                    "response_format": response_format,
                 }
             )
             output_text = str(response_payload.get("output_text", "")).strip()
@@ -99,11 +113,12 @@ def translate_dcx_gemini_structured_admin_content(
             translated_fields = _read_translated_fields_from_output_text(
                 output_text=output_text,
                 expected_language_code=normalized_target_language_code,
-                expected_field_names=sorted(normalized_source_fields.keys()),
+                expected_field_names=expected_field_names,
             )
             _validate_translated_fields(
                 source_fields=normalized_source_fields,
                 translated_fields=translated_fields,
+                target_language_code=normalized_target_language_code,
             )
             break
         except RuntimeError as exc:
@@ -137,18 +152,72 @@ def translate_dcx_gemini_structured_admin_content(
     }
 
 
-def _send_gemini_generate_content_request(request_context: dict) -> dict:
+def _send_gemini_interactions_request(request_context: dict) -> dict:
     from google import genai
 
     client = genai.Client(api_key=request_context["api_key"])
-    response = client.models.generate_content(
+    response = client.interactions.create(
         model=request_context["model_name"],
-        contents=[request_context["prompt_text"]],
+        input=request_context["prompt_text"],
+        response_format=request_context["response_format"],
     )
+    output_text = getattr(response, "output_text", None) or getattr(response, "text", "")
     return {
-        "output_text": (response.text or "").strip(),
+        "output_text": str(output_text or "").strip(),
         "usage_metadata": read_dcx_gemini_usage_metadata(response),
     }
+
+
+def _build_dcx_admin_structured_translation_response_format(
+    target_language_code: str,
+    expected_field_names: list[str],
+) -> dict:
+    return {
+        "type": "text",
+        "mime_type": "application/json",
+        "schema": _build_dcx_admin_structured_translation_response_schema(
+            target_language_code=target_language_code,
+            expected_field_names=expected_field_names,
+        ),
+    }
+
+
+def _build_dcx_admin_structured_translation_response_schema(
+    target_language_code: str,
+    expected_field_names: list[str],
+) -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "target_language_code": {
+                "type": "string",
+                "enum": [target_language_code],
+                "description": "The requested target language code.",
+            },
+            "fields": {
+                "type": "object",
+                "properties": {
+                    field_name: {
+                        "type": "string",
+                        "description": _build_translation_field_schema_description(field_name),
+                    }
+                    for field_name in expected_field_names
+                },
+                "required": expected_field_names,
+            },
+        },
+        "required": ["target_language_code", "fields"],
+    }
+
+
+def _build_translation_field_schema_description(field_name: str) -> str:
+    if field_name in _SLUG_FIELD_NAMES:
+        return (
+            "Localized UTF-8 public URL path segment. Use native script for Arabic, Hindi, "
+            "Urdu, Chinese, and Russian generic words. Do not romanize or transliterate "
+            "non-Latin slug words."
+        )
+    return "Translated UTF-8 field text preserving the source meaning and required tokens."
 
 
 def _build_admin_translation_prompt(
@@ -266,7 +335,9 @@ def _build_validation_feedback(error_detail: str, previous_output_text: str) -> 
             "Return the full JSON contract again. Correct the failed field while preserving "
             "the same source meaning. If a number mismatch is reported, every source number "
             "token listed in the preservation manifest must appear as a digit-bearing equivalent "
-            "in the same translated field, and no new digit-bearing number may be introduced."
+            "in the same translated field, and no new digit-bearing number may be introduced. "
+            "If a native-script slug mismatch is reported, regenerate the slug in the target "
+            "language's native script rather than Latin-script-only romanized words."
         ),
     }
 
@@ -293,6 +364,7 @@ def _is_retryable_translation_response_error(exc: RuntimeError) -> bool:
         "API_DCX_GEMINI_ADMIN_TRANSLATION_URL_MISMATCH",
         "API_DCX_GEMINI_ADMIN_TRANSLATION_COMMERCIAL_TOKEN_MISMATCH",
         "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH",
+        "API_DCX_GEMINI_ADMIN_TRANSLATION_NATIVE_SCRIPT_SLUG_MISMATCH",
     }
 
 
@@ -332,6 +404,7 @@ def _read_translated_fields_from_output_text(
 def _validate_translated_fields(
     source_fields: dict[str, str],
     translated_fields: dict[str, str],
+    target_language_code: str,
 ) -> None:
     for field_name, source_value in source_fields.items():
         translated_value = translated_fields.get(field_name, "")
@@ -361,6 +434,34 @@ def _validate_translated_fields(
             field_name=field_name,
             source_value=source_value,
             translated_value=translated_value,
+        )
+    _validate_native_script_slug_fields(
+        translated_fields=translated_fields,
+        target_language_code=target_language_code,
+    )
+
+
+def _validate_native_script_slug_fields(
+    translated_fields: dict[str, str],
+    target_language_code: str,
+) -> None:
+    native_script_pattern = _NATIVE_SCRIPT_SLUG_CHARACTER_PATTERN_BY_LANGUAGE_CODE.get(
+        target_language_code
+    )
+    if native_script_pattern is None:
+        return
+
+    for field_name in sorted(_SLUG_FIELD_NAMES):
+        if field_name not in translated_fields:
+            continue
+        translated_slug = str(translated_fields.get(field_name) or "").strip()
+        if translated_slug == "" or native_script_pattern.search(translated_slug):
+            continue
+        raise RuntimeError(
+            "API_DCX_GEMINI_ADMIN_TRANSLATION_NATIVE_SCRIPT_SLUG_MISMATCH:"
+            f"field={field_name};"
+            f"target_language_code={target_language_code};"
+            f"translated_slug={json.dumps(translated_slug, ensure_ascii=False)}"
         )
 
 
