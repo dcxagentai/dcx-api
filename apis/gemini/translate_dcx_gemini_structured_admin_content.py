@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_08_v3"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v4"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
@@ -190,6 +190,10 @@ The fields object must contain exactly the same field names as the input.
 - Locale punctuation such as decimal commas, non-breaking-space group separators, and native digit glyphs is allowed only when it preserves the same number.
 - The preservation manifest is binding. For each field, make sure every listed source_token is represented by a digit-bearing equivalent in that translated field.
 - Translate field text, headings, and link labels where appropriate.
+- For fields named `page_slug` or `category_slug`, return a concise translated URL path segment
+  in the target language and script. Use hyphens between words where the language uses word
+  spacing. Do not include slashes, spaces, query strings, fragments, quotes, emoji, leading
+  hyphens, or trailing hyphens.
 - Keep abbreviations such as FOB, CIF, CFR, LC, MT, SGS, HS, ISO, USD, EUR, GBP, CNY, AED unchanged unless local business usage strongly requires otherwise.
 - Preserve markdown structure and line breaks.
 - If a field is empty, return an empty string for that field.

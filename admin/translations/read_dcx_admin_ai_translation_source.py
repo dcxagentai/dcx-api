@@ -165,6 +165,7 @@ def _read_content_page_source_or_error(
         "page_body_markdown": source_row[9],
         "meta_title": source_row[10],
         "meta_description": source_row[11],
+        "page_slug": source_row[12],
     }
     return {
         "entity_kind": "content_page",
@@ -218,6 +219,7 @@ def _read_content_page_category_source_or_error(
     fields = {
         "category_name": source_row[6],
         "category_description": source_row[7],
+        "category_slug": source_row[8],
     }
     return {
         "entity_kind": "content_page_category",

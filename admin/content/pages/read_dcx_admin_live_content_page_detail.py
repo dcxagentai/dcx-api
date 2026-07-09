@@ -230,7 +230,8 @@ def read_dcx_admin_live_content_page_detail_capability(
                         page_lede,
                         page_body_markdown,
                         meta_title,
-                        meta_description
+                        meta_description,
+                        page_slug
                     FROM stephen_dcx_content_pages
                     WHERE page_key = %s
                       AND is_original = TRUE
@@ -371,6 +372,7 @@ def _build_current_original_page_source_hash(
             "page_body_markdown": original_content_row[2],
             "meta_title": original_content_row[3],
             "meta_description": original_content_row[4],
+            "page_slug": original_content_row[5],
         }
     else:
         fields = {
@@ -379,6 +381,7 @@ def _build_current_original_page_source_hash(
             "page_body_markdown": selected_page_row[5],
             "meta_title": selected_page_row[6],
             "meta_description": selected_page_row[7],
+            "page_slug": selected_page_row[8],
         }
     return build_dcx_admin_ai_translation_content_hash(fields)
 

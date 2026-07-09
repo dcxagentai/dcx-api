@@ -83,7 +83,7 @@ def test_returns_requested_live_content_page_detail_with_ai_metadata() -> None:
                 None,
                 None,
             ),
-            ("Test Page", "Lede", "Body", "Meta title", "Meta description"),
+            ("Test Page", "Lede", "Body", "Meta title", "Meta description", "test-page"),
         ],
         fetchall_results=[
             [

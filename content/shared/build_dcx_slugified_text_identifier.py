@@ -1,15 +1,15 @@
 """
 CONTEXT:
-This file builds one stable slug-like identifier from human-entered DCX content text.
-It exists so content pages and newsletter drafts can derive readable internal keys or slugs
-without duplicating the same normalization rules across multiple content capabilities.
+This file builds one stable UTF-8 slug-like identifier from human-entered DCX content text.
+It exists so content pages, categories, and newsletter drafts can derive readable internal keys
+or public URL slugs without duplicating the same normalization rules across content capabilities.
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 
-_DCX_SLUG_UNSAFE_CHARACTERS_PATTERN = re.compile(r"[^a-z0-9]+")
 _DCX_SLUG_DUPLICATE_HYPHENS_PATTERN = re.compile(r"-+")
 
 
@@ -19,7 +19,8 @@ def build_dcx_slugified_text_identifier(value: str) -> str:
       preconditions:
         - value is one candidate human-readable text value.
       postconditions:
-        - Returns a lowercase ASCII-safe slug fragment.
+        - Returns a lowercase UTF-8 slug fragment suitable for one URL path segment.
+        - Preserves Unicode letters, marks, and numbers for native-language slugs.
         - Never returns an empty string; falls back to `item`.
       side_effects: []
       idempotent: true
@@ -35,12 +36,16 @@ def build_dcx_slugified_text_identifier(value: str) -> str:
       WHEN NOT TO USE it:
         - Do not use it for security-sensitive opaque tokens.
       WHAT CAN GO WRONG:
-        - Non-ASCII characters are simplified aggressively.
+        - Unsupported punctuation, symbols, slashes, and control characters are converted to
+          hyphen separators or removed.
       WHAT COMES NEXT:
         - Callers can append a short suffix when uniqueness is required.
 
     TESTS:
-      - covered_indirectly_by_content_page_create_and_newsletter_create_tests
+      - test_builds_ascii_slug_without_regression
+      - test_preserves_latin_diacritics_for_utf8_urls
+      - test_preserves_non_latin_native_script_slug_text
+      - test_removes_url_structural_punctuation_from_one_path_segment
 
     ERRORS:
       - none:
@@ -51,6 +56,34 @@ def build_dcx_slugified_text_identifier(value: str) -> str:
 
     CODE:
     """
-    normalized = _DCX_SLUG_UNSAFE_CHARACTERS_PATTERN.sub("-", value.strip().lower())
+    normalized_input = unicodedata.normalize("NFKC", str(value or "").strip().lower())
+    slug_characters = []
+    previous_character_was_separator = False
+
+    for character in normalized_input:
+        if _is_dcx_slug_character_allowed(character):
+            slug_characters.append(character)
+            previous_character_was_separator = False
+            continue
+
+        if _is_dcx_slug_character_separator(character):
+            if slug_characters and not previous_character_was_separator:
+                slug_characters.append("-")
+                previous_character_was_separator = True
+            continue
+
+    normalized = "".join(slug_characters)
     normalized = _DCX_SLUG_DUPLICATE_HYPHENS_PATTERN.sub("-", normalized).strip("-")
     return normalized or "item"
+
+
+def _is_dcx_slug_character_allowed(character: str) -> bool:
+    unicode_category = unicodedata.category(character)
+    return unicode_category[0] in {"L", "M", "N"}
+
+
+def _is_dcx_slug_character_separator(character: str) -> bool:
+    if character.isspace():
+        return True
+    unicode_category = unicodedata.category(character)
+    return unicode_category[0] in {"P", "S", "Z"}
