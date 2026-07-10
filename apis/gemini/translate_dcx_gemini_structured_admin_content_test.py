@@ -72,7 +72,7 @@ def test_includes_preservation_manifest_in_prompt(monkeypatch) -> None:
         send_gemini_request=fake_send_gemini_request,
     )
 
-    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_09_v8"
+    assert result["prompt_version"] == "dcx_admin_structured_translation_2026_07_10_v9"
     assert "<preservation_manifest_json>" in captured_prompt
     assert '"source_token": "16"' in captured_prompt
     assert '"source_token": "1"' in captured_prompt
@@ -213,6 +213,54 @@ def test_repairs_native_script_slug_mismatch_with_validation_feedback(monkeypatc
     assert len(captured_prompts) == 2
     assert "API_DCX_GEMINI_ADMIN_TRANSLATION_NATIVE_SCRIPT_SLUG_MISMATCH" in captured_prompts[1]
     assert result["translated_fields"]["page_slug"] == "whatsapp-隐私政策"
+
+
+def test_repairs_japanese_romanized_slug_mismatch_with_validation_feedback(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_MESSAGE_ANALYSIS_MODEL", "gemini-test-model")
+    captured_prompts = []
+
+    def fake_send_gemini_request(request_context: dict) -> dict:
+        captured_prompts.append(request_context["prompt_text"])
+        if len(captured_prompts) == 1:
+            return {
+                "output_text": json.dumps(
+                    {
+                        "target_language_code": "ja",
+                        "fields": {
+                            "page_slug": "whatsapp-puraibashi-porishi",
+                            "page_title": "WhatsApp\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        return {
+            "output_text": json.dumps(
+                {
+                    "target_language_code": "ja",
+                    "fields": {
+                        "page_slug": "whatsapp-\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc",
+                        "page_title": "WhatsApp\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        }
+
+    result = translate_dcx_gemini_structured_admin_content(
+        entity_kind="content_page",
+        source_language_code="en",
+        target_language_code="ja",
+        source_fields={
+            "page_slug": "whatsapp-privacy-policy",
+            "page_title": "WhatsApp Privacy Policy",
+        },
+        send_gemini_request=fake_send_gemini_request,
+    )
+
+    assert len(captured_prompts) == 2
+    assert "API_DCX_GEMINI_ADMIN_TRANSLATION_NATIVE_SCRIPT_SLUG_MISMATCH" in captured_prompts[1]
+    assert result["translated_fields"]["page_slug"] == "whatsapp-\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc"
 
 
 def test_rejects_structured_translation_with_missing_field(monkeypatch) -> None:

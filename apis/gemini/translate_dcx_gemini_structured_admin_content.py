@@ -20,7 +20,7 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_09_v8"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_10_v9"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
@@ -34,6 +34,7 @@ _SLUG_FIELD_NAMES = {"category_slug", "page_slug"}
 _NATIVE_SCRIPT_SLUG_CHARACTER_PATTERN_BY_LANGUAGE_CODE = {
     "ar": re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]"),
     "hi": re.compile(r"[\u0900-\u097F]"),
+    "ja": re.compile(r"[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]"),
     "ru": re.compile(r"[\u0400-\u04FF]"),
     "ur": re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]"),
     "zh": re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]"),
@@ -47,6 +48,7 @@ LANGUAGE_PROFILE_BY_CODE = {
     "fr": "French from France",
     "hi": "Hindi in Devanagari script",
     "id": "Indonesian",
+    "ja": "Japanese for Japan, using normal Japanese business register",
     "pt": "Portuguese from Portugal",
     "ru": "Russian",
     "tr": "Turkish",
@@ -221,7 +223,7 @@ def _build_translation_field_schema_description(
         native_script_hint = _build_native_script_slug_hint(target_language_code)
         return (
             "Localized UTF-8 public URL path segment. Use native script for Arabic, Hindi, "
-            "Urdu, Chinese, and Russian generic words. Do not romanize or transliterate "
+            "Urdu, Chinese, Japanese, and Russian generic words. Do not romanize or transliterate "
             f"non-Latin slug words. {native_script_hint}"
         )
     return "Translated UTF-8 field text preserving the source meaning and required tokens."
@@ -231,6 +233,7 @@ def _build_native_script_slug_hint(target_language_code: str) -> str:
     return {
         "ar": "Arabic slug example: سياسة-خصوصية-واتساب.",
         "hi": "Hindi slug example: व्हाट्सएप-गोपनीयता-नीति.",
+        "ja": "Japanese slug example: whatsapp-\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc.",
         "ru": "Russian slug example: политика-конфиденциальности-whatsapp.",
         "ur": "Urdu slug example: واٹس-ایپ-پرائیویسی-پالیسی.",
         "zh": "Chinese slug example: whatsapp-隐私政策.",
@@ -277,7 +280,7 @@ The fields object must contain exactly the same field names as the input.
 - The preservation manifest is binding. For each field, make sure every listed source_token is represented by a digit-bearing equivalent in that translated field.
 - Translate field text, headings, link labels, and URL slug fields into the target language.
 - Return Unicode/UTF-8 text where the target language normally uses a non-Latin script.
-- For Arabic, Hindi, Urdu, Chinese, and Russian slug fields, use that language's native script for all translatable generic words. Do not use pinyin, romanized Hindi, romanized Urdu, romanized Arabic, or romanized Russian in slug fields.
+- For Arabic, Hindi, Urdu, Chinese, Japanese, and Russian slug fields, use that language's native script for all translatable generic words. Do not use pinyin, romaji, romanized Hindi, romanized Urdu, romanized Arabic, or romanized Russian in slug fields.
 - Brand, company, product, ticker, and other proper nouns may remain in their usual written form, but generic words such as privacy, policy, terms, market, trading, insight, and update must be translated into the target language and script.
 - For fields named `page_slug` or `category_slug`, create a concise public URL path segment in the target language.
 - Slug fields are not technical identifiers to preserve. They must be newly localized from the translated title/category meaning.
@@ -293,6 +296,7 @@ The fields object must contain exactly the same field names as the input.
   - German: `whatsapp-datenschutzrichtlinie`
   - Hindi: `यह-एक-वेब-पता-है`
   - Chinese: `这是一个网址路径`
+  - Japanese: `\u3053\u308c\u306f-url-\u30d1\u30b9\u3067\u3059`
   - Arabic: `هذا-مسار-رابط`
   - Urdu: `واٹس-ایپ-پرائیویسی-پالیسی`
   - Russian: `политика-конфиденциальности-whatsapp`

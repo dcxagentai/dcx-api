@@ -21,6 +21,7 @@ WITH desired_languages(
     VALUES
         ('en', 'English', 'English', FALSE, TRUE),
         ('zh', 'Chinese', U&'\4E2D\6587', FALSE, FALSE),
+        ('ja', 'Japanese', U&'\65E5\672C\8A9E', FALSE, FALSE),
         ('hi', 'Hindi', U&'\0939\093F\0928\094D\0926\0940', FALSE, FALSE),
         ('ur', 'Urdu', U&'\0627\0631\062F\0648', TRUE, FALSE),
         ('vi', 'Vietnamese', U&'Ti\1EBFng Vi\1EC7t', FALSE, FALSE),
