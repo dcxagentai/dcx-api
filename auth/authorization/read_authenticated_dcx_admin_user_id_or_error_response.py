@@ -56,7 +56,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
             - Sign in through the real auth flow.
           retry_safe: true
       - API_DCX_ADMIN_FORBIDDEN:
-          suggested_action: Sign in with an admin, dev, shareholder, or investor account to access the admin workspace.
+          suggested_action: Sign in with an admin, dev, or shareholder account to access the admin workspace.
           common_causes:
             - normal user session tried to access admin
           recovery_steps:
@@ -76,7 +76,7 @@ def read_authenticated_dcx_admin_user_id_or_error_response(
                     "error": {
                         "code": "API_DCX_ADMIN_FORBIDDEN",
                     "message": "This authenticated DCX user does not have admin access.",
-                    "suggested_action": "Sign in with an admin, dev, shareholder, or investor account to access the admin workspace.",
+                    "suggested_action": "Sign in with an admin, dev, or shareholder account to access the admin workspace.",
                     },
                 },
             )

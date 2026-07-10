@@ -20,12 +20,69 @@ from apis.gemini.read_dcx_gemini_message_analysis_model_name import (
 )
 from apis.gemini.read_dcx_gemini_usage_metadata import read_dcx_gemini_usage_metadata
 
-PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_10_v9"
+PROMPT_VERSION_DCX_ADMIN_STRUCTURED_TRANSLATION = "dcx_admin_structured_translation_2026_07_10_v10"
 MAX_STRUCTURED_TRANSLATION_RESPONSE_ATTEMPTS = 3
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*[^{}]+\s*}}")
 _URL_PATTERN = re.compile(r"https?://[^\s)>\]]+")
-_NUMBER_PATTERN = re.compile(r"\d+(?:[.,\u066B\u066C\u00A0\u202F' ]\d+)*")
+_NUMBER_PATTERN = re.compile(r"\d+(?:(?:[.,\u066B\u066C']\d+)|(?:[\u00A0\u202F ]\d{3}(?!\d)))*")
+_ENGLISH_MONTH_NUMBER_BY_NAME = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
+_ENGLISH_MONTH_NAME_PATTERN = (
+    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?|tember)?|oct(?:ober)?|"
+    r"nov(?:ember)?|dec(?:ember)?"
+)
+_ENGLISH_DAY_MONTH_YEAR_DATE_PATTERN = re.compile(
+    rf"\b(?P<day>\d{{1,2}})(?:st|nd|rd|th)?\s+"
+    rf"(?P<month>{_ENGLISH_MONTH_NAME_PATTERN})\.?,?\s+"
+    r"(?P<year>\d{4})\b",
+    re.IGNORECASE,
+)
+_ENGLISH_MONTH_DAY_YEAR_DATE_PATTERN = re.compile(
+    rf"\b(?P<month>{_ENGLISH_MONTH_NAME_PATTERN})\.?\s+"
+    r"(?P<day>\d{1,2})(?:st|nd|rd|th)?,?\s+"
+    r"(?P<year>\d{4})\b",
+    re.IGNORECASE,
+)
+_NUMERIC_YEAR_MONTH_DAY_DATE_PATTERN = re.compile(
+    r"\b(?P<year>\d{4})\s*(?:年|[-/.])\s*"
+    r"(?P<month>\d{1,2})\s*(?:月|[-/.])\s*"
+    r"(?P<day>\d{1,2})(?:日)?\b",
+    re.IGNORECASE,
+)
+_NUMERIC_DAY_MONTH_YEAR_DATE_PATTERN = re.compile(
+    r"\b(?:ngày\s+|ngay\s+)?(?P<day>\d{1,2})\s*"
+    r"(?:日|[-/.]|\s+tháng\s+|\s+thang\s+|\s+)"
+    r"(?P<month>\d{1,2})\s*"
+    r"(?:月|[-/.]|\s+năm\s+|\s+nam\s+|\s+)"
+    r"(?P<year>\d{4})\b",
+    re.IGNORECASE,
+)
 _COMMERCIAL_TOKEN_PATTERN = re.compile(
     r"\b(?:USD|EUR|GBP|CNY|RMB|AED|FOB|CIF|CFR|DAP|DDP|EXW|LC|L/C|MT|KG|G|LB|OZ|SGS|HS|ISO)\b",
     re.IGNORECASE,
@@ -277,6 +334,7 @@ The fields object must contain exactly the same field names as the input.
 - Preserve quantities, grades, units, currencies, dates, locations, ports, company names, URLs, placeholders, and markdown link targets.
 - Preserve every digit-bearing number as digits. Do not spell source digit tokens out as words, remove them, or introduce new digit tokens.
 - Locale punctuation such as decimal commas, non-breaking-space group separators, and native digit glyphs is allowed only when it preserves the same number.
+- If a source date uses an English month name, a localized numeric month is allowed only when the full date is exactly the same calendar date.
 - The preservation manifest is binding. For each field, make sure every listed source_token is represented by a digit-bearing equivalent in that translated field.
 - Translate field text, headings, link labels, and URL slug fields into the target language.
 - Return Unicode/UTF-8 text where the target language normally uses a non-Latin script.
@@ -359,6 +417,9 @@ def _build_validation_feedback(error_detail: str, previous_output_text: str) -> 
             "the same source meaning. If a number mismatch is reported, every source number "
             "token listed in the preservation manifest must appear as a digit-bearing equivalent "
             "in the same translated field, and no new digit-bearing number may be introduced. "
+            "The only allowed exception is a localized numeric month inside the same calendar "
+            "date as an English source month-name date, such as 16 June 2026 becoming "
+            "2026年6月16日 or 16 thang 6 nam 2026. "
             "If a native-script slug mismatch is reported, regenerate the slug in the target "
             "language's native script rather than Latin-script-only romanized words. For Russian, "
             "use Cyrillic words such as политика-конфиденциальности-whatsapp, not "
@@ -459,6 +520,7 @@ def _validate_translated_fields(
             field_name=field_name,
             source_value=source_value,
             translated_value=translated_value,
+            target_language_code=target_language_code,
         )
     _validate_native_script_slug_fields(
         translated_fields=translated_fields,
@@ -506,27 +568,207 @@ def _validate_same_tokens(
         raise RuntimeError(error_code)
 
 
-def _validate_same_number_shapes(field_name: str, source_value: str, translated_value: str) -> None:
-    source_numbers = _read_normalized_number_tokens(source_value)
-    translated_numbers = _read_normalized_number_tokens(translated_value)
+def _validate_same_number_shapes(
+    field_name: str,
+    source_value: str,
+    translated_value: str,
+    target_language_code: str,
+) -> None:
+    source_number_tokens = _read_normalized_number_tokens_with_spans(source_value)
+    translated_number_tokens = _read_normalized_number_tokens_with_spans(translated_value)
+    source_numbers = [number_token["normalized_token"] for number_token in source_number_tokens]
+    translated_numbers = [
+        number_token["normalized_token"]
+        for number_token in translated_number_tokens
+    ]
     if Counter(source_numbers) != Counter(translated_numbers):
-        raise RuntimeError(
-            "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH:"
-            f"field={field_name};"
-            f"source_numbers={json.dumps(source_numbers, ensure_ascii=False)};"
-            f"translated_numbers={json.dumps(translated_numbers, ensure_ascii=False)}"
-        )
+        if not _date_aware_number_shapes_match(
+            source_value=source_value,
+            translated_value=translated_value,
+            source_number_tokens=source_number_tokens,
+            translated_number_tokens=translated_number_tokens,
+            target_language_code=target_language_code,
+        ):
+            raise RuntimeError(
+                "API_DCX_GEMINI_ADMIN_TRANSLATION_NUMBER_MISMATCH:"
+                f"field={field_name};"
+                f"source_numbers={json.dumps(source_numbers, ensure_ascii=False)};"
+                f"translated_numbers={json.dumps(translated_numbers, ensure_ascii=False)}"
+            )
 
 
 def _read_normalized_number_tokens(value: str) -> list[str]:
     return [
-        normalized_token
-        for normalized_token in (
-            _normalize_number_token(token)
-            for token in _NUMBER_PATTERN.findall(value or "")
-        )
-        if normalized_token != ""
+        number_token["normalized_token"]
+        for number_token in _read_normalized_number_tokens_with_spans(value)
     ]
+
+
+def _read_normalized_number_tokens_with_spans(value: str) -> list[dict[str, Any]]:
+    number_tokens = []
+    for match in _NUMBER_PATTERN.finditer(value or ""):
+        normalized_token = _normalize_number_token(match.group(0))
+        if normalized_token == "":
+            continue
+        number_tokens.append(
+            {
+                "normalized_token": normalized_token,
+                "span": match.span(),
+            }
+        )
+    return number_tokens
+
+
+def _date_aware_number_shapes_match(
+    source_value: str,
+    translated_value: str,
+    source_number_tokens: list[dict[str, Any]],
+    translated_number_tokens: list[dict[str, Any]],
+    target_language_code: str,
+) -> bool:
+    source_date_matches = _read_date_matches(source_value, target_language_code="en")
+    translated_date_matches = _read_date_matches(
+        translated_value,
+        target_language_code=target_language_code,
+    )
+    if not source_date_matches or not translated_date_matches:
+        return False
+
+    translated_matches_by_signature: dict[str, list[dict[str, Any]]] = {}
+    for translated_date_match in translated_date_matches:
+        translated_matches_by_signature.setdefault(
+            translated_date_match["signature"],
+            [],
+        ).append(translated_date_match)
+
+    source_date_spans = []
+    translated_date_spans = []
+    for source_date_match in source_date_matches:
+        matching_translated_dates = translated_matches_by_signature.get(
+            source_date_match["signature"],
+            [],
+        )
+        if not matching_translated_dates:
+            continue
+        translated_date_match = matching_translated_dates.pop(0)
+        source_date_spans.append(source_date_match["span"])
+        translated_date_spans.append(translated_date_match["span"])
+
+    if not source_date_spans:
+        return False
+
+    source_numbers_without_matched_dates = _remove_number_tokens_overlapping_spans(
+        number_tokens=source_number_tokens,
+        spans=source_date_spans,
+    )
+    translated_numbers_without_matched_dates = _remove_number_tokens_overlapping_spans(
+        number_tokens=translated_number_tokens,
+        spans=translated_date_spans,
+    )
+    return Counter(source_numbers_without_matched_dates) == Counter(
+        translated_numbers_without_matched_dates
+    )
+
+
+def _remove_number_tokens_overlapping_spans(
+    number_tokens: list[dict[str, Any]],
+    spans: list[tuple[int, int]],
+) -> list[str]:
+    return [
+        number_token["normalized_token"]
+        for number_token in number_tokens
+        if not _span_overlaps_any_span(number_token["span"], spans)
+    ]
+
+
+def _span_overlaps_any_span(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    span_start, span_end = span
+    return any(span_start < other_end and other_start < span_end for other_start, other_end in spans)
+
+
+def _read_date_matches(value: str, target_language_code: str) -> list[dict[str, Any]]:
+    date_matches = []
+    date_matches.extend(_read_english_word_month_date_matches(value))
+    date_matches.extend(_read_numeric_date_matches(value, target_language_code))
+    return _deduplicate_date_matches(date_matches)
+
+
+def _read_english_word_month_date_matches(value: str) -> list[dict[str, Any]]:
+    date_matches = []
+    for pattern in (
+        _ENGLISH_DAY_MONTH_YEAR_DATE_PATTERN,
+        _ENGLISH_MONTH_DAY_YEAR_DATE_PATTERN,
+    ):
+        for match in pattern.finditer(value or ""):
+            month_name = str(match.group("month")).strip(".").lower()
+            signature = _build_date_signature(
+                year_text=match.group("year"),
+                month_text=str(_ENGLISH_MONTH_NUMBER_BY_NAME.get(month_name, "")),
+                day_text=match.group("day"),
+            )
+            if signature is None:
+                continue
+            date_matches.append(
+                {
+                    "signature": signature,
+                    "span": match.span(),
+                }
+            )
+    return date_matches
+
+
+def _read_numeric_date_matches(value: str, target_language_code: str) -> list[dict[str, Any]]:
+    date_matches = []
+    patterns = [_NUMERIC_YEAR_MONTH_DAY_DATE_PATTERN]
+    if target_language_code in {"ja", "vi"}:
+        patterns.append(_NUMERIC_DAY_MONTH_YEAR_DATE_PATTERN)
+
+    for pattern in patterns:
+        for match in pattern.finditer(value or ""):
+            signature = _build_date_signature(
+                year_text=match.group("year"),
+                month_text=match.group("month"),
+                day_text=match.group("day"),
+            )
+            if signature is None:
+                continue
+            date_matches.append(
+                {
+                    "signature": signature,
+                    "span": match.span(),
+                }
+            )
+    return date_matches
+
+
+def _deduplicate_date_matches(date_matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen_keys = set()
+    deduplicated_date_matches = []
+    for date_match in date_matches:
+        deduplication_key = (date_match["signature"], date_match["span"])
+        if deduplication_key in seen_keys:
+            continue
+        seen_keys.add(deduplication_key)
+        deduplicated_date_matches.append(date_match)
+    return deduplicated_date_matches
+
+
+def _build_date_signature(
+    year_text: str,
+    month_text: str,
+    day_text: str,
+) -> str | None:
+    year_digits = _normalize_number_token(year_text)
+    month_digits = _normalize_number_token(month_text)
+    day_digits = _normalize_number_token(day_text)
+    if year_digits == "" or month_digits == "" or day_digits == "":
+        return None
+    year = int(year_digits)
+    month = int(month_digits)
+    day = int(day_digits)
+    if year < 1000 or year > 9999 or month < 1 or month > 12 or day < 1 or day > 31:
+        return None
+    return f"{year:04d}-{month:02d}-{day:02d}"
 
 
 def _normalize_number_token(value: str) -> str:
